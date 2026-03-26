@@ -1,0 +1,154 @@
+import { HttpRequest } from '@azure/functions';
+import jwt, { JwtPayload } from 'jsonwebtoken';
+import jwksClient, { JwksClient } from 'jwks-rsa';
+import { env, assertEnv } from './env';
+import { runQuery } from './db';
+
+type DbUserRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'supadmin' | 'admin' | 'user';
+  isGuest: boolean;
+  companyId: string | null;
+  status: 'Active' | 'Inactive' | 'Suspended';
+  powerBiAccess: 'none' | 'viewer' | 'editor';
+  powerBiWorkspaceId: string | null;
+  powerBiReportId: string | null;
+  lastLogin: string | null;
+};
+
+export type AuthUser = DbUserRow & {
+  permissions: string[];
+};
+
+let cachedJwksClient: JwksClient | null = null;
+
+const getJwksClient = (): JwksClient => {
+  if (cachedJwksClient) return cachedJwksClient;
+  cachedJwksClient = jwksClient({
+    jwksUri: `https://login.microsoftonline.com/${env.azureTenantId}/discovery/v2.0/keys`,
+    cache: true,
+    cacheMaxAge: 10 * 60 * 1000,
+    cacheMaxEntries: 10,
+    rateLimit: true,
+    jwksRequestsPerMinute: 10,
+  });
+  return cachedJwksClient;
+};
+
+const getBearerToken = (request: HttpRequest): string | null => {
+  const raw = request.headers.get('authorization') || request.headers.get('Authorization');
+  if (!raw) return null;
+  if (!raw.toLowerCase().startsWith('bearer ')) return null;
+  return raw.slice(7).trim();
+};
+
+const getTokenClaims = async (token: string): Promise<JwtPayload> => {
+  assertEnv();
+  const acceptedIssuers: [string, ...string[]] = [
+    `https://login.microsoftonline.com/${env.azureTenantId}/v2.0`,
+    `https://sts.windows.net/${env.azureTenantId}/`,
+  ];
+  const decoded = jwt.decode(token, { complete: true });
+  const kid = decoded && typeof decoded === 'object' ? (decoded.header as { kid?: string }).kid : undefined;
+  if (!kid) throw new Error('Invalid token: missing key id.');
+  const signingKey = await getJwksClient().getSigningKey(kid);
+  const publicKey = signingKey.getPublicKey();
+
+  return await new Promise<JwtPayload>((resolve, reject) => {
+    jwt.verify(
+      token,
+      publicKey,
+      {
+        algorithms: ['RS256'],
+        audience: env.azureAudience,
+      },
+      (error, payload) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        if (!payload || typeof payload === 'string') {
+          reject(new Error('Invalid token payload.'));
+          return;
+        }
+        if (!acceptedIssuers.includes(payload.iss || '')) {
+          reject(new Error(`Invalid token issuer: ${payload.iss || 'unknown'}`));
+          return;
+        }
+        resolve(payload);
+      }
+    );
+  });
+};
+
+const getClaimEmail = (claims: JwtPayload): string | null => {
+  const preferred = claims.preferred_username;
+  const email = claims.email;
+  const upn = claims.upn;
+  const candidate = preferred || email || upn;
+  if (typeof candidate !== 'string') return null;
+  return candidate.trim().toLowerCase();
+};
+
+const getUserByEmail = async (email: string): Promise<AuthUser | null> => {
+  const userResult = await runQuery<DbUserRow>(
+    `
+    SELECT TOP 1
+      id,
+      display_name AS name,
+      email,
+      role,
+      is_guest AS isGuest,
+      company_id AS companyId,
+      status,
+      power_bi_access AS powerBiAccess,
+      power_bi_workspace_id AS powerBiWorkspaceId,
+      power_bi_report_id AS powerBiReportId,
+      CONVERT(varchar(33), last_login_at, 127) AS lastLogin
+    FROM dbo.users
+    WHERE LOWER(email) = @email
+    `,
+    { email: email.toLowerCase() }
+  );
+
+  const row = userResult.recordset[0];
+  if (!row || row.status !== 'Active') return null;
+
+  const permissionsResult = await runQuery<{ permission: string }>(
+    'SELECT permission FROM dbo.user_permissions WHERE user_id = @userId',
+    { userId: row.id }
+  );
+
+  const permissions = permissionsResult.recordset.map((p) => p.permission);
+
+  return {
+    ...row,
+    permissions,
+  };
+};
+
+export const touchLastLogin = async (userId: string): Promise<void> => {
+  await runQuery('UPDATE dbo.users SET last_login_at = SYSUTCDATETIME(), updated_at = SYSUTCDATETIME() WHERE id = @userId', { userId });
+};
+
+export const authenticateRequest = async (request: HttpRequest): Promise<AuthUser> => {
+  const token = getBearerToken(request);
+  if (!token) {
+    throw new Error('Missing bearer token.');
+  }
+
+  const claims = await getTokenClaims(token);
+  const email = getClaimEmail(claims);
+  if (!email) {
+    throw new Error('Token is missing an email claim.');
+  }
+
+  const user = await getUserByEmail(email);
+  if (!user) {
+    throw new Error('No access record found for this Microsoft account email.');
+  }
+
+  return user;
+};

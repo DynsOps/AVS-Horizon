@@ -1,6 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { MsalProvider } from '@azure/msal-react';
 import App from './App';
+import { msalInstance } from './src/auth/msalInstance';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -8,8 +10,18 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+
+const bootstrap = async () => {
+  await msalInstance.initialize();
+  await msalInstance.handleRedirectPromise();
+
+  root.render(
+    <React.StrictMode>
+      <MsalProvider instance={msalInstance}>
+        <App />
+      </MsalProvider>
+    </React.StrictMode>
+  );
+};
+
+void bootstrap();

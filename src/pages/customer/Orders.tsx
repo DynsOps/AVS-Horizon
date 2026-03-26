@@ -4,14 +4,16 @@ import { Order } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { useUIStore } from '../../store/uiStore';
 import { Filter, Download, MoreVertical, Truck } from 'lucide-react';
+import { useAuthStore } from '../../store/authStore';
 
 export const CustomerOrders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
-  const { openDrawer } = useUIStore();
+  const { openDrawer, addToast } = useUIStore();
+  const { user } = useAuthStore();
 
   useEffect(() => {
-    api.customer.getOrders().then(setOrders);
-  }, []);
+    api.customer.getOrders(user?.companyId).then(setOrders);
+  }, [user?.companyId]);
 
   const handleRowClick = (order: Order) => {
     openDrawer(
@@ -80,10 +82,16 @@ export const CustomerOrders: React.FC = () => {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Order Management</h1>
         <div className="flex space-x-2">
-             <button className="flex items-center space-x-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200">
+             <button
+                onClick={() => addToast({ title: 'Filter', message: 'Order filter drawer will be enabled in next release.', type: 'info' })}
+                className="flex items-center space-x-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200"
+             >
                 <Filter size={16} strokeWidth={1.5} /> <span>Filter</span>
              </button>
-             <button className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 shadow-sm shadow-blue-500/20">
+             <button
+                onClick={() => addToast({ title: 'Export Started', message: `${orders.length} orders are being prepared for export.`, type: 'success' })}
+                className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 shadow-sm shadow-blue-500/20"
+             >
                 <Download size={16} strokeWidth={1.5} /> <span>Export</span>
              </button>
         </div>
@@ -120,7 +128,13 @@ export const CustomerOrders: React.FC = () => {
                   </span>
                 </td>
                 <td className="px-6 py-4 text-right">
-                    <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                    <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          addToast({ title: 'Order Actions', message: `Quick actions for ${order.id} are ready.`, type: 'info' });
+                        }}
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    >
                         <MoreVertical size={16} strokeWidth={1.5} />
                     </button>
                 </td>

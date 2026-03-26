@@ -2,19 +2,20 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { Permission } from '../types';
 import { 
-  LayoutDashboard, Ship, Package, DollarSign, Leaf, BarChart2, 
-  Truck, ShieldAlert, Activity, Settings, LogOut, Anchor, Users, Building, UserCircle
+  LayoutDashboard, Ship, Package, ClipboardList, ReceiptText, Landmark,
+  Truck, ShieldAlert, Activity, Settings, LogOut, Anchor, Users, UserCircle, LifeBuoy, FilePlus2, BarChart3
 } from 'lucide-react';
 
 const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: string }) => (
   <NavLink 
     to={to} 
     className={({ isActive }) => 
-      `group flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 mb-1 relative overflow-hidden ${
+      `group flex items-center space-x-3 px-4 py-2.5 rounded-xl transition-all duration-200 mb-1 relative overflow-hidden ${
         isActive 
           ? 'text-white shadow-lg shadow-blue-500/20' 
-          : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+          : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
       }`
     }
   >
@@ -36,11 +37,13 @@ const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: stri
 export const Sidebar: React.FC = () => {
   const { user, logout } = useAuthStore();
   const role = user?.role;
+  const hasPermission = (permission: Permission) => Boolean(user?.permissions.includes(permission));
+  const canAccessBiReports = Boolean(user?.powerBiAccess && user.powerBiAccess !== 'none');
 
   return (
     <div className={`
         h-screen w-64 flex flex-col flex-shrink-0 transition-all duration-300
-        bg-slate-900 dark:bg-slate-900 border-r border-slate-800
+        bg-slate-900/95 dark:bg-slate-900/95 border-r border-slate-800/80 backdrop-blur-xl
         relative overflow-hidden
     `}>
       {/* Background Ambience */}
@@ -60,44 +63,58 @@ export const Sidebar: React.FC = () => {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-6 relative z-10 custom-scrollbar">
-        {role === 'Customer' && (
+        {role === 'user' && (
           <>
             <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Operations</div>
-            <NavItem to="/customer/dashboard" icon={LayoutDashboard} label="Dashboard" />
-            <NavItem to="/customer/fleet" icon={Ship} label="Fleet Management" />
-            <NavItem to="/customer/orders" icon={Package} label="Orders" />
-            <NavItem to="/customer/shipments" icon={Truck} label="Shipments" />
-            
-            <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 mt-8">Business</div>
-            <NavItem to="/customer/finance" icon={DollarSign} label="Finance" />
-            <NavItem to="/customer/sustainability" icon={Leaf} label="Sustainability" />
-            <NavItem to="/customer/analytics" icon={BarChart2} label="Analytics" />
+            {hasPermission('view:dashboard') && <NavItem to="/customer/dashboard" icon={LayoutDashboard} label="Dashboard" />}
+            {hasPermission('view:operational-list') && <NavItem to="/customer/operational-list" icon={ClipboardList} label="Operational List" />}
+            {hasPermission('view:invoices') && <NavItem to="/customer/invoices" icon={ReceiptText} label="Invoice List" />}
+            {hasPermission('view:port-fees') && <NavItem to="/customer/port-fees" icon={Landmark} label="Port Fee List" />}
+            {hasPermission('view:fleet') && <NavItem to="/customer/fleet" icon={Ship} label="Fleet Management" />}
+            {hasPermission('view:orders') && <NavItem to="/customer/orders" icon={Package} label="Orders" />}
+            {hasPermission('view:orders') && <NavItem to="/customer/historical-orders" icon={ClipboardList} label="Historical Orders" />}
+            {hasPermission('view:shipments') && <NavItem to="/customer/shipments" icon={Truck} label="Shipments" />}
+            {hasPermission('view:reports') && <NavItem to="/customer/reports/consumption" icon={BarChart3} label="Consumption Report" />}
+            {hasPermission('view:reports') && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
+            {(canAccessBiReports || hasPermission('view:analytics')) && <NavItem to="/customer/analytics" icon={BarChart3} label="BI Reports" />}
+            {hasPermission('create:support-ticket') && <NavItem to="/support/tickets" icon={LifeBuoy} label="Support Tickets" />}
+            {hasPermission('submit:rfq') && <NavItem to="/guest/rfq" icon={FilePlus2} label="Guest RFQ" />}
+
+            {hasPermission('view:supplier') && (
+              <>
+                <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 mt-6">Supplier</div>
+                <NavItem to="/supplier/dashboard" icon={LayoutDashboard} label="Supplier Dashboard" />
+                <NavItem to="/supplier/orders" icon={Package} label="Supplier Orders" />
+                <NavItem to="/supplier/logistics" icon={Truck} label="Supplier Logistics" />
+                <NavItem to="/supplier/performance" icon={BarChart3} label="Supplier Performance" />
+              </>
+            )}
           </>
         )}
 
-        {role === 'Supplier' && (
-          <>
-            <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Vendor Portal</div>
-            <NavItem to="/supplier/dashboard" icon={LayoutDashboard} label="Dashboard" />
-            <NavItem to="/supplier/orders" icon={Package} label="Orders" />
-            <NavItem to="/supplier/logistics" icon={Truck} label="Logistics" />
-            <NavItem to="/supplier/performance" icon={BarChart2} label="Performance" />
-          </>
-        )}
-
-        {role === 'Admin' && (
+        {role === 'admin' && (
           <>
             <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Administration</div>
-            <NavItem to="/admin/system-health" icon={Activity} label="System Health" />
-            <NavItem to="/admin/users" icon={Users} label="User Management" />
-            <NavItem to="/admin/companies" icon={Building} label="Entity Management" />
-            <NavItem to="/admin/security" icon={ShieldAlert} label="Security Logs" />
-            <NavItem to="/admin/feature-flags" icon={Settings} label="Feature Flags" />
+            {hasPermission('system:settings') && <NavItem to="/admin/system-health" icon={Activity} label="System Health" />}
+            {hasPermission('manage:users') && <NavItem to="/admin/users" icon={Users} label="User Management" />}
+            {hasPermission('system:settings') && <NavItem to="/admin/security" icon={ShieldAlert} label="Security Logs" />}
+            {hasPermission('create:support-ticket') && <NavItem to="/support/tickets" icon={LifeBuoy} label="Support Tickets" />}
+          </>
+        )}
+
+        {role === 'supadmin' && (
+          <>
+            <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Super Administration</div>
+            {hasPermission('system:settings') && <NavItem to="/admin/system-health" icon={Activity} label="System Health" />}
+            {hasPermission('manage:users') && <NavItem to="/admin/users" icon={Users} label="User Management" />}
+            {hasPermission('system:settings') && <NavItem to="/admin/security" icon={ShieldAlert} label="Security Logs" />}
+            {hasPermission('system:settings') && <NavItem to="/admin/feature-flags" icon={Settings} label="Feature Flags" />}
+            {hasPermission('create:support-ticket') && <NavItem to="/support/tickets" icon={LifeBuoy} label="Support Tickets" />}
           </>
         )}
 
         {/* Profile Link for All Roles */}
-         <div className="mt-8">
+         <div className="mt-8 border-t border-slate-800/60 pt-5">
             <NavItem to="/profile" icon={UserCircle} label="My Profile" />
          </div>
 

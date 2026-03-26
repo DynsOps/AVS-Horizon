@@ -12,19 +12,19 @@ export const Card: React.FC<CardProps> = ({ children, title, className = '', act
   return (
     <div className={`
       relative overflow-hidden
-      bg-white/80 dark:bg-slate-900 
+      bg-white/80 dark:bg-slate-900/90
       backdrop-blur-xl
-      border border-gray-200/60 dark:border-slate-800
-      shadow-sm dark:shadow-lg dark:shadow-black/20
-      rounded-xl transition-all duration-300
+      border border-white/60 dark:border-slate-800/70
+      shadow-panel dark:shadow-black/20
+      rounded-2xl transition-all duration-300
       ${className}
     `}>
       {/* Subtle top highlight for depth */}
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 dark:via-blue-500/10 to-transparent opacity-50" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/80 dark:via-blue-400/20 to-transparent opacity-70" />
 
       {(title || action) && (
-        <div className="px-6 py-4 border-b border-gray-100/10 dark:border-slate-800/50 flex justify-between items-center bg-gray-50/30 dark:bg-slate-800/30">
-          {title && <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 tracking-wide uppercase">{title}</h3>}
+        <div className="px-6 py-4 border-b border-gray-100/60 dark:border-slate-800/70 flex justify-between items-center bg-white/50 dark:bg-slate-800/35">
+          {title && <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 tracking-wide">{title}</h3>}
           {action && <div className="text-sm">{action}</div>}
         </div>
       )}

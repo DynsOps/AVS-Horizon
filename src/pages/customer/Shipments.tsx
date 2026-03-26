@@ -4,14 +4,16 @@ import { Shipment } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { useThemeStore } from '../../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
 
 export const Shipments: React.FC = () => {
     const [shipments, setShipments] = useState<Shipment[]>([]);
     const { isDarkMode } = useThemeStore();
+    const { user } = useAuthStore();
     
     useEffect(() => {
-        api.customer.getShipments().then(setShipments);
-    }, []);
+        api.customer.getShipments(user?.companyId).then(setShipments);
+    }, [user?.companyId]);
 
     const scorecardData = [
         { name: 'On Time', value: 85 },

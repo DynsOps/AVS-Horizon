@@ -4,13 +4,19 @@ import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useUIStore } from '../store/uiStore';
-import { User as UserIcon, Mail, Shield, Building, Save, Loader2 } from 'lucide-react';
+import { User as UserIcon, Mail, Shield, Building, Save, Loader2, Lock } from 'lucide-react';
 
 export const Profile: React.FC = () => {
     const { user, login } = useAuthStore();
     const { addToast } = useUIStore();
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [passwordForm, setPasswordForm] = useState({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+    });
     
     // Form state
     const [formData, setFormData] = useState({
@@ -30,6 +36,30 @@ export const Profile: React.FC = () => {
             addToast({ title: 'Error', message: 'Failed to update profile', type: 'error' });
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handlePasswordChange = async () => {
+        if (!user) return;
+        if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+            addToast({ title: 'Validation Error', message: 'Please fill all password fields.', type: 'error' });
+            return;
+        }
+        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+            addToast({ title: 'Validation Error', message: 'New password and confirmation do not match.', type: 'error' });
+            return;
+        }
+
+        setIsChangingPassword(true);
+        try {
+            await api.auth.changePassword(user.id, passwordForm.currentPassword, passwordForm.newPassword);
+            addToast({ title: 'Success', message: 'Password changed successfully.', type: 'success' });
+            setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to change password.';
+            addToast({ title: 'Error', message, type: 'error' });
+        } finally {
+            setIsChangingPassword(false);
         }
     };
 
@@ -82,12 +112,15 @@ export const Profile: React.FC = () => {
                                     </div>
                                     <input 
                                         type="email" 
-                                        disabled={!isEditing}
+                                        disabled
                                         value={formData.email}
                                         onChange={(e) => setFormData({...formData, email: e.target.value})}
                                         className="pl-10 w-full px-4 py-2 bg-gray-50 dark:bg-slate-950/50 border border-gray-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white disabled:opacity-60 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
                                     />
                                 </div>
+                                <p className="text-[11px] text-slate-500 mt-1">
+                                    Email is managed by Microsoft identity and cannot be edited here.
+                                </p>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
@@ -162,10 +195,44 @@ export const Profile: React.FC = () => {
                             </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400 flex justify-between border-b border-gray-100 dark:border-slate-800 pb-1">
                                 <span>Password Last Changed</span>
-                                <span className="font-mono">30 days ago</span>
+                                <span className="font-mono">{user.passwordLastChangedAt ? new Date(user.passwordLastChangedAt).toLocaleString() : 'Never'}</span>
                             </div>
                         </div>
-                        <button className="mt-4 text-xs text-blue-600 hover:underline dark:text-blue-400">Change Password</button>
+                        <div className="mt-4 space-y-3 rounded-lg border border-gray-200 dark:border-slate-800 p-3 bg-gray-50 dark:bg-slate-900/40">
+                            <div className="flex items-center gap-2">
+                                <Lock size={14} className="text-slate-500" />
+                                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Change Password</p>
+                            </div>
+                            <input
+                                type="password"
+                                placeholder="Current password"
+                                value={passwordForm.currentPassword}
+                                onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-slate-900 dark:text-white"
+                            />
+                            <input
+                                type="password"
+                                placeholder="New password"
+                                value={passwordForm.newPassword}
+                                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-slate-900 dark:text-white"
+                            />
+                            <input
+                                type="password"
+                                placeholder="Confirm new password"
+                                value={passwordForm.confirmPassword}
+                                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-slate-900 dark:text-white"
+                            />
+                            <button
+                                onClick={handlePasswordChange}
+                                disabled={isChangingPassword}
+                                className="w-full inline-flex items-center justify-center gap-2 rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-70"
+                            >
+                                {isChangingPassword ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
+                                Update Password
+                            </button>
+                        </div>
                     </div>
                 </div>
             </Card>
