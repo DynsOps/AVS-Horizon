@@ -1,6 +1,6 @@
 import { Configuration, RedirectRequest } from '@azure/msal-browser';
 
-const env = (import.meta as any).env || {};
+const env = import.meta.env;
 
 const tenantId = env.VITE_AZURE_AD_TENANT_ID || '';
 const clientId = env.VITE_AZURE_AD_CLIENT_ID || '';
