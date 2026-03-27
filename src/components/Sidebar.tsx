@@ -1,8 +1,10 @@
 
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useMsal } from '@azure/msal-react';
 import { useAuthStore } from '../store/authStore';
 import { Permission } from '../types';
+import { api } from '../services/api';
 import { 
   LayoutDashboard, Ship, Package, ClipboardList, ReceiptText, Landmark,
   Truck, ShieldAlert, Activity, Settings, LogOut, Anchor, Users, UserCircle, LifeBuoy, FilePlus2, BarChart3
@@ -36,9 +38,32 @@ const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: stri
 
 export const Sidebar: React.FC = () => {
   const { user, logout } = useAuthStore();
+  const { instance, accounts } = useMsal();
+  const navigate = useNavigate();
   const role = user?.role;
   const hasPermission = (permission: Permission) => Boolean(user?.permissions.includes(permission));
   const canAccessBiReports = Boolean(user?.powerBiAccess && user.powerBiAccess !== 'none');
+  const hasMicrosoftSession = accounts.length > 0;
+
+  const handleSignOut = async () => {
+    const userEmail = user?.email;
+    if (userEmail) {
+      await api.auth.clearMicrosoftToken(userEmail);
+    } else {
+      await api.auth.clearMicrosoftToken();
+    }
+
+    logout();
+
+    if (hasMicrosoftSession) {
+      await instance.logoutRedirect({
+        postLogoutRedirectUri: `${window.location.origin}/#/login`,
+      });
+      return;
+    }
+
+    navigate('/login', { replace: true });
+  };
 
   return (
     <div className={`
@@ -122,7 +147,7 @@ export const Sidebar: React.FC = () => {
 
       <div className="p-4 border-t border-slate-800/50 relative z-10 bg-slate-900/50 backdrop-blur-md">
         <button 
-          onClick={logout}
+          onClick={() => { void handleSignOut(); }}
           className="group w-full flex items-center justify-center space-x-2 px-4 py-2.5 
                      bg-slate-800/50 hover:bg-red-500/10 border border-slate-700 hover:border-red-500/50
                      rounded-lg transition-all duration-200 text-sm text-slate-300 hover:text-red-400"
