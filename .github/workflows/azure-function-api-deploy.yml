@@ -31,10 +31,10 @@ jobs:
 
       - name: Validate deployment credentials
         env:
-          AZURE_FUNCTIONAPP_PUBLISH_PROFILE: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+          AZURE_FUNCTIONAPP_PUBLISH_PROFILE: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE || vars.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
         run: |
           if [ -z "$AZURE_FUNCTIONAPP_PUBLISH_PROFILE" ]; then
-            echo "Missing secret: AZURE_FUNCTIONAPP_PUBLISH_PROFILE"
+            echo "Missing deployment credential: AZURE_FUNCTIONAPP_PUBLISH_PROFILE (secret or variable)"
             exit 1
           fi
 
@@ -43,4 +43,4 @@ jobs:
         with:
           app-name: avs-horizon-global-func-auth
           package: function-api
-          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE || vars.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
