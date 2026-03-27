@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { InteractionStatus } from '@azure/msal-browser';
 import { useMsal } from '@azure/msal-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { loginRequest } from './authConfig';
+import { apiTokenRequest } from './authConfig';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { getDefaultRouteForUser } from '../utils/rbac';
@@ -33,7 +33,7 @@ export const MsalAuthBridge: React.FC = () => {
 
       try {
         const tokenResult = await instance.acquireTokenSilent({
-          ...loginRequest,
+          ...apiTokenRequest,
           account: activeAccount,
         });
 

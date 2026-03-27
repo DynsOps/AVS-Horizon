@@ -5,11 +5,17 @@ const env = import.meta.env;
 const tenantId = env.VITE_AZURE_AD_TENANT_ID || '';
 const clientId = env.VITE_AZURE_AD_CLIENT_ID || '';
 const redirectUri = env.VITE_AZURE_AD_REDIRECT_URI || window.location.origin;
-const scopeValue = env.VITE_AZURE_AD_SCOPE || 'User.Read Calendars.Read';
-const scopes = scopeValue
+const scopeValue = env.VITE_AZURE_AD_SCOPE || '';
+const configuredScopes = scopeValue
   .split(/[ ,]+/)
   .map((scope: string) => scope.trim())
   .filter(Boolean);
+
+const defaultApiScope = clientId ? `api://${clientId}/access_as_user` : '';
+const apiScopes = configuredScopes.filter((scope: string) => scope.startsWith('api://'));
+if (apiScopes.length === 0 && defaultApiScope) {
+  apiScopes.push(defaultApiScope);
+}
 
 if (!tenantId || !clientId) {
   // Keep app bootable for password login mode; Microsoft button will fail gracefully.
@@ -30,5 +36,9 @@ export const msalConfig: Configuration = {
 };
 
 export const loginRequest: RedirectRequest = {
-  scopes,
+  scopes: ['openid', 'profile', 'email'],
+};
+
+export const apiTokenRequest: RedirectRequest = {
+  scopes: apiScopes,
 };
