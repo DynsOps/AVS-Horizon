@@ -12,9 +12,6 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,17 +30,13 @@ jobs:
         run: npm run build
 
       - name: Validate deployment credentials
+        env:
+          AZURE_FUNCTIONAPP_PUBLISH_PROFILE: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
         run: |
-          if [ -z "${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}" ] && [ -z "${{ secrets.AZURE_CREDENTIALS }}" ]; then
-            echo "Missing secrets: set AZURE_FUNCTIONAPP_PUBLISH_PROFILE or AZURE_CREDENTIALS"
+          if [ -z "$AZURE_FUNCTIONAPP_PUBLISH_PROFILE" ]; then
+            echo "Missing secret: AZURE_FUNCTIONAPP_PUBLISH_PROFILE"
             exit 1
           fi
-
-      - name: Azure Login (RBAC)
-        if: ${{ secrets.AZURE_CREDENTIALS != '' }}
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Deploy Function App
         uses: Azure/functions-action@v1
