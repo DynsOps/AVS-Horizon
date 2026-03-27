@@ -1,6 +1,7 @@
 import { HttpRequest } from '@azure/functions';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import jwksClient, { JwksClient } from 'jwks-rsa';
+import { randomUUID } from 'crypto';
 import { env, assertEnv } from './env';
 import { runQuery } from './db';
 
@@ -21,6 +22,28 @@ type DbUserRow = {
 export type AuthUser = DbUserRow & {
   permissions: string[];
 };
+
+const BOOTSTRAP_SUPADMIN_EMAILS = ['dynamicsops14@avsglobalsupply.com'];
+const LOWEST_AUTO_PERMISSIONS = ['view:dashboard'];
+const SUPADMIN_DEFAULT_PERMISSIONS = [
+  'view:dashboard',
+  'view:operational-list',
+  'view:invoices',
+  'view:port-fees',
+  'view:reports',
+  'view:fleet',
+  'view:shipments',
+  'view:orders',
+  'view:supplier',
+  'create:support-ticket',
+  'submit:rfq',
+  'manage:users',
+  'manage:companies',
+  'view:finance',
+  'edit:orders',
+  'view:analytics',
+  'system:settings',
+];
 
 let cachedJwksClient: JwksClient | null = null;
 
@@ -129,6 +152,138 @@ const getUserByEmail = async (email: string): Promise<AuthUser | null> => {
   };
 };
 
+const getEmailDomain = (email: string): string => {
+  const parts = email.split('@');
+  return parts.length > 1 ? parts[1].toLowerCase() : '';
+};
+
+const createUserWithPermissions = async (params: {
+  email: string;
+  role: 'supadmin' | 'admin' | 'user';
+  permissions: string[];
+  companyId?: string | null;
+}): Promise<void> => {
+  const userId = `u-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+  const name = params.email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+
+  await runQuery(
+    `
+    INSERT INTO dbo.users (
+      id,
+      display_name,
+      email,
+      role,
+      is_guest,
+      company_id,
+      status,
+      temporary_password,
+      power_bi_access,
+      power_bi_workspace_id,
+      power_bi_report_id,
+      password_last_changed_at,
+      created_at,
+      updated_at
+    ) VALUES (
+      @id,
+      @displayName,
+      @email,
+      @role,
+      0,
+      @companyId,
+      'Active',
+      NULL,
+      'none',
+      '',
+      '',
+      SYSUTCDATETIME(),
+      SYSUTCDATETIME(),
+      SYSUTCDATETIME()
+    )
+    `,
+    {
+      id: userId,
+      displayName: name || params.email,
+      email: params.email,
+      role: params.role,
+      companyId: params.companyId || null,
+    }
+  );
+
+  for (const permission of params.permissions) {
+    await runQuery(
+      'INSERT INTO dbo.user_permissions (user_id, permission) VALUES (@userId, @permission)',
+      { userId, permission }
+    );
+  }
+
+  if (params.role === 'user' && params.permissions.join(',') === LOWEST_AUTO_PERMISSIONS.join(',')) {
+    await runQuery(
+      `
+      INSERT INTO dbo.support_tickets (
+        id,
+        created_by_user_id,
+        created_by_email,
+        subject,
+        description,
+        category,
+        status,
+        created_at
+      ) VALUES (
+        @id,
+        @createdByUserId,
+        @createdByEmail,
+        @subject,
+        @description,
+        'Technical',
+        'Open',
+        SYSUTCDATETIME()
+      )
+      `,
+      {
+        id: `TCK-${randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`,
+        createdByUserId: userId,
+        createdByEmail: params.email,
+        subject: 'Auto access request created',
+        description: `User ${params.email} was auto-provisioned with lowest permissions based on corporate domain match.`,
+      }
+    );
+  }
+};
+
+const autoProvisionByPolicy = async (email: string): Promise<AuthUser | null> => {
+  const normalizedEmail = email.toLowerCase();
+
+  if (BOOTSTRAP_SUPADMIN_EMAILS.includes(normalizedEmail)) {
+    await createUserWithPermissions({
+      email: normalizedEmail,
+      role: 'supadmin',
+      permissions: SUPADMIN_DEFAULT_PERMISSIONS,
+    });
+    return getUserByEmail(normalizedEmail);
+  }
+
+  const domain = getEmailDomain(normalizedEmail);
+  if (!domain) return null;
+  const domainMatch = await runQuery<{ companyId: string | null }>(
+    `
+    SELECT TOP 1 company_id AS companyId
+    FROM dbo.users
+    WHERE RIGHT(LOWER(email), LEN(@suffix)) = @suffix
+    `,
+    { suffix: `@${domain}` }
+  );
+
+  if (!domainMatch.recordset[0]) return null;
+
+  await createUserWithPermissions({
+    email: normalizedEmail,
+    role: 'user',
+    permissions: LOWEST_AUTO_PERMISSIONS,
+    companyId: domainMatch.recordset[0].companyId,
+  });
+  return getUserByEmail(normalizedEmail);
+};
+
 export const touchLastLogin = async (userId: string): Promise<void> => {
   await runQuery('UPDATE dbo.users SET last_login_at = SYSUTCDATETIME(), updated_at = SYSUTCDATETIME() WHERE id = @userId', { userId });
 };
@@ -145,7 +300,14 @@ export const authenticateRequest = async (request: HttpRequest): Promise<AuthUse
     throw new Error('Token is missing an email claim.');
   }
 
-  const user = await getUserByEmail(email);
+  let user = await getUserByEmail(email);
+  if (!user) {
+    try {
+      user = await autoProvisionByPolicy(email);
+    } catch {
+      // Keep original deny behavior on provisioning failure.
+    }
+  }
   if (!user) {
     throw new Error('No access record found for this Microsoft account email.');
   }

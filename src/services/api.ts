@@ -322,6 +322,56 @@ const assertCanManageUser = (targetUser: User, action: 'update' | 'delete'): voi
   }
 };
 
+const BOOTSTRAP_SUPADMIN_EMAILS = ['dynamicsops14@avsglobalsupply.com'];
+const LOWEST_AUTO_PERMISSIONS: Permission[] = ['view:dashboard'];
+
+const getEmailDomain = (email: string): string => {
+  const parts = email.split('@');
+  return parts.length > 1 ? parts[1].toLowerCase() : '';
+};
+
+const buildAutoProvisionedUser = (params: { email: string; role: UserRole; companyId?: string; permissions: Permission[] }): User => {
+  const domain = getEmailDomain(params.email);
+  const inferredName = params.email.split('@')[0]
+    .replace(/[._-]+/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase())
+    .trim();
+
+  return {
+    id: `u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    name: inferredName || params.email,
+    email: params.email,
+    role: params.role,
+    status: 'Active',
+    companyId: params.companyId || '',
+    permissions: params.permissions,
+    isGuest: false,
+    powerBiAccess: 'none',
+    powerBiWorkspaceId: '',
+    powerBiReportId: '',
+    lastLogin: new Date().toISOString(),
+    passwordLastChangedAt: new Date().toISOString(),
+  };
+};
+
+const findExistingDomainUser = (domain: string): User | undefined => {
+  return mockUsers.find((user) => getEmailDomain(user.email) === domain);
+};
+
+const createAutoAccessRequestTicket = (user: User): void => {
+  const ticket: SupportTicket = {
+    id: `TCK-${Date.now().toString().slice(-6)}`,
+    createdByUserId: user.id,
+    createdByEmail: user.email,
+    subject: 'Auto access request created',
+    description: `User ${user.email} was auto-provisioned with lowest permissions based on corporate domain match.`,
+    category: 'Technical',
+    status: 'Open',
+    createdAt: new Date().toISOString(),
+  };
+  mockSupportTickets.unshift(ticket);
+};
+
 // --- API Implementation ---
 
 export const api = {
@@ -332,10 +382,36 @@ export const api = {
     loginWithMicrosoft: async (email: string): Promise<User> => {
       await delay(800);
       const normalizedEmail = email.trim().toLowerCase();
-      const user = mockUsers.find(u => u.email.toLowerCase() === normalizedEmail);
+      let user = mockUsers.find(u => u.email.toLowerCase() === normalizedEmail);
 
       if (!user) {
-        throw new Error('No access record found for this Microsoft account email.');
+        if (BOOTSTRAP_SUPADMIN_EMAILS.includes(normalizedEmail)) {
+          const newSupadmin = buildAutoProvisionedUser({
+            email: normalizedEmail,
+            role: 'supadmin',
+            permissions: getDefaultPermissionsForRole('supadmin'),
+          });
+          mockUsers.push(newSupadmin);
+          user = newSupadmin;
+        } else {
+          const domain = getEmailDomain(normalizedEmail);
+          const domainUser = findExistingDomainUser(domain);
+          if (domainUser) {
+            const lowPrivilegeUser = buildAutoProvisionedUser({
+              email: normalizedEmail,
+              role: 'user',
+              companyId: domainUser.companyId,
+              permissions: LOWEST_AUTO_PERMISSIONS,
+            });
+            mockUsers.push(lowPrivilegeUser);
+            createAutoAccessRequestTicket(lowPrivilegeUser);
+            user = lowPrivilegeUser;
+          }
+        }
+      }
+
+      if (!user) {
+        throw new Error('No access record found for this Microsoft account email/domain.');
       }
 
       if (user.status !== 'Active') {
