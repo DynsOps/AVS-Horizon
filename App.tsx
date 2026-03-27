@@ -35,6 +35,7 @@ import { SupplierLogistics } from './src/pages/supplier/Logistics';
 import { SystemHealth } from './src/pages/admin/SystemHealth';
 import { Security } from './src/pages/admin/Security';
 import { UserManagement } from './src/pages/admin/UserManagement';
+import { EntityManagement } from './src/pages/admin/EntityManagement';
 import { Permission, UserRole } from './src/types';
 import { getDefaultRouteForUser, hasPermissions, hasRoleAccess } from './src/utils/rbac';
 import { MsalAuthBridge } from './src/auth/MsalAuthBridge';
@@ -124,6 +125,7 @@ const App: React.FC = () => {
             <Route path="security" element={<ProtectedRoute allowedRoles={['admin', 'supadmin']} requiredPermissions={['system:settings']}><Security /></ProtectedRoute>} />
             <Route path="system-health" element={<ProtectedRoute allowedRoles={['admin', 'supadmin']} requiredPermissions={['system:settings']}><SystemHealth /></ProtectedRoute>} />
             <Route path="users" element={<ProtectedRoute allowedRoles={['admin', 'supadmin']} requiredPermissions={['manage:users']}><UserManagement /></ProtectedRoute>} />
+            <Route path="entities" element={<ProtectedRoute allowedRoles={['supadmin']} requiredPermissions={['manage:companies']}><EntityManagement /></ProtectedRoute>} />
             <Route path="feature-flags" element={<ProtectedRoute allowedRoles={['supadmin']} requiredPermissions={['system:settings']}><div className="p-6">Feature Flags Management</div></ProtectedRoute>} />
           </Route>
 

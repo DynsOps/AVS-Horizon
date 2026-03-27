@@ -6,7 +6,14 @@
 - `POST /api/auth/change-password`
 - `POST /api/auth/change-password-password`
 - `POST /api/support/tickets`
+- `GET /api/identity/users`
 - `POST /api/identity/users`
+- `PATCH /api/identity/users/{id}`
+- `DELETE /api/identity/users/{id}`
+- `GET /api/identity/companies`
+- `POST /api/identity/companies`
+- `PATCH /api/identity/companies/{id}`
+- `DELETE /api/identity/companies/{id}`
 
 ## Required app settings
 - `AZURE_AD_TENANT_ID`

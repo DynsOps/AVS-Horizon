@@ -76,6 +76,14 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
       ? body.permissions
       : getDefaultPermissionsForRole(role);
 
+    if (actor.role === 'admin') {
+      const actorPermissionSet = new Set(actor.permissions);
+      const disallowedByActor = effectivePermissions.filter((permission) => !actorPermissionSet.has(permission));
+      if (disallowedByActor.length > 0) {
+        return errorResponse(403, `Admin can only grant permissions they already have: ${disallowedByActor.join(', ')}`);
+      }
+    }
+
     if (actor.role !== 'supadmin') {
       const disallowed = effectivePermissions.filter((permission) => SUPADMIN_CONTROLLED_PERMISSIONS.has(permission));
       if (disallowed.length > 0) {

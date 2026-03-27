@@ -30,7 +30,7 @@ Repository > Settings > Secrets and variables > Actions > Secrets:
 - `AZURE_FUNCTIONAPP_PUBLISH_PROFILE` (publish profile XML içeriği)
 - `VITE_AZURE_AD_TENANT_ID`
 - `VITE_AZURE_AD_CLIENT_ID`
-- `VITE_AZURE_AD_REDIRECT_URI=https://lemon-dune-0bea96203.1.azurestaticapps.net/`
+- `VITE_AZURE_AD_REDIRECT_URI=https://horizon.avsglobalsupply.com/`
 - `VITE_AZURE_AD_SCOPE=openid profile email offline_access User.Read api://fdec718f-914f-4403-b31a-e19318b81302/access_as_user`
 - `VITE_FUNCTION_API_BASE_URL=https://avs-horizon-global-func-auth.azurewebsites.net`
 
@@ -39,11 +39,11 @@ Repository > Settings > Secrets and variables > Actions > Secrets:
 Push sonrası iki workflow çalışmalı:
 
 1. `.github/workflows/azure-function-api-deploy.yml`
-2. `.github/workflows/azure-static-web-apps-lemon-dune-0bea96203.yml`
+2. `.github/workflows/azure-static-web-apps.yml`
 
 ## 5) Live smoke test
 
-URL: `https://lemon-dune-0bea96203.1.azurestaticapps.net/#/login`
+URL: `https://horizon.avsglobalsupply.com/#/login`
 
 Kontrol listesi:
 

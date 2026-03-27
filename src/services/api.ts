@@ -13,6 +13,10 @@ const getStoredMicrosoftAccessToken = (): string => {
   return window.localStorage.getItem(MS_ACCESS_TOKEN_KEY) || '';
 };
 
+const shouldUseFunctionApi = (): boolean => {
+  return Boolean(FUNCTION_API_BASE_URL && getStoredMicrosoftAccessToken());
+};
+
 const callFunctionApi = async <T = any>(path: string, init?: RequestInit): Promise<T> => {
   if (!FUNCTION_API_BASE_URL) {
     throw new Error('Function API base URL is not configured.');
@@ -450,7 +454,19 @@ const createAutoAccessRequestTicket = (user: User): void => {
 
 const assertPermissionGrantPolicy = (targetPermissions: Permission[], existingPermissions: Permission[] = []): void => {
   const actorRole = getActorRole();
+  const actorPermissions = useAuthStore.getState().user?.permissions || [];
   if (actorRole === 'supadmin') return;
+
+  if (actorRole === 'admin') {
+    const actorPermissionSet = new Set(actorPermissions);
+    const existingSet = new Set(existingPermissions);
+    const disallowedByActor = targetPermissions.filter(
+      (permission) => !actorPermissionSet.has(permission) && !existingSet.has(permission)
+    );
+    if (disallowedByActor.length > 0) {
+      throw new Error(`Admin can only grant permissions they already have: ${disallowedByActor.join(', ')}`);
+    }
+  }
 
   const existingSet = new Set(existingPermissions);
   const disallowed = targetPermissions.filter(
@@ -662,10 +678,28 @@ export const api = {
   },
   admin: {
     getUsers: async (): Promise<User[]> => {
+      if (shouldUseFunctionApi()) {
+        const payload = await callFunctionApi<{ users: User[] }>('api/identity/users');
+        mockUsers = payload.users.map((u) => ({ ...u }));
+        persistLocalDb();
+        return payload.users;
+      }
       await delay(400);
       return [...mockUsers];
     },
     createUser: async (user: Omit<User, 'id'>): Promise<{ user: User; temporaryPassword: string }> => {
+        if (shouldUseFunctionApi()) {
+            const payload = await callFunctionApi<{ user: User; temporaryPassword: string }>('api/identity/users', {
+                method: 'POST',
+                body: JSON.stringify(user),
+            });
+            const createdUser = payload.user;
+            const existingIdx = mockUsers.findIndex((u) => u.id === createdUser.id);
+            if (existingIdx === -1) mockUsers.push({ ...createdUser });
+            else mockUsers[existingIdx] = { ...createdUser };
+            persistLocalDb();
+            return payload;
+        }
         await delay(500);
         assertCanAssignRole(user.role);
         const requestedPermissions = user.permissions?.length ? user.permissions : getDefaultPermissionsForRole(user.role);
@@ -698,6 +732,16 @@ export const api = {
         return { user: newUser, temporaryPassword };
     },
     updateUser: async (id: string, updates: Partial<User>): Promise<User> => {
+        if (shouldUseFunctionApi()) {
+            await callFunctionApi<{ success: boolean }>(`api/identity/users/${id}`, {
+                method: 'PATCH',
+                body: JSON.stringify(updates),
+            });
+            const refreshed = await api.admin.getUsers();
+            const updated = refreshed.find((u) => u.id === id);
+            if (!updated) throw new Error('User not found after update.');
+            return updated;
+        }
         await delay(400);
         const index = mockUsers.findIndex(u => u.id === id);
         if (index === -1) throw new Error("User not found");
@@ -750,6 +794,14 @@ export const api = {
         return mockUsers[index];
     },
     deleteUser: async (id: string): Promise<void> => {
+      if (shouldUseFunctionApi()) {
+        await callFunctionApi<{ success: boolean }>(`api/identity/users/${id}`, {
+          method: 'DELETE',
+        });
+        mockUsers = mockUsers.filter((u) => u.id !== id);
+        persistLocalDb();
+        return;
+      }
       await delay(400);
       const targetUser = mockUsers.find((u) => u.id === id);
       if (!targetUser) throw new Error('User not found');
@@ -759,10 +811,25 @@ export const api = {
       persistLocalDb();
     },
     getCompanies: async (): Promise<Company[]> => {
+        if (shouldUseFunctionApi()) {
+            const payload = await callFunctionApi<{ companies: Company[] }>('api/identity/companies');
+            mockCompanies = payload.companies.map((c) => ({ ...c }));
+            persistLocalDb();
+            return payload.companies;
+        }
         await delay(400);
         return [...mockCompanies];
     },
     createCompany: async (company: Omit<Company, 'id'>): Promise<Company> => {
+        if (shouldUseFunctionApi()) {
+            const payload = await callFunctionApi<{ company: Company }>('api/identity/companies', {
+                method: 'POST',
+                body: JSON.stringify(company),
+            });
+            mockCompanies.push({ ...payload.company });
+            persistLocalDb();
+            return payload.company;
+        }
         await delay(500);
         const newCompany = { ...company, id: `${company.type === 'Customer' ? 'C' : 'S'}-${Date.now().toString().slice(-3)}` };
         mockCompanies.push(newCompany);
@@ -770,6 +837,16 @@ export const api = {
         return newCompany;
     },
     updateCompany: async (id: string, updates: Partial<Company>): Promise<Company> => {
+        if (shouldUseFunctionApi()) {
+            await callFunctionApi<{ success: boolean }>(`api/identity/companies/${id}`, {
+                method: 'PATCH',
+                body: JSON.stringify(updates),
+            });
+            const refreshed = await api.admin.getCompanies();
+            const updated = refreshed.find((c) => c.id === id);
+            if (!updated) throw new Error('Company not found after update.');
+            return updated;
+        }
         await delay(400);
         const index = mockCompanies.findIndex(c => c.id === id);
         if (index === -1) throw new Error("Company not found");
@@ -778,6 +855,14 @@ export const api = {
         return mockCompanies[index];
     },
     deleteCompany: async (id: string): Promise<void> => {
+        if (shouldUseFunctionApi()) {
+            await callFunctionApi<{ success: boolean }>(`api/identity/companies/${id}`, {
+                method: 'DELETE',
+            });
+            mockCompanies = mockCompanies.filter(c => c.id !== id);
+            persistLocalDb();
+            return;
+        }
         await delay(400);
         mockCompanies = mockCompanies.filter(c => c.id !== id);
         persistLocalDb();

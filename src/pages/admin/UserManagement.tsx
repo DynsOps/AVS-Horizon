@@ -134,6 +134,7 @@ export const UserManagement: React.FC = () => {
                 companies={companies}
                 assignableRoles={assignableRoles}
                 isSupAdminActor={isSupAdminActor}
+                actorPermissions={actor?.permissions || []}
                 onSave={(data) => handleSaveUser(data, !user)}
                 onCancel={closeDrawer}
             />
@@ -341,6 +342,7 @@ const UserForm = ({
     companies,
     assignableRoles,
     isSupAdminActor,
+    actorPermissions,
     onSave,
     onCancel,
 }: {
@@ -348,6 +350,7 @@ const UserForm = ({
     companies: Company[],
     assignableRoles: UserRole[],
     isSupAdminActor: boolean,
+    actorPermissions: Permission[],
     onSave: (data: Partial<User>) => void,
     onCancel: () => void
 }) => {
@@ -383,6 +386,7 @@ const UserForm = ({
 
     const togglePermission = (perm: Permission) => {
         if (!isSupAdminActor && SUPADMIN_CONTROLLED_PERMISSIONS.includes(perm)) return;
+        if (!isSupAdminActor && !actorPermissions.includes(perm)) return;
         setFormData(prev => {
             const perms = prev.permissions || [];
             if (perms.includes(perm)) return { ...prev, permissions: perms.filter(p => p !== perm) };
@@ -416,7 +420,9 @@ const UserForm = ({
                                         role: nextRole,
                                         companyId: nextRole === 'user' && !formData.isGuest ? formData.companyId : '',
                                         powerBiAccess: nextRole === 'user' ? 'viewer' : 'editor',
-                                        permissions: getDefaultPermissionsForRole(nextRole),
+                                        permissions: isSupAdminActor
+                                            ? getDefaultPermissionsForRole(nextRole)
+                                            : getDefaultPermissionsForRole(nextRole).filter((perm) => actorPermissions.includes(perm)),
                                     });
                                 }}>
                             {assignableRoles.map((role) => (
@@ -515,11 +521,12 @@ const UserForm = ({
                         {ALL_PERMISSIONS.map(p => (
                             (() => {
                                 const isSupadminControlled = SUPADMIN_CONTROLLED_PERMISSIONS.includes(p);
-                                const isLocked = !isSupAdminActor && isSupadminControlled;
+                                const actorMissing = !isSupAdminActor && !actorPermissions.includes(p);
+                                const isLocked = !isSupAdminActor && (isSupadminControlled || actorMissing);
                                 return (
                             <div key={p} 
                                  onClick={() => !isLocked && togglePermission(p)}
-                                 title={isLocked ? 'Only supadmin can manage this permission.' : p}
+                                 title={isLocked ? (actorMissing ? 'Admin can only grant permissions they already have.' : 'Only supadmin can manage this permission.') : p}
                                  className={`${isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} px-3 py-2 rounded text-xs border flex items-center justify-between transition-colors ${formData.permissions?.includes(p) ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300' : 'bg-gray-50 border-gray-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}`}>
                                 <span>{p}</span>
                                 <span className="flex items-center gap-1">

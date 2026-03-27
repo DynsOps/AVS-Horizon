@@ -7,7 +7,7 @@ import { Permission } from '../types';
 import { api } from '../services/api';
 import { 
   LayoutDashboard, Ship, Package, ClipboardList, ReceiptText, Landmark,
-  Truck, ShieldAlert, Activity, Settings, LogOut, Anchor, Users, UserCircle, LifeBuoy, FilePlus2, BarChart3
+  Truck, ShieldAlert, Activity, Settings, LogOut, Anchor, Users, UserCircle, LifeBuoy, FilePlus2, BarChart3, Building2
 } from 'lucide-react';
 
 const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: string }) => (
@@ -135,6 +135,7 @@ export const Sidebar: React.FC = () => {
             <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Super Administration</div>
             {hasPermission('system:settings') && <NavItem to="/admin/system-health" icon={Activity} label="System Health" />}
             {hasPermission('manage:users') && <NavItem to="/admin/users" icon={Users} label="User Management" />}
+            {hasPermission('manage:companies') && <NavItem to="/admin/entities" icon={Building2} label="Entity Management" />}
             {hasPermission('system:settings') && <NavItem to="/admin/security" icon={ShieldAlert} label="Security Logs" />}
             {hasPermission('system:settings') && <NavItem to="/admin/feature-flags" icon={Settings} label="Feature Flags" />}
             {hasPermission('create:support-ticket') && <NavItem to="/support/tickets" icon={LifeBuoy} label="Support Tickets" />}
