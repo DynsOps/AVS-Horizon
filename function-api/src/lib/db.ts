@@ -3,6 +3,7 @@ import { DefaultAzureCredential } from '@azure/identity';
 import { env } from './env';
 
 const credential = new DefaultAzureCredential();
+let pooledConnection: Promise<sql.ConnectionPool> | null = null;
 
 type QueryParams = Record<string, string | number | boolean | Date | null | undefined>;
 
@@ -21,6 +22,13 @@ const getConnectionConfig = async (): Promise<sql.config> => {
       database: env.sqlDatabase,
       user: env.sqlUser,
       password: env.sqlPassword,
+      requestTimeout: 30000,
+      connectionTimeout: 15000,
+      pool: {
+        max: 10,
+        min: 0,
+        idleTimeoutMillis: 30000,
+      },
       options: {
         encrypt: true,
         trustServerCertificate: false,
@@ -36,6 +44,13 @@ const getConnectionConfig = async (): Promise<sql.config> => {
   return {
     server: env.sqlServer,
     database: env.sqlDatabase,
+    requestTimeout: 30000,
+    connectionTimeout: 15000,
+    pool: {
+      max: 10,
+      min: 0,
+      idleTimeoutMillis: 30000,
+    },
     options: {
       encrypt: true,
       trustServerCertificate: false,
@@ -49,14 +64,44 @@ const getConnectionConfig = async (): Promise<sql.config> => {
   } as sql.config;
 };
 
+const getPool = async (): Promise<sql.ConnectionPool> => {
+  if (!pooledConnection) {
+    pooledConnection = (async () => {
+      const config = await getConnectionConfig();
+      const pool = new sql.ConnectionPool(config);
+      pool.on('error', () => {
+        pooledConnection = null;
+      });
+      await pool.connect();
+      return pool;
+    })();
+  }
+  return pooledConnection;
+};
+
+const shouldReconnect = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  const message = (error.message || '').toLowerCase();
+  return (
+    message.includes('token') ||
+    message.includes('econn') ||
+    message.includes('connection') ||
+    message.includes('elogin')
+  );
+};
+
 export const runQuery = async <T = any>(query: string, params?: QueryParams): Promise<IResult<T>> => {
-  const config = await getConnectionConfig();
-  const pool = new sql.ConnectionPool(config);
-  await pool.connect();
   try {
+    const pool = await getPool();
     const request = addInputs(pool.request(), params);
     return await request.query<T>(query);
-  } finally {
-    await pool.close();
+  } catch (error) {
+    if (shouldReconnect(error)) {
+      pooledConnection = null;
+      const retryPool = await getPool();
+      const retryRequest = addInputs(retryPool.request(), params);
+      return await retryRequest.query<T>(query);
+    }
+    throw error;
   }
 };
