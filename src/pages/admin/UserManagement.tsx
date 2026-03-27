@@ -33,9 +33,14 @@ export const UserManagement: React.FC = () => {
     }, []);
 
     const loadData = async () => {
-        const [u, c] = await Promise.all([api.admin.getUsers(), api.admin.getCompanies()]);
-        setUsers(u);
-        setCompanies(c);
+        try {
+            const [u, c] = await Promise.all([api.admin.getUsers(), api.admin.getCompanies()]);
+            setUsers(u);
+            setCompanies(c);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to load users/entities.';
+            addToast({ title: 'Data Load Error', message, type: 'error' });
+        }
     };
 
     const handleDelete = async (id: string) => {
