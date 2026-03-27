@@ -127,16 +127,6 @@ export const Login: React.FC = () => {
                 {isMicrosoftLoading ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} /> : 'Sign in with Microsoft'}
               </button>
             </form>
-
-            <div className="mt-8 border-t border-slate-700 pt-4">
-              <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Quick Fill</p>
-              <div className="grid grid-cols-2 gap-2 text-xs text-slate-300 sm:grid-cols-4">
-                <button type="button" className="rounded-md border border-slate-600 bg-slate-800/70 px-2 py-1.5 hover:border-blue-400/50 hover:bg-slate-800" onClick={() => { setEmail('ops@nordic-hamburg.com'); setPassword('AVS-NORDIC-USER-INIT'); }}>nordic user</button>
-                <button type="button" className="rounded-md border border-slate-600 bg-slate-800/70 px-2 py-1.5 hover:border-blue-400/50 hover:bg-slate-800" onClick={() => { setEmail('admin@nordic-hamburg.com'); setPassword('AVS-NORDIC-ADMIN-INIT'); }}>nordic admin</button>
-                <button type="button" className="rounded-md border border-slate-600 bg-slate-800/70 px-2 py-1.5 hover:border-blue-400/50 hover:bg-slate-800" onClick={() => { setEmail('admin@avs.com'); setPassword('AVS-ADMIN-INIT'); }}>portal admin</button>
-                <button type="button" className="rounded-md border border-slate-600 bg-slate-800/70 px-2 py-1.5 hover:border-blue-400/50 hover:bg-slate-800" onClick={() => { setEmail('supadmin@avs.com'); setPassword('AVS-SUPADMIN-INIT'); }}>supadmin</button>
-              </div>
-            </div>
           </div>
       </div>
     </div>

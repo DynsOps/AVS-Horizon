@@ -28,7 +28,7 @@ export const Profile: React.FC = () => {
         if (!user) return;
         setIsLoading(true);
         try {
-            const updatedUser = await api.auth.updateProfile(user.id, formData);
+            const updatedUser = await api.auth.updateProfile(user.id, { name: formData.name });
             login(updatedUser); // Update local store
             addToast({ title: 'Success', message: 'Profile updated successfully', type: 'success' });
             setIsEditing(false);
@@ -114,7 +114,6 @@ export const Profile: React.FC = () => {
                                         type="email" 
                                         disabled
                                         value={formData.email}
-                                        onChange={(e) => setFormData({...formData, email: e.target.value})}
                                         className="pl-10 w-full px-4 py-2 bg-gray-50 dark:bg-slate-950/50 border border-gray-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white disabled:opacity-60 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
                                     />
                                 </div>

@@ -5,14 +5,15 @@ import { User, Permission, UserRole, Company } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
-import { Trash2, Edit2, Plus, Check, Search, KeyRound, Copy, Eye, EyeOff, X } from 'lucide-react';
+import { Trash2, Edit2, Plus, Check, Search, KeyRound, Copy, Eye, EyeOff, X, Lock } from 'lucide-react';
 import { getDefaultPermissionsForRole } from '../../utils/rbac';
 
 const ALL_PERMISSIONS: Permission[] = [
     'view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'view:supplier',
     'create:support-ticket', 'submit:rfq',
-    'manage:users', 'manage:companies', 'view:finance', 'edit:orders', 'view:analytics', 'system:settings'
+    'manage:users', 'manage:companies', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings'
 ];
+const SUPADMIN_CONTROLLED_PERMISSIONS: Permission[] = ['system:settings', 'view:finance', 'view:sustainability', 'view:business'];
 
 export const UserManagement: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
@@ -132,6 +133,7 @@ export const UserManagement: React.FC = () => {
                 user={user}
                 companies={companies}
                 assignableRoles={assignableRoles}
+                isSupAdminActor={isSupAdminActor}
                 onSave={(data) => handleSaveUser(data, !user)}
                 onCancel={closeDrawer}
             />
@@ -338,12 +340,14 @@ const UserForm = ({
     user,
     companies,
     assignableRoles,
+    isSupAdminActor,
     onSave,
     onCancel,
 }: {
     user?: User,
     companies: Company[],
     assignableRoles: UserRole[],
+    isSupAdminActor: boolean,
     onSave: (data: Partial<User>) => void,
     onCancel: () => void
 }) => {
@@ -361,7 +365,24 @@ const UserForm = ({
         permissions: user?.permissions || getDefaultPermissionsForRole(user?.role || 'user')
     });
 
+    useEffect(() => {
+        setFormData({
+            id: user?.id,
+            name: user?.name || '',
+            email: user?.email || '',
+            role: user?.role || 'user',
+            companyId: user?.companyId || '',
+            isGuest: user?.isGuest || false,
+            powerBiAccess: user?.powerBiAccess || 'none',
+            powerBiWorkspaceId: user?.powerBiWorkspaceId || '',
+            powerBiReportId: user?.powerBiReportId || '',
+            status: user?.status || 'Active',
+            permissions: user?.permissions || getDefaultPermissionsForRole(user?.role || 'user')
+        });
+    }, [user]);
+
     const togglePermission = (perm: Permission) => {
+        if (!isSupAdminActor && SUPADMIN_CONTROLLED_PERMISSIONS.includes(perm)) return;
         setFormData(prev => {
             const perms = prev.permissions || [];
             if (perms.includes(perm)) return { ...prev, permissions: perms.filter(p => p !== perm) };
@@ -492,12 +513,22 @@ const UserForm = ({
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Permissions</label>
                     <div className="grid grid-cols-2 gap-2">
                         {ALL_PERMISSIONS.map(p => (
+                            (() => {
+                                const isSupadminControlled = SUPADMIN_CONTROLLED_PERMISSIONS.includes(p);
+                                const isLocked = !isSupAdminActor && isSupadminControlled;
+                                return (
                             <div key={p} 
-                                 onClick={() => togglePermission(p)}
-                                 className={`cursor-pointer px-3 py-2 rounded text-xs border flex items-center justify-between transition-colors ${formData.permissions?.includes(p) ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300' : 'bg-gray-50 border-gray-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}`}>
+                                 onClick={() => !isLocked && togglePermission(p)}
+                                 title={isLocked ? 'Only supadmin can manage this permission.' : p}
+                                 className={`${isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} px-3 py-2 rounded text-xs border flex items-center justify-between transition-colors ${formData.permissions?.includes(p) ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300' : 'bg-gray-50 border-gray-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}`}>
                                 <span>{p}</span>
-                                {formData.permissions?.includes(p) && <Check size={12} />}
+                                <span className="flex items-center gap-1">
+                                    {isLocked && <Lock size={11} />}
+                                    {formData.permissions?.includes(p) && <Check size={12} />}
+                                </span>
                             </div>
+                                );
+                            })()
                         ))}
                     </div>
                 </div>

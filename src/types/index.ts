@@ -16,6 +16,8 @@ export type Permission =
   | 'manage:users' 
   | 'manage:companies' 
   | 'view:finance' 
+  | 'view:sustainability'
+  | 'view:business'
   | 'edit:orders' 
   | 'view:analytics'
   | 'system:settings';

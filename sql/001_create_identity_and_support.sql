@@ -14,6 +14,7 @@ BEGIN
         company_id NVARCHAR(64) NULL,
         status NVARCHAR(20) NOT NULL CHECK (status IN ('Active', 'Inactive', 'Suspended')),
         temporary_password NVARCHAR(128) NULL,
+        password_hash NVARCHAR(512) NULL,
         power_bi_access NVARCHAR(20) NOT NULL CONSTRAINT DF_users_power_bi_access DEFAULT ('none') CHECK (power_bi_access IN ('none', 'viewer', 'editor')),
         power_bi_workspace_id NVARCHAR(128) NULL,
         power_bi_report_id NVARCHAR(128) NULL,

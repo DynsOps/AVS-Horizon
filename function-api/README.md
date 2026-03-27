@@ -2,6 +2,9 @@
 
 ## Endpoints
 - `GET /api/auth/me`
+- `POST /api/auth/login-password`
+- `POST /api/auth/change-password`
+- `POST /api/auth/change-password-password`
 - `POST /api/support/tickets`
 - `POST /api/identity/users`
 

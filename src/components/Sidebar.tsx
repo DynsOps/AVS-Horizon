@@ -99,6 +99,9 @@ export const Sidebar: React.FC = () => {
             {hasPermission('view:orders') && <NavItem to="/customer/orders" icon={Package} label="Orders" />}
             {hasPermission('view:orders') && <NavItem to="/customer/historical-orders" icon={ClipboardList} label="Historical Orders" />}
             {hasPermission('view:shipments') && <NavItem to="/customer/shipments" icon={Truck} label="Shipments" />}
+            {hasPermission('view:finance') && <NavItem to="/customer/finance" icon={Landmark} label="Finance" />}
+            {hasPermission('view:sustainability') && <NavItem to="/customer/sustainability" icon={BarChart3} label="Sustainability" />}
+            {hasPermission('view:business') && <NavItem to="/customer/business" icon={Settings} label="Business" />}
             {hasPermission('view:reports') && <NavItem to="/customer/reports/consumption" icon={BarChart3} label="Consumption Report" />}
             {hasPermission('view:reports') && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
             {(canAccessBiReports || hasPermission('view:analytics')) && <NavItem to="/customer/analytics" icon={BarChart3} label="BI Reports" />}

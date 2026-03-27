@@ -21,6 +21,9 @@ import { Analytics } from './src/pages/customer/Analytics';
 import { CustomerOrders } from './src/pages/customer/Orders';
 import { Fleet } from './src/pages/customer/Fleet';
 import { Shipments } from './src/pages/customer/Shipments';
+import { Finance } from './src/pages/customer/Finance';
+import { Sustainability } from './src/pages/customer/Sustainability';
+import { Business } from './src/pages/customer/Business';
 import { SupportTickets } from './src/pages/shared/SupportTickets';
 import { GuestRFQPage } from './src/pages/guest/RFQ';
 
@@ -103,6 +106,9 @@ const App: React.FC = () => {
             <Route path="fleet" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:fleet']}><Fleet /></ProtectedRoute>} />
             <Route path="orders" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:orders']}><CustomerOrders /></ProtectedRoute>} />
             <Route path="shipments" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:shipments']}><Shipments /></ProtectedRoute>} />
+            <Route path="finance" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:finance']}><Finance /></ProtectedRoute>} />
+            <Route path="sustainability" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:sustainability']}><Sustainability /></ProtectedRoute>} />
+            <Route path="business" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:business']}><Business /></ProtectedRoute>} />
           </Route>
 
           {/* Supplier Routes */}

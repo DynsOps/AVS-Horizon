@@ -6,6 +6,76 @@ import { useAuthStore } from '../store/authStore';
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const LOCAL_DB_KEY = 'avs_horizon_local_db_v2';
 const MS_ACCESS_TOKEN_KEY = 'avs_ms_access_token';
+const FUNCTION_API_BASE_URL = (import.meta.env.VITE_FUNCTION_API_BASE_URL || '').replace(/\/+$/, '');
+
+const getStoredMicrosoftAccessToken = (): string => {
+  if (typeof window === 'undefined') return '';
+  return window.localStorage.getItem(MS_ACCESS_TOKEN_KEY) || '';
+};
+
+const callFunctionApi = async <T = any>(path: string, init?: RequestInit): Promise<T> => {
+  if (!FUNCTION_API_BASE_URL) {
+    throw new Error('Function API base URL is not configured.');
+  }
+
+  const token = getStoredMicrosoftAccessToken();
+  if (!token) {
+    throw new Error('Microsoft access token is missing. Please sign in with Microsoft again.');
+  }
+
+  const normalizedPath = path.startsWith('/') ? path.slice(1) : path;
+  const response = await fetch(`${FUNCTION_API_BASE_URL}/${normalizedPath}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(init?.headers || {}),
+    },
+  });
+
+  let payload: any = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message = payload?.error || payload?.message || `Function API request failed (${response.status})`;
+    throw new Error(message);
+  }
+
+  return payload as T;
+};
+
+const callFunctionApiPublic = async <T = any>(path: string, init?: RequestInit): Promise<T> => {
+  if (!FUNCTION_API_BASE_URL) {
+    throw new Error('Function API base URL is not configured.');
+  }
+
+  const normalizedPath = path.startsWith('/') ? path.slice(1) : path;
+  const response = await fetch(`${FUNCTION_API_BASE_URL}/${normalizedPath}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers || {}),
+    },
+  });
+
+  let payload: any = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message = payload?.error || payload?.message || `Function API request failed (${response.status})`;
+    throw new Error(message);
+  }
+
+  return payload as T;
+};
 
 type LocalDbSnapshot = {
   companies: Company[];
@@ -324,6 +394,12 @@ const assertCanManageUser = (targetUser: User, action: 'update' | 'delete'): voi
 
 const BOOTSTRAP_SUPADMIN_EMAILS = ['dynamicsops14@avsglobalsupply.com'];
 const LOWEST_AUTO_PERMISSIONS: Permission[] = ['view:dashboard'];
+const SUPADMIN_CONTROLLED_PERMISSIONS: Permission[] = [
+  'system:settings',
+  'view:finance',
+  'view:sustainability',
+  'view:business',
+];
 
 const getEmailDomain = (email: string): string => {
   const parts = email.split('@');
@@ -370,6 +446,19 @@ const createAutoAccessRequestTicket = (user: User): void => {
     createdAt: new Date().toISOString(),
   };
   mockSupportTickets.unshift(ticket);
+};
+
+const assertPermissionGrantPolicy = (targetPermissions: Permission[], existingPermissions: Permission[] = []): void => {
+  const actorRole = getActorRole();
+  if (actorRole === 'supadmin') return;
+
+  const existingSet = new Set(existingPermissions);
+  const disallowed = targetPermissions.filter(
+    (permission) => SUPADMIN_CONTROLLED_PERMISSIONS.includes(permission) && !existingSet.has(permission)
+  );
+  if (disallowed.length > 0) {
+    throw new Error(`Only supadmin can grant controlled permissions: ${disallowed.join(', ')}`);
+  }
 };
 
 // --- API Implementation ---
@@ -462,6 +551,27 @@ export const api = {
       persistLocalDb();
     },
     loginWithPassword: async (email: string, password: string): Promise<User> => {
+      if (FUNCTION_API_BASE_URL) {
+        const normalizedEmail = email.trim().toLowerCase();
+        const payload = await callFunctionApiPublic<{ user: User }>('api/auth/login-password', {
+          method: 'POST',
+          body: JSON.stringify({
+            email: normalizedEmail,
+            password,
+          }),
+        });
+
+        const backendUser = payload.user;
+        const existingIdx = mockUsers.findIndex((u) => u.id === backendUser.id);
+        if (existingIdx === -1) {
+          mockUsers.push({ ...backendUser });
+        } else {
+          mockUsers[existingIdx] = { ...mockUsers[existingIdx], ...backendUser };
+        }
+        persistLocalDb();
+        return { ...backendUser };
+      }
+
       await delay(700);
       const normalizedEmail = email.trim().toLowerCase();
       const user = mockUsers.find((u) => u.email.toLowerCase() === normalizedEmail);
@@ -502,6 +612,40 @@ export const api = {
         throw new Error('User not found');
     },
     changePassword: async (userId: string, currentPassword: string, newPassword: string): Promise<void> => {
+      if (FUNCTION_API_BASE_URL) {
+        const storedToken = getStoredMicrosoftAccessToken();
+        if (storedToken) {
+          await callFunctionApi('api/auth/change-password', {
+            method: 'POST',
+            body: JSON.stringify({
+              currentPassword,
+              newPassword,
+            }),
+          });
+        } else {
+          const activeUser = useAuthStore.getState().user;
+          if (!activeUser?.email) {
+            throw new Error('Authenticated user context is missing.');
+          }
+          await callFunctionApiPublic('api/auth/change-password-password', {
+            method: 'POST',
+            body: JSON.stringify({
+              email: activeUser.email,
+              currentPassword,
+              newPassword,
+            }),
+          });
+        }
+
+        const user = mockUsers.find((u) => u.id === userId);
+        if (user) {
+          user.passwordLastChangedAt = new Date().toISOString();
+          user.temporaryPassword = undefined;
+          persistLocalDb();
+        }
+        return;
+      }
+
       await delay(500);
       const user = mockUsers.find((u) => u.id === userId);
       if (!user) throw new Error('User not found');
@@ -524,6 +668,8 @@ export const api = {
     createUser: async (user: Omit<User, 'id'>): Promise<{ user: User; temporaryPassword: string }> => {
         await delay(500);
         assertCanAssignRole(user.role);
+        const requestedPermissions = user.permissions?.length ? user.permissions : getDefaultPermissionsForRole(user.role);
+        assertPermissionGrantPolicy(requestedPermissions);
         const emailExists = mockUsers.some(u => u.email.toLowerCase() === user.email.toLowerCase());
         if (emailExists) {
             throw new Error('A user with this email already exists.');
@@ -540,7 +686,7 @@ export const api = {
             ...user, 
             id: `u-${Date.now()}`, 
             temporaryPassword,
-            permissions: user.permissions?.length ? user.permissions : getDefaultPermissionsForRole(user.role),
+            permissions: requestedPermissions,
             powerBiAccess: user.powerBiAccess || 'none',
             powerBiWorkspaceId: user.powerBiWorkspaceId || '',
             powerBiReportId: user.powerBiReportId || '',
@@ -576,6 +722,7 @@ export const api = {
         const nextPermissions = updates.permissions?.length
             ? updates.permissions
             : (updates.role && updates.role !== currentUser.role ? getDefaultPermissionsForRole(updates.role) : currentUser.permissions);
+        assertPermissionGrantPolicy(nextPermissions, currentUser.permissions);
         const hasCompanyAdminPermissions = Boolean(nextPermissions?.includes('manage:users') || nextPermissions?.includes('manage:companies'));
         if (targetRole === 'user' && hasCompanyAdminPermissions && (!targetCompanyId || targetIsGuest)) {
             throw new Error('Company Admin users must be non-guest and linked to a company.');

@@ -24,6 +24,13 @@ const assertCanManageRole = (actorRole: UserRole, targetRole: UserRole): boolean
   return false;
 };
 
+const SUPADMIN_CONTROLLED_PERMISSIONS = new Set<string>([
+  'system:settings',
+  'view:finance',
+  'view:sustainability',
+  'view:business',
+]);
+
 export async function createAdminUser(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const actor = await authenticateRequest(request);
@@ -68,6 +75,13 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
     const effectivePermissions = (body.permissions && body.permissions.length > 0)
       ? body.permissions
       : getDefaultPermissionsForRole(role);
+
+    if (actor.role !== 'supadmin') {
+      const disallowed = effectivePermissions.filter((permission) => SUPADMIN_CONTROLLED_PERMISSIONS.has(permission));
+      if (disallowed.length > 0) {
+        return errorResponse(403, `Only supadmin can grant controlled permissions: ${disallowed.join(', ')}`);
+      }
+    }
 
     await runQuery(
       `
