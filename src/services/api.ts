@@ -103,6 +103,20 @@ type MicrosoftTokenRecord = {
   updatedAt: string;
 };
 
+type SystemHealthService = {
+  key: string;
+  label: string;
+  status: 'ok' | 'warn' | 'error';
+  details?: string;
+  latencyMs?: number | null;
+};
+
+type SystemHealthPayload = {
+  generatedAt: string;
+  services: SystemHealthService[];
+  logs: LogEntry[];
+};
+
 // --- Initial Mock Data (Stateful) ---
 
 let mockCompanies: Company[] = [
@@ -867,7 +881,27 @@ export const api = {
         mockCompanies = mockCompanies.filter(c => c.id !== id);
         persistLocalDb();
     },
+    getSystemHealth: async (): Promise<SystemHealthPayload> => {
+      if (shouldUseFunctionApi()) {
+        return callFunctionApi<SystemHealthPayload>('api/system-health');
+      }
+      await delay(250);
+      return {
+        generatedAt: new Date().toISOString(),
+        services: [
+          { key: 'auth-service', label: 'Auth Service', status: 'ok', details: 'Mock auth is active.', latencyMs: null },
+          { key: 'core-db', label: 'Core DB', status: 'warn', details: 'Using local mock store.', latencyMs: null },
+          { key: 'function-runtime', label: 'Function Runtime', status: 'ok', details: 'Frontend runtime active.', latencyMs: null },
+          { key: 'identity-module', label: 'Identity Module', status: 'ok', details: 'Mock identity is loaded.', latencyMs: null },
+        ],
+        logs: mockLogs,
+      };
+    },
     getSystemLogs: async (): Promise<LogEntry[]> => {
+      if (shouldUseFunctionApi()) {
+        const payload = await api.admin.getSystemHealth();
+        return payload.logs;
+      }
       await delay(300);
       return mockLogs;
     },

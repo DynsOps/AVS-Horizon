@@ -19,16 +19,26 @@ const StatusCard = ({ label, status }: { label: string, status: 'ok' | 'warn' | 
 );
 
 export const SystemHealth: React.FC = () => {
+    const [services, setServices] = useState<Array<{ key: string; label: string; status: 'ok' | 'warn' | 'error' }>>([]);
     const [logs, setLogs] = useState<LogEntry[]>([]);
 
     useEffect(() => {
-        // Mock live stream
-        const fetchLogs = async () => {
-             const data = await api.admin.getSystemLogs();
-             setLogs(data);
+        const fetchHealth = async () => {
+            try {
+                const health = await api.admin.getSystemHealth();
+                setServices(health.services.map((service) => ({
+                    key: service.key,
+                    label: service.label,
+                    status: service.status,
+                })));
+                setLogs(health.logs);
+            } catch {
+                const fallbackLogs = await api.admin.getSystemLogs();
+                setLogs(fallbackLogs);
+            }
         };
-        fetchLogs();
-        const interval = setInterval(fetchLogs, 5000);
+        void fetchHealth();
+        const interval = setInterval(() => { void fetchHealth(); }, 10000);
         return () => clearInterval(interval);
     }, []);
 
@@ -37,10 +47,14 @@ export const SystemHealth: React.FC = () => {
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">System Health</h1>
             
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <StatusCard label="Auth Service" status="ok" />
-                <StatusCard label="Order API" status="warn" />
-                <StatusCard label="Finance Worker" status="ok" />
-                <StatusCard label="Core DB" status="error" />
+                {(services.length ? services : [
+                    { key: 'auth-service', label: 'Auth Service', status: 'warn' as const },
+                    { key: 'core-db', label: 'Core DB', status: 'warn' as const },
+                    { key: 'function-runtime', label: 'Function Runtime', status: 'warn' as const },
+                    { key: 'identity-module', label: 'Identity Module', status: 'warn' as const },
+                ]).map((service) => (
+                    <StatusCard key={service.key} label={service.label} status={service.status} />
+                ))}
             </div>
 
             <Card className="bg-slate-900 border-slate-800 h-[500px] flex flex-col" noPadding>
