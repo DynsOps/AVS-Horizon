@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useUIStore } from '../store/uiStore';
-import { User as UserIcon, Mail, Shield, Building, Save, Loader2, Lock } from 'lucide-react';
+import { User as UserIcon, Mail, Shield, Building, Save, Loader2, Lock, KeyRound, BadgeCheck, ChevronDown } from 'lucide-react';
 
 export const Profile: React.FC = () => {
     const { user, login } = useAuthStore();
@@ -12,6 +12,7 @@ export const Profile: React.FC = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [isPasswordSectionOpen, setIsPasswordSectionOpen] = useState(false);
     const [passwordForm, setPasswordForm] = useState({
         currentPassword: '',
         newPassword: '',
@@ -23,17 +24,23 @@ export const Profile: React.FC = () => {
         name: user?.name || '',
         email: user?.email || '',
     });
+    const hasProfileChanges = formData.name.trim() !== (user?.name || '');
 
     const handleSave = async () => {
         if (!user) return;
+        if (!formData.name.trim()) {
+            addToast({ title: 'Validation Error', message: 'Full name is required.', type: 'error' });
+            return;
+        }
         setIsLoading(true);
         try {
-            const updatedUser = await api.auth.updateProfile(user.id, { name: formData.name });
+            const updatedUser = await api.auth.updateProfile(user.id, { name: formData.name.trim() });
             login(updatedUser); // Update local store
             addToast({ title: 'Success', message: 'Profile updated successfully', type: 'success' });
             setIsEditing(false);
         } catch (error) {
-            addToast({ title: 'Error', message: 'Failed to update profile', type: 'error' });
+            const message = error instanceof Error ? error.message : 'Failed to update profile.';
+            addToast({ title: 'Error', message, type: 'error' });
         } finally {
             setIsLoading(false);
         }
@@ -151,8 +158,8 @@ export const Profile: React.FC = () => {
                                     </button>
                                     <button 
                                         onClick={handleSave}
-                                        disabled={isLoading}
-                                        className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-blue-500/20 transition-all"
+                                        disabled={isLoading || !hasProfileChanges}
+                                        className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-blue-500/20 transition-all disabled:cursor-not-allowed"
                                     >
                                         {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                                         <span>Save Changes</span>
@@ -197,40 +204,67 @@ export const Profile: React.FC = () => {
                                 <span className="font-mono">{user.passwordLastChangedAt ? new Date(user.passwordLastChangedAt).toLocaleString() : 'Never'}</span>
                             </div>
                         </div>
-                        <div className="mt-4 space-y-3 rounded-lg border border-gray-200 dark:border-slate-800 p-3 bg-gray-50 dark:bg-slate-900/40">
-                            <div className="flex items-center gap-2">
-                                <Lock size={14} className="text-slate-500" />
-                                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Change Password</p>
-                            </div>
-                            <input
-                                type="password"
-                                placeholder="Current password"
-                                value={passwordForm.currentPassword}
-                                onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-slate-900 dark:text-white"
-                            />
-                            <input
-                                type="password"
-                                placeholder="New password"
-                                value={passwordForm.newPassword}
-                                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-slate-900 dark:text-white"
-                            />
-                            <input
-                                type="password"
-                                placeholder="Confirm new password"
-                                value={passwordForm.confirmPassword}
-                                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-slate-900 dark:text-white"
-                            />
+                        <div className="mt-4 rounded-xl border border-indigo-200/70 bg-gradient-to-br from-indigo-50 to-sky-50 p-4 dark:border-indigo-900/50 dark:from-indigo-950/30 dark:to-sky-950/20">
                             <button
-                                onClick={handlePasswordChange}
-                                disabled={isChangingPassword}
-                                className="w-full inline-flex items-center justify-center gap-2 rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-70"
+                                type="button"
+                                onClick={() => setIsPasswordSectionOpen((prev) => !prev)}
+                                className="mb-2 flex w-full items-center justify-between rounded-lg px-1 py-1 text-left hover:bg-indigo-100/40 dark:hover:bg-indigo-900/20"
                             >
-                                {isChangingPassword ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
-                                Update Password
+                                <div className="flex items-center gap-2">
+                                    <div className="rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/40">
+                                        <KeyRound size={14} className="text-indigo-600 dark:text-indigo-300" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Change Password</p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Use at least 8 characters.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+                                        <BadgeCheck size={10} />
+                                        Secure
+                                    </span>
+                                    <ChevronDown
+                                        size={14}
+                                        className={`text-indigo-500 transition-transform ${isPasswordSectionOpen ? 'rotate-180' : ''}`}
+                                    />
+                                </div>
                             </button>
+                            {isPasswordSectionOpen && (
+                                <>
+                                    <div className="space-y-2">
+                                        <input
+                                            type="password"
+                                            placeholder="Current password"
+                                            value={passwordForm.currentPassword}
+                                            onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                                            className="w-full rounded-lg border border-indigo-100 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-indigo-300 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                                        />
+                                        <input
+                                            type="password"
+                                            placeholder="New password"
+                                            value={passwordForm.newPassword}
+                                            onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                                            className="w-full rounded-lg border border-indigo-100 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-indigo-300 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                                        />
+                                        <input
+                                            type="password"
+                                            placeholder="Confirm new password"
+                                            value={passwordForm.confirmPassword}
+                                            onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                                            className="w-full rounded-lg border border-indigo-100 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-indigo-300 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={handlePasswordChange}
+                                        disabled={isChangingPassword}
+                                        className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-70"
+                                    >
+                                        {isChangingPassword ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
+                                        Update Password
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>

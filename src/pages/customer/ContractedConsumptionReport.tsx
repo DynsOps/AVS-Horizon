@@ -3,22 +3,25 @@ import { Card } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
 import { api } from '../../services/api';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import { useUIStore } from '../../store/uiStore';
 
 type ConsumptionRow = { month: string; consumed: number; contracted: number };
 
 export const ContractedConsumptionReport: React.FC = () => {
   const { user } = useAuthStore();
+  const { dashboardCompanyId } = useUIStore();
   const [data, setData] = useState<ConsumptionRow[]>([]);
+  const effectiveCompanyId = dashboardCompanyId || user?.companyId;
 
   useEffect(() => {
-    api.customer.getContractedConsumptionReport(user?.companyId).then(setData);
-  }, [user?.companyId]);
+    api.customer.getContractedConsumptionReport(effectiveCompanyId).then(setData);
+  }, [effectiveCompanyId]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Contracted Consumption Report</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Consumption vs contracted values over time.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Consumption vs contracted values over time. Company: {effectiveCompanyId || 'N/A'}.</p>
       </div>
       <Card title="Consumption Trend">
         <div className="h-80">

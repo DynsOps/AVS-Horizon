@@ -19,6 +19,7 @@ const getConnectionConfig = async (): Promise<sql.config> => {
   if (env.sqlAuthMode === 'sqlpassword') {
     return {
       server: env.sqlServer,
+      port: env.sqlPort,
       database: env.sqlDatabase,
       user: env.sqlUser,
       password: env.sqlPassword,
@@ -30,8 +31,8 @@ const getConnectionConfig = async (): Promise<sql.config> => {
         idleTimeoutMillis: 30000,
       },
       options: {
-        encrypt: true,
-        trustServerCertificate: false,
+        encrypt: env.sqlEncrypt,
+        trustServerCertificate: env.sqlTrustServerCertificate,
       },
     };
   }
@@ -43,6 +44,7 @@ const getConnectionConfig = async (): Promise<sql.config> => {
 
   return {
     server: env.sqlServer,
+    port: env.sqlPort,
     database: env.sqlDatabase,
     requestTimeout: 30000,
     connectionTimeout: 15000,
@@ -52,8 +54,8 @@ const getConnectionConfig = async (): Promise<sql.config> => {
       idleTimeoutMillis: 30000,
     },
     options: {
-      encrypt: true,
-      trustServerCertificate: false,
+      encrypt: env.sqlEncrypt,
+      trustServerCertificate: env.sqlTrustServerCertificate,
     },
     authentication: {
       type: 'azure-active-directory-access-token',

@@ -37,6 +37,7 @@ export interface User {
   email: string;
   role: UserRole;
   isGuest?: boolean;
+  showOnlyCoreAdminPermissions?: boolean;
   powerBiAccess?: 'none' | 'viewer' | 'editor';
   powerBiWorkspaceId?: string;
   powerBiReportId?: string;

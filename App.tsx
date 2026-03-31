@@ -24,7 +24,6 @@ import { Shipments } from './src/pages/customer/Shipments';
 import { Finance } from './src/pages/customer/Finance';
 import { Sustainability } from './src/pages/customer/Sustainability';
 import { Business } from './src/pages/customer/Business';
-import { SupportTickets } from './src/pages/shared/SupportTickets';
 import { GuestRFQPage } from './src/pages/guest/RFQ';
 
 // Supplier Pages
@@ -91,33 +90,32 @@ const App: React.FC = () => {
           
           {/* Common Routes */}
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="/support/tickets" element={<ProtectedRoute requiredPermissions={['create:support-ticket']}><SupportTickets /></ProtectedRoute>} />
           <Route path="/guest/rfq" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['submit:rfq']}><GuestRFQPage /></ProtectedRoute>} />
 
           {/* Customer Routes */}
           <Route path="/customer">
-            <Route path="dashboard" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:dashboard']}><CustomerDashboard /></ProtectedRoute>} />
-            <Route path="operational-list" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:operational-list']}><OperationalList /></ProtectedRoute>} />
-            <Route path="invoices" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:invoices']}><InvoiceList /></ProtectedRoute>} />
-            <Route path="port-fees" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:port-fees']}><PortFeeList /></ProtectedRoute>} />
-            <Route path="historical-orders" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:orders']}><HistoricalOrders /></ProtectedRoute>} />
-            <Route path="reports/consumption" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:reports']}><ContractedConsumptionReport /></ProtectedRoute>} />
-            <Route path="reports/analysis" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:reports']}><ContractedAnalysisReport /></ProtectedRoute>} />
-            <Route path="analytics" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:reports']}><Analytics /></ProtectedRoute>} />
-            <Route path="fleet" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:fleet']}><Fleet /></ProtectedRoute>} />
-            <Route path="orders" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:orders']}><CustomerOrders /></ProtectedRoute>} />
-            <Route path="shipments" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:shipments']}><Shipments /></ProtectedRoute>} />
-            <Route path="finance" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:finance']}><Finance /></ProtectedRoute>} />
-            <Route path="sustainability" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:sustainability']}><Sustainability /></ProtectedRoute>} />
-            <Route path="business" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:business']}><Business /></ProtectedRoute>} />
+            <Route path="dashboard" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:dashboard']}><CustomerDashboard /></ProtectedRoute>} />
+            <Route path="operational-list" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:operational-list']}><OperationalList /></ProtectedRoute>} />
+            <Route path="invoices" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:invoices']}><InvoiceList /></ProtectedRoute>} />
+            <Route path="port-fees" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:port-fees']}><PortFeeList /></ProtectedRoute>} />
+            <Route path="historical-orders" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:orders']}><HistoricalOrders /></ProtectedRoute>} />
+            <Route path="reports/consumption" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:reports']}><ContractedConsumptionReport /></ProtectedRoute>} />
+            <Route path="reports/analysis" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:reports']}><ContractedAnalysisReport /></ProtectedRoute>} />
+            <Route path="analytics" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:analytics']}><Analytics /></ProtectedRoute>} />
+            <Route path="fleet" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:fleet']}><Fleet /></ProtectedRoute>} />
+            <Route path="orders" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:orders']}><CustomerOrders /></ProtectedRoute>} />
+            <Route path="shipments" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:shipments']}><Shipments /></ProtectedRoute>} />
+            <Route path="finance" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:finance']}><Finance /></ProtectedRoute>} />
+            <Route path="sustainability" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:sustainability']}><Sustainability /></ProtectedRoute>} />
+            <Route path="business" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:business']}><Business /></ProtectedRoute>} />
           </Route>
 
           {/* Supplier Routes */}
           <Route path="/supplier">
-            <Route path="dashboard" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:supplier']}><SupplierDashboard /></ProtectedRoute>} />
-            <Route path="orders" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:supplier']}><div className="p-6">Supplier Orders View</div></ProtectedRoute>} />
-            <Route path="logistics" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:supplier']}><SupplierLogistics /></ProtectedRoute>} />
-            <Route path="performance" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['view:supplier']}><div className="p-6">Performance Scorecards</div></ProtectedRoute>} />
+            <Route path="dashboard" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:supplier']}><SupplierDashboard /></ProtectedRoute>} />
+            <Route path="orders" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:supplier']}><div className="p-6">Supplier Orders View</div></ProtectedRoute>} />
+            <Route path="logistics" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:supplier']}><SupplierLogistics /></ProtectedRoute>} />
+            <Route path="performance" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:supplier']}><div className="p-6">Performance Scorecards</div></ProtectedRoute>} />
           </Route>
 
           {/* Admin Routes */}

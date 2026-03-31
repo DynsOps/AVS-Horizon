@@ -40,6 +40,12 @@ export async function updateAdminCompany(request: HttpRequest, context: Invocati
     );
     const current = currentResult.recordset[0];
     if (!current) return errorResponse(404, 'Company not found.');
+    if (actor.role === 'admin') {
+      if (!actor.companyId) return errorResponse(403, 'Admin user is not linked to a company.');
+      if (current.id !== actor.companyId) {
+        return errorResponse(403, 'Admin can only manage their own company.');
+      }
+    }
 
     const body = (await request.json()) as UpdateCompanyBody;
     const next = {

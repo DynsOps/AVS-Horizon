@@ -11,6 +11,7 @@ type DbUserRow = {
   email: string;
   role: 'supadmin' | 'admin' | 'user';
   isGuest: boolean;
+  showOnlyCoreAdminPermissions: boolean;
   companyId: string | null;
   status: 'Active' | 'Inactive' | 'Suspended';
   powerBiAccess: 'none' | 'viewer' | 'editor';
@@ -124,6 +125,7 @@ const getUserByEmail = async (email: string): Promise<AuthUser | null> => {
       email,
       role,
       is_guest AS isGuest,
+      show_only_core_admin_permissions AS showOnlyCoreAdminPermissions,
       company_id AS companyId,
       status,
       power_bi_access AS powerBiAccess,
@@ -174,6 +176,7 @@ const createUserWithPermissions = async (params: {
       email,
       role,
       is_guest,
+      show_only_core_admin_permissions,
       company_id,
       status,
       temporary_password,
@@ -188,6 +191,7 @@ const createUserWithPermissions = async (params: {
       @displayName,
       @email,
       @role,
+      0,
       0,
       @companyId,
       'Active',
@@ -290,6 +294,18 @@ export const touchLastLogin = async (userId: string): Promise<void> => {
 
 export const authenticateRequest = async (request: HttpRequest): Promise<AuthUser> => {
   const token = getBearerToken(request);
+  if (!token && env.devBypassAuth) {
+    const devEmailRaw = request.headers.get('x-dev-user-email') || request.headers.get('X-Dev-User-Email');
+    const devEmail = (devEmailRaw || '').trim().toLowerCase();
+    if (!devEmail) {
+      throw new Error('Missing bearer token.');
+    }
+    const devUser = await getUserByEmail(devEmail);
+    if (!devUser) {
+      throw new Error('No access record found for this Microsoft account email.');
+    }
+    return devUser;
+  }
   if (!token) {
     throw new Error('Missing bearer token.');
   }

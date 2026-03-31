@@ -8,6 +8,25 @@ interface ToastMessage {
   type: 'success' | 'error' | 'info';
 }
 
+type ConfirmTone = 'default' | 'danger';
+
+type ConfirmDialogState = {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  tone: ConfirmTone;
+};
+
+type ConfirmDialogOptions = {
+  title?: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: ConfirmTone;
+};
+
 interface UIState {
   isSidebarOpen: boolean;
   toggleSidebar: () => void;
@@ -18,6 +37,12 @@ interface UIState {
   toasts: ToastMessage[];
   addToast: (toast: Omit<ToastMessage, 'id'>) => void;
   removeToast: (id: string) => void;
+  dashboardCompanyId: string;
+  setDashboardCompanyId: (companyId: string) => void;
+  confirmDialog: ConfirmDialogState;
+  openConfirmDialog: (options: ConfirmDialogOptions) => Promise<boolean>;
+  resolveConfirmDialog: (confirmed: boolean) => void;
+  confirmDialogResolver: ((confirmed: boolean) => void) | null;
 }
 
 const playToastSound = (type: ToastMessage['type']) => {
@@ -48,7 +73,7 @@ const playToastSound = (type: ToastMessage['type']) => {
   }
 };
 
-export const useUIStore = create<UIState>((set) => ({
+export const useUIStore = create<UIState>((set, get) => ({
   isSidebarOpen: true,
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   isDrawerOpen: false,
@@ -65,4 +90,49 @@ export const useUIStore = create<UIState>((set) => ({
     }, toast.type === 'error' ? 6200 : 4800);
   },
   removeToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+  dashboardCompanyId: '',
+  setDashboardCompanyId: (companyId) => set({ dashboardCompanyId: companyId }),
+  confirmDialog: {
+    isOpen: false,
+    title: 'Confirm Action',
+    message: '',
+    confirmLabel: 'Confirm',
+    cancelLabel: 'Cancel',
+    tone: 'default',
+  },
+  confirmDialogResolver: null,
+  openConfirmDialog: (options) => {
+    const activeResolver = get().confirmDialogResolver;
+    if (activeResolver) {
+      activeResolver(false);
+    }
+    return new Promise<boolean>((resolve) => {
+      set({
+        confirmDialog: {
+          isOpen: true,
+          title: options.title || 'Confirm Action',
+          message: options.message,
+          confirmLabel: options.confirmLabel || 'Confirm',
+          cancelLabel: options.cancelLabel || 'Cancel',
+          tone: options.tone || 'default',
+        },
+        confirmDialogResolver: resolve,
+      });
+    });
+  },
+  resolveConfirmDialog: (confirmed) => {
+    const resolver = get().confirmDialogResolver;
+    set({
+      confirmDialog: {
+        isOpen: false,
+        title: 'Confirm Action',
+        message: '',
+        confirmLabel: 'Confirm',
+        cancelLabel: 'Cancel',
+        tone: 'default',
+      },
+      confirmDialogResolver: null,
+    });
+    if (resolver) resolver(confirmed);
+  },
 }));

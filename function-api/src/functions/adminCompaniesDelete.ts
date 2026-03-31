@@ -9,6 +9,9 @@ export async function deleteAdminCompany(request: HttpRequest, context: Invocati
     if (!actor.permissions.includes('manage:companies')) {
       return errorResponse(403, 'Missing permission: manage:companies');
     }
+    if (actor.role === 'admin') {
+      return errorResponse(403, 'Admin cannot delete companies.');
+    }
 
     const companyId = request.params.id;
     if (!companyId) return errorResponse(400, 'Company id is required.');

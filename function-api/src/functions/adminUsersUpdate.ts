@@ -9,12 +9,10 @@ type UpdateUserBody = {
   email?: string;
   role?: UserRole;
   isGuest?: boolean;
+  showOnlyCoreAdminPermissions?: boolean;
   companyId?: string | null;
   status?: 'Active' | 'Inactive' | 'Suspended';
   permissions?: string[];
-  powerBiAccess?: 'none' | 'viewer' | 'editor';
-  powerBiWorkspaceId?: string;
-  powerBiReportId?: string;
 };
 
 type TargetUser = {
@@ -24,6 +22,7 @@ type TargetUser = {
   email: string;
   companyId: string | null;
   isGuest: boolean;
+  showOnlyCoreAdminPermissions: boolean;
   status: 'Active' | 'Inactive' | 'Suspended';
   powerBiAccess: 'none' | 'viewer' | 'editor';
   powerBiWorkspaceId: string | null;
@@ -63,6 +62,7 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
         email,
         company_id AS companyId,
         is_guest AS isGuest,
+        show_only_core_admin_permissions AS showOnlyCoreAdminPermissions,
         status,
         power_bi_access AS powerBiAccess,
         power_bi_workspace_id AS powerBiWorkspaceId,
@@ -74,6 +74,14 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
     );
     const target = targetResult.recordset[0];
     if (!target) return errorResponse(404, 'User not found.');
+
+    const isAdminActor = actor.role === 'admin';
+    if (isAdminActor) {
+      if (!actor.companyId) return errorResponse(403, 'Admin user is not linked to a company.');
+      if (target.companyId !== actor.companyId) {
+        return errorResponse(403, 'Admin can only manage users in their own company.');
+      }
+    }
 
     const nextRole = body.role || target.role;
     if (!canManageRole(actor.role, target.role) || !canManageRole(actor.role, nextRole)) {
@@ -94,17 +102,26 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
       }
     }
 
-    const nextIsGuest = typeof body.isGuest === 'boolean' ? body.isGuest : target.isGuest;
+    const nextIsGuest = nextRole === 'user'
+      ? (typeof body.isGuest === 'boolean' ? body.isGuest : target.isGuest)
+      : false;
+    const nextShowOnlyCoreAdminPermissions = nextRole === 'admin'
+      ? (typeof body.showOnlyCoreAdminPermissions === 'boolean'
+        ? body.showOnlyCoreAdminPermissions
+        : target.showOnlyCoreAdminPermissions)
+      : false;
     const nextCompanyId = body.companyId !== undefined ? body.companyId : target.companyId;
-    if (nextRole === 'user' && !nextIsGuest && !nextCompanyId) {
-      return errorResponse(400, 'Company is required for non-guest users.');
+    if (isAdminActor) {
+      if (nextRole === 'user' && nextIsGuest) {
+        return errorResponse(403, 'Admin cannot assign guest scope.');
+      }
+      if (nextCompanyId && nextCompanyId !== actor.companyId) {
+        return errorResponse(403, 'Admin can only assign users to their own company.');
+      }
     }
-
-    const nextPowerBiAccess = body.powerBiAccess || target.powerBiAccess || 'none';
-    const nextWorkspace = nextPowerBiAccess === 'none' ? '' : (body.powerBiWorkspaceId ?? target.powerBiWorkspaceId ?? '');
-    const nextReport = nextPowerBiAccess === 'none' ? '' : (body.powerBiReportId ?? target.powerBiReportId ?? '');
-    if (nextPowerBiAccess !== 'none' && (!nextWorkspace || !nextReport)) {
-      return errorResponse(400, 'Power BI workspace/report is required when access is not none.');
+    const scopedCompanyId = isAdminActor ? actor.companyId : nextCompanyId;
+    if ((nextRole === 'user' && !nextIsGuest && !scopedCompanyId) || (nextRole === 'admin' && !scopedCompanyId)) {
+      return errorResponse(400, 'Company is required for admin and non-guest user roles.');
     }
 
     const currentPermissionsResult = await runQuery<{ permission: string }>(
@@ -137,11 +154,12 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
         email = @email,
         role = @role,
         is_guest = @isGuest,
+        show_only_core_admin_permissions = @showOnlyCoreAdminPermissions,
         company_id = @companyId,
         status = @status,
-        power_bi_access = @powerBiAccess,
-        power_bi_workspace_id = @workspaceId,
-        power_bi_report_id = @reportId,
+        power_bi_access = 'none',
+        power_bi_workspace_id = NULL,
+        power_bi_report_id = NULL,
         updated_at = SYSUTCDATETIME()
       WHERE id = @userId
       `,
@@ -151,11 +169,9 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
         email: nextEmail,
         role: nextRole,
         isGuest: nextIsGuest,
-        companyId: nextRole === 'user' && !nextIsGuest ? nextCompanyId || null : null,
+        showOnlyCoreAdminPermissions: nextShowOnlyCoreAdminPermissions,
+        companyId: nextRole === 'supadmin' ? null : (nextRole === 'user' && nextIsGuest ? null : scopedCompanyId || null),
         status: body.status || target.status,
-        powerBiAccess: nextPowerBiAccess,
-        workspaceId: nextWorkspace,
-        reportId: nextReport,
       }
     );
 

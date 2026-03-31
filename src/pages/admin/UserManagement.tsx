@@ -13,19 +13,21 @@ const ALL_PERMISSIONS: Permission[] = [
     'create:support-ticket', 'submit:rfq',
     'manage:users', 'manage:companies', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings'
 ];
+const ADMIN_CORE_PERMISSIONS: Permission[] = ['view:dashboard', 'view:reports', 'manage:users', 'view:analytics'];
 const SUPADMIN_CONTROLLED_PERMISSIONS: Permission[] = ['system:settings', 'view:finance', 'view:sustainability', 'view:business'];
 
 export const UserManagement: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
     const [companies, setCompanies] = useState<Company[]>([]);
-    const { addToast, openDrawer, closeDrawer } = useUIStore();
+    const { addToast, openDrawer, closeDrawer, openConfirmDialog } = useUIStore();
     const [searchTerm, setSearchTerm] = useState('');
     const [newUserCredentials, setNewUserCredentials] = useState<{ email: string; temporaryPassword: string } | null>(null);
     const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
     const [showNewCredentialPassword, setShowNewCredentialPassword] = useState(false);
     const { user: actor } = useAuthStore();
     const isSupAdminActor = actor?.role === 'supadmin';
-    const assignableRoles: UserRole[] = isSupAdminActor ? ['user', 'admin', 'supadmin'] : ['user', 'admin'];
+    const isCoreAdminActor = actor?.role === 'admin' && Boolean(actor?.showOnlyCoreAdminPermissions);
+    const assignableRoles: UserRole[] = isSupAdminActor ? ['user', 'admin', 'supadmin'] : (isCoreAdminActor ? ['user'] : ['user', 'admin']);
     const canManageTargetUser = (target: User) => isSupAdminActor || target.role !== 'supadmin';
 
     useEffect(() => {
@@ -49,11 +51,16 @@ export const UserManagement: React.FC = () => {
             addToast({ title: 'Permission Denied', message: 'Only supadmin can delete a supadmin user.', type: 'error' });
             return;
         }
-        if (confirm('Are you sure you want to delete this user?')) {
-            await api.admin.deleteUser(id);
-            await loadData();
-            addToast({ title: 'User Deleted', message: 'User removed successfully.', type: 'info' });
-        }
+        const confirmed = await openConfirmDialog({
+            title: 'Delete User',
+            message: 'Are you sure you want to delete this user?',
+            confirmLabel: 'Delete',
+            tone: 'danger',
+        });
+        if (!confirmed) return;
+        await api.admin.deleteUser(id);
+        await loadData();
+        addToast({ title: 'User Deleted', message: 'User removed successfully.', type: 'info' });
     };
 
     const handleSaveUser = async (userData: Partial<User>, isNew: boolean) => {
@@ -85,17 +92,14 @@ export const UserManagement: React.FC = () => {
                 return;
             }
         }
-        if (userData.role === 'user' && !userData.isGuest && !userData.companyId) {
-            addToast({ title: 'Validation Error', message: 'Company is required for role "user".', type: 'error' });
+        const companyRequired = (userData.role === 'user' && !userData.isGuest) || userData.role === 'admin';
+        if (companyRequired && !userData.companyId) {
+            addToast({ title: 'Validation Error', message: 'Company is required for role "user" (non-guest) and "admin".', type: 'error' });
             return;
         }
         const hasCompanyAdminPermissions = Boolean(userData.permissions?.includes('manage:users') || userData.permissions?.includes('manage:companies'));
         if (userData.role === 'user' && hasCompanyAdminPermissions && (!userData.companyId || userData.isGuest)) {
             addToast({ title: 'Validation Error', message: 'Company Admin users must be non-guest and linked to a company.', type: 'error' });
-            return;
-        }
-        if ((userData.powerBiAccess || 'none') !== 'none' && (!userData.powerBiWorkspaceId || !userData.powerBiReportId)) {
-            addToast({ title: 'Validation Error', message: 'Power BI workspace/report is required when access is not none.', type: 'error' });
             return;
         }
 
@@ -117,6 +121,16 @@ export const UserManagement: React.FC = () => {
                 addToast({ title: 'User Created', message: 'Temporary password generated.', type: 'success' });
             } else {
                 if (!userData.id) return;
+                const existingUser = users.find((u) => u.id === userData.id);
+                const confirmMessage = existingUser
+                    ? `Are you sure you want to update ${existingUser.email}?`
+                    : 'Are you sure you want to update this user?';
+                const confirmed = await openConfirmDialog({
+                    title: 'Update User',
+                    message: confirmMessage,
+                    confirmLabel: 'Update',
+                });
+                if (!confirmed) return;
                 await api.admin.updateUser(userData.id, { ...userData, email: normalizedEmail });
                 await loadData();
                 addToast({ title: 'User Updated', message: 'User details saved.', type: 'success' });
@@ -139,6 +153,7 @@ export const UserManagement: React.FC = () => {
                 companies={companies}
                 assignableRoles={assignableRoles}
                 isSupAdminActor={isSupAdminActor}
+                isCoreAdminActor={isCoreAdminActor}
                 actorPermissions={actor?.permissions || []}
                 onSave={(data) => handleSaveUser(data, !user)}
                 onCancel={closeDrawer}
@@ -153,6 +168,28 @@ export const UserManagement: React.FC = () => {
 
     const togglePasswordVisibility = (userId: string) => {
         setVisiblePasswords((prev) => ({ ...prev, [userId]: !prev[userId] }));
+    };
+    const handleResetPassword = async (target: User) => {
+        if (!canManageTargetUser(target)) {
+            addToast({ title: 'Permission Denied', message: 'Only supadmin can reset supadmin passwords.', type: 'error' });
+            return;
+        }
+        const confirmed = await openConfirmDialog({
+            title: 'Reset Password',
+            message: `Reset password for ${target.email}?`,
+            confirmLabel: 'Reset',
+        });
+        if (!confirmed) return;
+        try {
+            const payload = await api.admin.resetUserPassword(target.id);
+            await loadData();
+            setNewUserCredentials({ email: payload.email, temporaryPassword: payload.temporaryPassword });
+            setShowNewCredentialPassword(false);
+            addToast({ title: 'Password Reset', message: 'Temporary password generated successfully.', type: 'success' });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to reset password.';
+            addToast({ title: 'Error', message, type: 'error' });
+        }
     };
 
     return (
@@ -317,6 +354,14 @@ export const UserManagement: React.FC = () => {
                                 </td>
                                 <td className="px-6 py-4 text-right space-x-2">
                                     <button
+                                        onClick={() => { void handleResetPassword(user); }}
+                                        className="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 disabled:text-slate-300 disabled:cursor-not-allowed"
+                                        disabled={!canManageTargetUser(user)}
+                                        title={!canManageTargetUser(user) ? 'Only supadmin can reset supadmin passwords' : 'Reset password'}
+                                    >
+                                        <KeyRound size={16} />
+                                    </button>
+                                    <button
                                         onClick={() => openUserDrawer(user)}
                                         className="text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 disabled:text-slate-300 disabled:cursor-not-allowed"
                                         disabled={!canManageTargetUser(user)}
@@ -347,6 +392,7 @@ const UserForm = ({
     companies,
     assignableRoles,
     isSupAdminActor,
+    isCoreAdminActor,
     actorPermissions,
     onSave,
     onCancel,
@@ -355,10 +401,21 @@ const UserForm = ({
     companies: Company[],
     assignableRoles: UserRole[],
     isSupAdminActor: boolean,
+    isCoreAdminActor: boolean,
     actorPermissions: Permission[],
     onSave: (data: Partial<User>) => void,
     onCancel: () => void
 }) => {
+    const getDefaultFormPermissionsForRole = (role: UserRole): Permission[] => {
+        const defaults = role === 'supadmin' ? getDefaultPermissionsForRole(role) : ADMIN_CORE_PERMISSIONS;
+        return isSupAdminActor ? defaults : defaults.filter((permission) => actorPermissions.includes(permission));
+    };
+
+    const inferShowOnlyAdminCore = (formUser?: User): boolean => {
+        if (typeof formUser?.id === 'string') return Boolean(formUser?.showOnlyCoreAdminPermissions);
+        return isCoreAdminActor;
+    };
+
     const [formData, setFormData] = useState<Partial<User>>({
         id: user?.id,
         name: user?.name || '',
@@ -366,12 +423,10 @@ const UserForm = ({
         role: user?.role || 'user',
         companyId: user?.companyId || '',
         isGuest: user?.isGuest || false,
-        powerBiAccess: user?.powerBiAccess || 'none',
-        powerBiWorkspaceId: user?.powerBiWorkspaceId || '',
-        powerBiReportId: user?.powerBiReportId || '',
         status: user?.status || 'Active',
-        permissions: user?.permissions || getDefaultPermissionsForRole(user?.role || 'user')
+        permissions: user?.permissions || getDefaultFormPermissionsForRole(user?.role || 'user')
     });
+    const [showOnlyAdminCorePermissions, setShowOnlyAdminCorePermissions] = useState<boolean>(inferShowOnlyAdminCore(user));
 
     useEffect(() => {
         setFormData({
@@ -381,12 +436,10 @@ const UserForm = ({
             role: user?.role || 'user',
             companyId: user?.companyId || '',
             isGuest: user?.isGuest || false,
-            powerBiAccess: user?.powerBiAccess || 'none',
-            powerBiWorkspaceId: user?.powerBiWorkspaceId || '',
-            powerBiReportId: user?.powerBiReportId || '',
             status: user?.status || 'Active',
-            permissions: user?.permissions || getDefaultPermissionsForRole(user?.role || 'user')
+            permissions: user?.permissions || getDefaultFormPermissionsForRole(user?.role || 'user')
         });
+        setShowOnlyAdminCorePermissions(inferShowOnlyAdminCore(user));
     }, [user]);
 
     const togglePermission = (perm: Permission) => {
@@ -400,6 +453,7 @@ const UserForm = ({
     };
 
     return (
+        <>
         <div className="space-y-6">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">{user ? 'Edit User' : 'Create User'}</h2>
             
@@ -423,16 +477,22 @@ const UserForm = ({
                                     setFormData({
                                         ...formData,
                                         role: nextRole,
-                                        companyId: nextRole === 'user' && !formData.isGuest ? formData.companyId : '',
-                                        powerBiAccess: nextRole === 'user' ? 'viewer' : 'editor',
-                                        permissions: isSupAdminActor
-                                            ? getDefaultPermissionsForRole(nextRole)
-                                            : getDefaultPermissionsForRole(nextRole).filter((perm) => actorPermissions.includes(perm)),
+                                        isGuest: nextRole === 'user' ? formData.isGuest : false,
+                                        companyId: nextRole === 'supadmin' ? '' : formData.companyId,
+                                        permissions: getDefaultFormPermissionsForRole(nextRole),
                                     });
                                 }}>
-                            {assignableRoles.map((role) => (
+                            {(() => {
+                                const limitedRoleOptions = (!isSupAdminActor && showOnlyAdminCorePermissions)
+                                    ? assignableRoles.filter((role) => role === 'user')
+                                    : assignableRoles;
+                                const roleOptions = (formData.role && !limitedRoleOptions.includes(formData.role))
+                                    ? [...limitedRoleOptions, formData.role]
+                                    : limitedRoleOptions;
+                                return roleOptions.map((role) => (
                                 <option key={role} value={role}>{role}</option>
-                            ))}
+                                ));
+                            })()}
                         </select>
                     </div>
                     <div>
@@ -455,9 +515,6 @@ const UserForm = ({
                                 ...formData,
                                 isGuest: e.target.checked,
                                 companyId: e.target.checked ? '' : formData.companyId,
-                                powerBiAccess: e.target.checked ? 'none' : formData.powerBiAccess,
-                                powerBiWorkspaceId: e.target.checked ? '' : formData.powerBiWorkspaceId,
-                                powerBiReportId: e.target.checked ? '' : formData.powerBiReportId,
                             })}
                         />
                         Guest user (Global)
@@ -465,71 +522,52 @@ const UserForm = ({
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Company</label>
                     <select className="w-full p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-sm text-slate-900 dark:text-white"
                             value={formData.companyId}
-                            disabled={formData.role !== 'user' || !!formData.isGuest}
+                            disabled={formData.role === 'supadmin' || (formData.role === 'user' && !!formData.isGuest)}
                             onChange={e => setFormData({...formData, companyId: e.target.value})}>
-                        <option value="">-- None (Admin/Supadmin) --</option>
+                        <option value="">-- Select Company --</option>
                         {companies.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
                     </select>
                     <p className="mt-1 text-[11px] text-slate-500">
-                        Company selection is required only for non-guest `user` role.
+                        Company selection is required for `admin` and non-guest `user` roles.
                     </p>
                 </div>
 
                 <div>
-                    <p className="text-xs font-bold text-slate-500 uppercase mb-2">Power BI Access Management</p>
-                    <div className="grid grid-cols-3 gap-3">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Access</label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Permissions</label>
+                    {isSupAdminActor && (
+                        <div className="mb-3">
+                            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Permission View
+                            </label>
                             <select
-                                value={formData.powerBiAccess}
-                                onChange={(e) => {
-                                    const access = e.target.value as User['powerBiAccess'];
-                                    setFormData({
-                                        ...formData,
-                                        powerBiAccess: access,
-                                        powerBiWorkspaceId: access === 'none' ? '' : formData.powerBiWorkspaceId,
-                                        powerBiReportId: access === 'none' ? '' : formData.powerBiReportId,
-                                    });
-                                }}
-                                className="w-full p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-sm text-slate-900 dark:text-white"
-                                disabled={!!formData.isGuest}
+                                value={showOnlyAdminCorePermissions ? 'core' : 'all'}
+                                onChange={(e) => setShowOnlyAdminCorePermissions(e.target.value === 'core')}
+                                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                             >
-                                <option value="none">none</option>
-                                <option value="viewer">viewer</option>
-                                <option value="editor">editor</option>
+                                <option value="all">All permissions</option>
+                                <option value="core">Core admin only</option>
                             </select>
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Workspace ID</label>
-                            <input
-                                value={formData.powerBiWorkspaceId || ''}
-                                disabled={formData.powerBiAccess === 'none' || !!formData.isGuest}
-                                onChange={(e) => setFormData({ ...formData, powerBiWorkspaceId: e.target.value })}
-                                className="w-full p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-sm text-slate-900 dark:text-white disabled:opacity-60"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Report ID</label>
-                            <input
-                                value={formData.powerBiReportId || ''}
-                                disabled={formData.powerBiAccess === 'none' || !!formData.isGuest}
-                                onChange={(e) => setFormData({ ...formData, powerBiReportId: e.target.value })}
-                                className="w-full p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-sm text-slate-900 dark:text-white disabled:opacity-60"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Permissions</label>
+                    )}
                     <div className="grid grid-cols-2 gap-2">
                         {ALL_PERMISSIONS.map(p => (
                             (() => {
                                 const isSupadminControlled = SUPADMIN_CONTROLLED_PERMISSIONS.includes(p);
                                 const actorMissing = !isSupAdminActor && !actorPermissions.includes(p);
                                 const isLocked = !isSupAdminActor && (isSupadminControlled || actorMissing);
+                                const hiddenByCoreAdminActor =
+                                    !isSupAdminActor &&
+                                    isCoreAdminActor &&
+                                    !ADMIN_CORE_PERMISSIONS.includes(p);
+                                const hideUnselectedLockedForAdmin =
+                                    isSupAdminActor &&
+                                    showOnlyAdminCorePermissions &&
+                                    formData.role === 'admin' &&
+                                    isSupadminControlled &&
+                                    !(formData.permissions || []).includes(p);
+                                if (hiddenByCoreAdminActor || hideUnselectedLockedForAdmin) return null;
                                 return (
-                            <div key={p} 
+                            <div key={p}
                                  onClick={() => !isLocked && togglePermission(p)}
                                  title={isLocked ? (actorMissing ? 'Admin can only grant permissions they already have.' : 'Only supadmin can manage this permission.') : p}
                                  className={`${isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} px-3 py-2 rounded text-xs border flex items-center justify-between transition-colors ${formData.permissions?.includes(p) ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300' : 'bg-gray-50 border-gray-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}`}>
@@ -548,8 +586,22 @@ const UserForm = ({
 
             <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-800">
                 <button onClick={onCancel} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">Cancel</button>
-                <button onClick={() => onSave(formData)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 shadow-md">Save User</button>
+                <button
+                    onClick={() => {
+                        const nextData: Partial<User> = { ...formData };
+                        nextData.showOnlyCoreAdminPermissions = formData.role === 'admin' ? showOnlyAdminCorePermissions : false;
+                        if (showOnlyAdminCorePermissions && formData.role === 'admin') {
+                            nextData.permissions = (formData.permissions || []).filter((permission) => ADMIN_CORE_PERMISSIONS.includes(permission));
+                        }
+                        onSave(nextData);
+                    }}
+                    className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 shadow-md"
+                >
+                    Save User
+                </button>
             </div>
         </div>
+
+        </>
     );
 };

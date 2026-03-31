@@ -1,17 +1,71 @@
 
-import React from 'react';
-import { Search, Bell, ShoppingCart, User as UserIcon, Sun, Moon, Sparkles } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Bell, ShoppingCart, User as UserIcon, Sun, Moon, Sparkles, Building2 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../store/uiStore';
+import { api } from '../services/api';
+import { Company } from '../types';
 
 export const Header: React.FC = () => {
   const { user } = useAuthStore();
   const { isDarkMode, toggleTheme } = useThemeStore();
-  const { addToast } = useUIStore();
+  const { addToast, dashboardCompanyId, setDashboardCompanyId } = useUIStore();
   const navigate = useNavigate();
   const isCustomer = user?.role === 'user';
+  const [companyOptions, setCompanyOptions] = useState<Company[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadCompanyOptions = async () => {
+      if (!user) {
+        if (mounted) setCompanyOptions([]);
+        return;
+      }
+      if (user.role === 'user') {
+        if (!user.companyId) {
+          if (mounted) setCompanyOptions([]);
+          return;
+        }
+        const fallbackCompany: Company = {
+          id: user.companyId,
+          name: user.companyId,
+          type: 'Customer',
+          country: '',
+          contactEmail: '',
+          status: 'Active',
+        };
+        if (mounted) setCompanyOptions([fallbackCompany]);
+        return;
+      }
+      try {
+        const rows = await api.admin.getCompanies();
+        if (mounted) setCompanyOptions(rows);
+      } catch {
+        if (mounted) setCompanyOptions([]);
+      }
+    };
+
+    void loadCompanyOptions();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id, user?.role, user?.companyId]);
+
+  const resolvedCompanyId = useMemo(() => {
+    if (!companyOptions.length) return '';
+    if (dashboardCompanyId && companyOptions.some((company) => company.id === dashboardCompanyId)) {
+      return dashboardCompanyId;
+    }
+    return companyOptions[0].id;
+  }, [companyOptions, dashboardCompanyId]);
+
+  useEffect(() => {
+    if (resolvedCompanyId && resolvedCompanyId !== dashboardCompanyId) {
+      setDashboardCompanyId(resolvedCompanyId);
+    }
+  }, [resolvedCompanyId, dashboardCompanyId, setDashboardCompanyId]);
 
   return (
     <header className={`
@@ -26,24 +80,22 @@ export const Header: React.FC = () => {
           <Sparkles size={12} className="mr-1.5" />
           Ops Command Center
         </div>
-        <div className="relative w-full max-w-[30rem] group">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-            <Search className="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" strokeWidth={1.5} />
-          </span>
-          <input 
-            type="text" 
-            placeholder="Search orders, vessels, invoices... (Cmd+K)" 
-            className={`
-                w-full py-2.5 pl-10 pr-4 text-sm 
-                bg-white/70 dark:bg-slate-950/70 
-                border border-white/70 dark:border-slate-700/70 focus:bg-white dark:focus:bg-slate-900
-                focus:border-blue-500/50 dark:focus:border-blue-500/50
-                rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 
-                text-slate-700 dark:text-slate-200
-                transition-all duration-200
-            `}
-          />
-        </div>
+        {companyOptions.length > 0 && (
+          <div className="flex items-center gap-2 rounded-xl border border-white/70 bg-white/70 px-3 py-2 dark:border-slate-700/70 dark:bg-slate-950/70">
+            <Building2 size={15} className="text-slate-500 dark:text-slate-300" />
+            <select
+              value={resolvedCompanyId}
+              onChange={(e) => setDashboardCompanyId(e.target.value)}
+              className="bg-transparent pr-2 text-sm text-slate-700 outline-none dark:text-slate-200"
+            >
+              {companyOptions.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.name} ({company.id})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center space-x-3">

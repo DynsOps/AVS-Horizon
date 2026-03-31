@@ -6,15 +6,16 @@ import { useUIStore } from '../../store/uiStore';
 
 export const Analytics: React.FC = () => {
     const { user } = useAuthStore();
-    const { addToast } = useUIStore();
-    const access = user?.powerBiAccess || 'none';
-    const canAccess = access !== 'none';
-    const workspaceId = user?.powerBiWorkspaceId || 'N/A';
-    const reportId = user?.powerBiReportId || 'N/A';
+    const { addToast, dashboardCompanyId } = useUIStore();
+    const canAccess = Boolean(user?.permissions?.includes('view:analytics'));
+    const effectiveCompanyId = dashboardCompanyId || user?.companyId || 'N/A';
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Advanced Analytics</h1>
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Advanced Analytics</h1>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Company context: {effectiveCompanyId}</p>
+                </div>
                 <button
                     onClick={() => addToast({ title: 'Filter Context', message: 'Context filters are ready to be configured.', type: 'info' })}
                     className="flex items-center space-x-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 px-4 py-2 rounded-lg shadow-sm text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
@@ -31,10 +32,10 @@ export const Analytics: React.FC = () => {
                     </div>
                     <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Power BI Report Access</h3>
                     <p className="text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">
-                        Current level: <span className="font-mono text-xs bg-gray-100 dark:bg-slate-900 px-1 py-0.5 rounded text-slate-700 dark:text-slate-300">{access}</span>.
+                        Access is managed from secure backend configuration.
                     </p>
                     <p className="text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
-                        Workspace: <span className="font-mono text-xs bg-gray-100 dark:bg-slate-900 px-1 py-0.5 rounded text-slate-700 dark:text-slate-300">{workspaceId}</span> | Report: <span className="font-mono text-xs bg-gray-100 dark:bg-slate-900 px-1 py-0.5 rounded text-slate-700 dark:text-slate-300">{reportId}</span>
+                        Workspace and report identifiers are no longer managed per-user in this panel.
                     </p>
                     <button
                         onClick={() => {

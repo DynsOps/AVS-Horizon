@@ -33,8 +33,24 @@ export const SystemHealth: React.FC = () => {
                 })));
                 setLogs(health.logs);
             } catch {
-                const fallbackLogs = await api.admin.getSystemLogs();
-                setLogs(fallbackLogs);
+                try {
+                    const fallbackLogs = await api.admin.getSystemLogs();
+                    setLogs(fallbackLogs);
+                } catch {
+                    setServices([
+                        { key: 'auth-service', label: 'Auth Service', status: 'warn' },
+                        { key: 'core-db', label: 'Core DB', status: 'warn' },
+                        { key: 'function-runtime', label: 'Function Runtime', status: 'warn' },
+                        { key: 'identity-module', label: 'Identity Module', status: 'warn' },
+                    ]);
+                    setLogs([{
+                        id: `health-fallback-${Date.now()}`,
+                        timestamp: new Date().toISOString(),
+                        level: 'WARN',
+                        service: 'SystemHealth',
+                        message: 'Function API token is missing. Sign in with Microsoft or disable forced Function API mode.',
+                    }]);
+                }
             }
         };
         void fetchHealth();

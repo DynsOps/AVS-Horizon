@@ -15,9 +15,12 @@ type CompanyRow = {
 export async function listAdminCompanies(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const actor = await authenticateRequest(request);
-    if (!actor.permissions.includes('manage:companies')) {
-      return errorResponse(403, 'Missing permission: manage:companies');
+    if (!actor.permissions.includes('manage:companies') && !actor.permissions.includes('manage:users')) {
+      return errorResponse(403, 'Missing permission: manage:companies/manage:users');
     }
+
+    const isAdminActor = actor.role === 'admin';
+    if (isAdminActor && !actor.companyId) return ok({ companies: [] });
 
     const result = await runQuery<CompanyRow>(
       `
@@ -29,8 +32,10 @@ export async function listAdminCompanies(request: HttpRequest, context: Invocati
         contact_email AS contactEmail,
         status
       FROM dbo.companies
+      ${isAdminActor ? 'WHERE id = @companyId' : ''}
       ORDER BY created_at DESC
-      `
+      `,
+      isAdminActor ? { companyId: actor.companyId } : undefined
     );
 
     return ok({ companies: result.recordset });

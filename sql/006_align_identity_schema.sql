@@ -11,6 +11,7 @@ BEGIN
         email NVARCHAR(320) NOT NULL,
         role NVARCHAR(20) NOT NULL,
         is_guest BIT NOT NULL CONSTRAINT DF_users_is_guest DEFAULT (0),
+        show_only_core_admin_permissions BIT NOT NULL CONSTRAINT DF_users_show_only_core_admin_permissions DEFAULT (0),
         company_id NVARCHAR(64) NULL,
         status NVARCHAR(20) NOT NULL CONSTRAINT DF_users_status DEFAULT ('Active'),
         temporary_password NVARCHAR(128) NULL,
@@ -47,6 +48,12 @@ GO
 IF COL_LENGTH('dbo.users', 'is_guest') IS NULL
 BEGIN
     ALTER TABLE dbo.users ADD is_guest BIT NOT NULL CONSTRAINT DF_users_is_guest_align DEFAULT (0);
+END;
+GO
+
+IF COL_LENGTH('dbo.users', 'show_only_core_admin_permissions') IS NULL
+BEGIN
+    ALTER TABLE dbo.users ADD show_only_core_admin_permissions BIT NOT NULL CONSTRAINT DF_users_show_only_core_admin_permissions_align DEFAULT (0);
 END;
 GO
 
@@ -189,4 +196,3 @@ BEGIN
     CREATE UNIQUE INDEX UX_users_email ON dbo.users(email);
 END;
 GO
-

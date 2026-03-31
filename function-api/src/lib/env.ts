@@ -3,10 +3,14 @@ export const env = {
   azureClientId: process.env.AZURE_AD_CLIENT_ID || '',
   azureAudience: process.env.AZURE_AD_AUDIENCE || process.env.AZURE_AD_CLIENT_ID || '',
   sqlServer: process.env.SQL_SERVER || '',
+  sqlPort: Number(process.env.SQL_PORT || '1433'),
   sqlDatabase: process.env.SQL_DATABASE || '',
   sqlAuthMode: (process.env.SQL_AUTH_MODE || 'ManagedIdentity').toLowerCase(),
   sqlUser: process.env.SQL_USER || '',
   sqlPassword: process.env.SQL_PASSWORD || '',
+  sqlEncrypt: (process.env.SQL_ENCRYPT || 'true').toLowerCase() === 'true',
+  sqlTrustServerCertificate: (process.env.SQL_TRUST_SERVER_CERTIFICATE || 'false').toLowerCase() === 'true',
+  devBypassAuth: (process.env.DEV_BYPASS_AUTH || 'false').toLowerCase() === 'true',
 };
 
 export const assertEnv = (): void => {

@@ -9,6 +9,7 @@ type DbUserRow = {
   email: string;
   role: 'supadmin' | 'admin' | 'user';
   isGuest: boolean;
+  showOnlyCoreAdminPermissions: boolean;
   companyId: string | null;
   status: 'Active' | 'Inactive' | 'Suspended';
   powerBiAccess: 'none' | 'viewer' | 'editor';
@@ -26,6 +27,11 @@ export async function listAdminUsers(request: HttpRequest, context: InvocationCo
       return errorResponse(403, 'Missing permission: manage:users');
     }
 
+    const isAdminActor = actor.role === 'admin';
+    if (isAdminActor && !actor.companyId) {
+      return ok({ users: [] });
+    }
+
     const usersResult = await runQuery<DbUserRow>(
       `
       SELECT
@@ -34,6 +40,7 @@ export async function listAdminUsers(request: HttpRequest, context: InvocationCo
         email,
         role,
         is_guest AS isGuest,
+        show_only_core_admin_permissions AS showOnlyCoreAdminPermissions,
         company_id AS companyId,
         status,
         power_bi_access AS powerBiAccess,
@@ -43,8 +50,10 @@ export async function listAdminUsers(request: HttpRequest, context: InvocationCo
         CONVERT(varchar(33), last_login_at, 127) AS lastLogin,
         CONVERT(varchar(33), password_last_changed_at, 127) AS passwordLastChangedAt
       FROM dbo.users
+      ${isAdminActor ? 'WHERE company_id = @companyId' : ''}
       ORDER BY created_at DESC
-      `
+      `,
+      isAdminActor ? { companyId: actor.companyId } : undefined
     );
 
     const permissionsResult = await runQuery<{ userId: string; permission: string }>(

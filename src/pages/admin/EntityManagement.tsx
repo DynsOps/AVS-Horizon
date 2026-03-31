@@ -4,11 +4,18 @@ import { api } from '../../services/api';
 import { Company } from '../../types';
 import { useUIStore } from '../../store/uiStore';
 import { Plus, Edit2, Trash2, Building2, Mail, Globe, Tag } from 'lucide-react';
+import { getDefaultPermissionsForRole } from '../../utils/rbac';
+
+type CreateEntityPayload = Omit<Company, 'id'> & {
+  createCompanyAdmin?: boolean;
+  adminName?: string;
+  adminEmail?: string;
+};
 
 export const EntityManagement: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const { addToast, openDrawer, closeDrawer } = useUIStore();
+  const { addToast, openDrawer, closeDrawer, openConfirmDialog } = useUIStore();
 
   const loadCompanies = async () => {
     setIsLoading(true);
@@ -27,10 +34,39 @@ export const EntityManagement: React.FC = () => {
     void loadCompanies();
   }, []);
 
-  const createEntity = async (payload: Omit<Company, 'id'>) => {
+  const createEntity = async (payload: CreateEntityPayload) => {
+    const { createCompanyAdmin, adminName, adminEmail, ...companyPayload } = payload;
     try {
-      await api.admin.createCompany(payload);
-      addToast({ title: 'Entity Created', message: `${payload.name} added successfully.`, type: 'success' });
+      const createdCompany = await api.admin.createCompany(companyPayload);
+      addToast({ title: 'Entity Created', message: `${companyPayload.name} added successfully.`, type: 'success' });
+
+      if (createCompanyAdmin) {
+        try {
+          const { temporaryPassword } = await api.admin.createUser({
+            name: (adminName || '').trim(),
+            email: (adminEmail || '').trim().toLowerCase(),
+            role: 'admin',
+            companyId: createdCompany.id,
+            isGuest: false,
+            status: 'Active',
+            permissions: getDefaultPermissionsForRole('admin'),
+            showOnlyCoreAdminPermissions: false,
+          });
+          addToast({
+            title: 'Company Admin Created',
+            message: `Temporary password: ${temporaryPassword}`,
+            type: 'success',
+          });
+        } catch (adminError) {
+          const adminMessage = adminError instanceof Error ? adminError.message : 'Company admin create failed.';
+          addToast({
+            title: 'Entity Created, Admin Failed',
+            message: `${createdCompany.name} created but admin user could not be created: ${adminMessage}`,
+            type: 'error',
+          });
+        }
+      }
+
       await loadCompanies();
       closeDrawer();
     } catch (error) {
@@ -40,6 +76,13 @@ export const EntityManagement: React.FC = () => {
   };
 
   const editEntity = async (company: Company, payload: Partial<Company>) => {
+    const nextName = payload.name?.trim() || company.name;
+    const confirmed = await openConfirmDialog({
+      title: 'Update Entity',
+      message: `Are you sure you want to update ${nextName}?`,
+      confirmLabel: 'Update',
+    });
+    if (!confirmed) return;
     try {
       await api.admin.updateCompany(company.id, payload);
       addToast({ title: 'Entity Updated', message: `${payload.name || company.name} updated successfully.`, type: 'success' });
@@ -52,7 +95,13 @@ export const EntityManagement: React.FC = () => {
   };
 
   const deleteEntity = async (company: Company) => {
-    if (!window.confirm(`${company.name} entity will be deleted. Continue?`)) return;
+    const confirmed = await openConfirmDialog({
+      title: 'Delete Entity',
+      message: `${company.name} entity will be deleted. Continue?`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     try {
       await api.admin.deleteCompany(company.id);
       addToast({ title: 'Entity Deleted', message: `${company.name} removed.`, type: 'info' });
@@ -72,7 +121,7 @@ export const EntityManagement: React.FC = () => {
           if (company) {
             void editEntity(company, payload);
           } else {
-            void createEntity(payload as Omit<Company, 'id'>);
+            void createEntity(payload as CreateEntityPayload);
           }
         }}
       />
@@ -154,7 +203,7 @@ export const EntityManagement: React.FC = () => {
 
 type EntityFormProps = {
   company?: Company;
-  onSave: (data: Partial<Company>) => void;
+  onSave: (data: Partial<Company> | CreateEntityPayload) => void;
   onCancel: () => void;
 };
 
@@ -164,6 +213,9 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
   const [country, setCountry] = useState(company?.country || 'Germany');
   const [contactEmail, setContactEmail] = useState(company?.contactEmail || '');
   const [status, setStatus] = useState<Company['status']>(company?.status || 'Active');
+  const [createCompanyAdmin, setCreateCompanyAdmin] = useState(!company);
+  const [adminName, setAdminName] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
   const { addToast } = useUIStore();
 
   const submit = () => {
@@ -185,13 +237,33 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
       return;
     }
 
-    onSave({
+    const payload: CreateEntityPayload = {
       name: name.trim(),
       type,
       country: country.trim(),
       contactEmail: normalizedEmail,
       status,
-    });
+      createCompanyAdmin: !company ? createCompanyAdmin : undefined,
+      adminName: !company ? adminName.trim() : undefined,
+      adminEmail: !company ? adminEmail.trim().toLowerCase() : undefined,
+    };
+
+    if (!company && createCompanyAdmin) {
+      if (!payload.adminName) {
+        addToast({ title: 'Validation Error', message: 'Company admin full name is required.', type: 'error' });
+        return;
+      }
+      if (!payload.adminEmail) {
+        addToast({ title: 'Validation Error', message: 'Company admin email is required.', type: 'error' });
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.adminEmail)) {
+        addToast({ title: 'Validation Error', message: 'Please enter a valid company admin email.', type: 'error' });
+        return;
+      }
+    }
+
+    onSave(payload);
   };
 
   return (
@@ -273,6 +345,49 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
             />
           </div>
         </label>
+
+        {!company && (
+          <div className="rounded-xl border border-blue-200/70 bg-blue-50/70 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
+            <label className="mb-3 flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+              <input
+                type="checkbox"
+                checked={createCompanyAdmin}
+                onChange={(e) => setCreateCompanyAdmin(e.target.checked)}
+              />
+              Create company admin user
+            </label>
+
+            {createCompanyAdmin && (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Admin Full Name</span>
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                    <Building2 size={14} className="text-slate-400" />
+                    <input
+                      value={adminName}
+                      onChange={(e) => setAdminName(e.target.value)}
+                      className="w-full bg-transparent text-sm text-slate-900 outline-none dark:text-white"
+                      placeholder="Entity Admin"
+                    />
+                  </div>
+                </label>
+
+                <label className="space-y-1.5">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Admin Email</span>
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                    <Mail size={14} className="text-slate-400" />
+                    <input
+                      value={adminEmail}
+                      onChange={(e) => setAdminEmail(e.target.value)}
+                      className="w-full bg-transparent text-sm text-slate-900 outline-none dark:text-white"
+                      placeholder="admin@company.com"
+                    />
+                  </div>
+                </label>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end gap-2">

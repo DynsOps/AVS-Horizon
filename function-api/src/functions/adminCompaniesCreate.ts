@@ -18,6 +18,9 @@ export async function createAdminCompany(request: HttpRequest, context: Invocati
     if (!actor.permissions.includes('manage:companies')) {
       return errorResponse(403, 'Missing permission: manage:companies');
     }
+    if (actor.role === 'admin') {
+      return errorResponse(403, 'Admin cannot create companies.');
+    }
 
     const body = (await request.json()) as CreateCompanyBody;
     const name = (body.name || '').trim();

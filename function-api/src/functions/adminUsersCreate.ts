@@ -10,12 +10,10 @@ type CreateUserRequest = {
   email: string;
   role: UserRole;
   isGuest?: boolean;
+  showOnlyCoreAdminPermissions?: boolean;
   companyId?: string | null;
   status?: 'Active' | 'Inactive' | 'Suspended';
   permissions?: string[];
-  powerBiAccess?: 'none' | 'viewer' | 'editor';
-  powerBiWorkspaceId?: string;
-  powerBiReportId?: string;
 };
 
 const assertCanManageRole = (actorRole: UserRole, targetRole: UserRole): boolean => {
@@ -50,15 +48,28 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
 
     const normalizedEmail = body.email.trim().toLowerCase();
     const role = body.role;
-    const isGuest = Boolean(body.isGuest);
+    const isAdminActor = actor.role === 'admin';
+    const isGuest = role === 'user' ? Boolean(body.isGuest) : false;
+    const showOnlyCoreAdminPermissions = role === 'admin' ? Boolean(body.showOnlyCoreAdminPermissions) : false;
     const companyId = body.companyId || null;
     const status = body.status || 'Active';
-    const powerBiAccess = body.powerBiAccess || 'none';
-    const powerBiWorkspaceId = powerBiAccess === 'none' ? null : body.powerBiWorkspaceId || null;
-    const powerBiReportId = powerBiAccess === 'none' ? null : body.powerBiReportId || null;
 
-    if (role === 'user' && !isGuest && !companyId) {
-      return errorResponse(400, 'Company is required for non-guest users.');
+    if (isAdminActor) {
+      if (!actor.companyId) {
+        return errorResponse(403, 'Admin user is not linked to a company.');
+      }
+      if (role === 'user' && isGuest) {
+        return errorResponse(403, 'Admin cannot create guest users.');
+      }
+      if (companyId && companyId !== actor.companyId) {
+        return errorResponse(403, 'Admin can only create users for their own company.');
+      }
+    }
+
+    const scopedCompanyId = isAdminActor ? actor.companyId : companyId;
+
+    if ((role === 'user' && !isGuest && !scopedCompanyId) || (role === 'admin' && !scopedCompanyId)) {
+      return errorResponse(400, 'Company is required for admin and non-guest user roles.');
     }
 
     const existsResult = await runQuery<{ count: number }>(
@@ -99,6 +110,7 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
         email,
         role,
         is_guest,
+        show_only_core_admin_permissions,
         company_id,
         status,
         temporary_password,
@@ -114,12 +126,13 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
         @email,
         @role,
         @isGuest,
+        @showOnlyCoreAdminPermissions,
         @companyId,
         @status,
         @temporaryPassword,
-        @powerBiAccess,
-        @powerBiWorkspaceId,
-        @powerBiReportId,
+        'none',
+        NULL,
+        NULL,
         SYSUTCDATETIME(),
         SYSUTCDATETIME(),
         SYSUTCDATETIME()
@@ -131,12 +144,10 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
         email: normalizedEmail,
         role,
         isGuest,
-        companyId,
+        showOnlyCoreAdminPermissions,
+        companyId: scopedCompanyId,
         status,
         temporaryPassword,
-        powerBiAccess,
-        powerBiWorkspaceId,
-        powerBiReportId,
       }
     );
 
@@ -154,12 +165,10 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
         email: normalizedEmail,
         role,
         isGuest,
-        companyId,
+        showOnlyCoreAdminPermissions,
+        companyId: scopedCompanyId,
         status,
         permissions: effectivePermissions,
-        powerBiAccess,
-        powerBiWorkspaceId,
-        powerBiReportId,
       },
       temporaryPassword,
     });

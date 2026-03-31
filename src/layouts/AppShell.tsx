@@ -3,10 +3,18 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { Header } from '../components/Header';
 import { useUIStore } from '../store/uiStore';
-import { X, CircleCheck, CircleAlert, Info } from 'lucide-react';
+import { X, CircleCheck, CircleAlert, Info, AlertTriangle } from 'lucide-react';
 
 export const AppShell: React.FC = () => {
-  const { isDrawerOpen, drawerContent, closeDrawer, toasts, removeToast } = useUIStore();
+  const {
+    isDrawerOpen,
+    drawerContent,
+    closeDrawer,
+    toasts,
+    removeToast,
+    confirmDialog,
+    resolveConfirmDialog,
+  } = useUIStore();
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
@@ -76,6 +84,44 @@ export const AppShell: React.FC = () => {
           </div>
         ))}
       </div>
+
+      {confirmDialog.isOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-slate-900/45 backdrop-blur-sm"
+            onClick={() => resolveConfirmDialog(false)}
+          />
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="mb-4 flex items-start gap-3">
+              <div className={`rounded-lg p-2 ${confirmDialog.tone === 'danger' ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300'}`}>
+                <AlertTriangle size={16} />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-slate-900 dark:text-white">{confirmDialog.title}</h3>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{confirmDialog.message}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => resolveConfirmDialog(false)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                {confirmDialog.cancelLabel}
+              </button>
+              <button
+                onClick={() => resolveConfirmDialog(true)}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${
+                  confirmDialog.tone === 'danger'
+                    ? 'bg-rose-600 hover:bg-rose-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {confirmDialog.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -14,6 +14,7 @@ type UserRow = {
   email: string;
   role: 'supadmin' | 'admin' | 'user';
   isGuest: boolean;
+  showOnlyCoreAdminPermissions: boolean;
   companyId: string | null;
   status: 'Active' | 'Inactive' | 'Suspended';
   powerBiAccess: 'none' | 'viewer' | 'editor';
@@ -42,6 +43,7 @@ export async function authLoginPassword(request: HttpRequest, context: Invocatio
         email,
         role,
         is_guest AS isGuest,
+        show_only_core_admin_permissions AS showOnlyCoreAdminPermissions,
         company_id AS companyId,
         status,
         power_bi_access AS powerBiAccess,
@@ -87,6 +89,7 @@ export async function authLoginPassword(request: HttpRequest, context: Invocatio
         email: row.email,
         role: row.role,
         isGuest: row.isGuest,
+        showOnlyCoreAdminPermissions: row.showOnlyCoreAdminPermissions,
         companyId: row.companyId || '',
         status: row.status,
         permissions,

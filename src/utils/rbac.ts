@@ -2,8 +2,8 @@ import { Permission, User, UserRole } from '../types';
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   user: ['view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'edit:orders', 'create:support-ticket'],
-  admin: ['view:dashboard', 'view:operational-list', 'view:port-fees', 'view:reports', 'manage:users', 'manage:companies', 'view:analytics', 'view:finance', 'view:sustainability', 'view:business', 'system:settings', 'create:support-ticket'],
-  supadmin: ['view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'manage:users', 'manage:companies', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings', 'view:supplier', 'create:support-ticket'],
+  admin: ['view:dashboard', 'view:reports', 'manage:users', 'view:analytics'],
+  supadmin: ['view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'view:supplier', 'create:support-ticket', 'submit:rfq', 'manage:users', 'manage:companies', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings'],
 };
 
 export const getDefaultRouteForRole = (role: UserRole): string => {
