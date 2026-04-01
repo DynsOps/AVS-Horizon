@@ -15,18 +15,23 @@ const defaults: Record<UserRole, string[]> = {
     'submit:rfq',
     'manage:users',
     'manage:companies',
+    'manage:reports',
     'view:finance',
     'view:sustainability',
     'view:business',
     'edit:orders',
     'view:analytics',
     'system:settings',
+    'view:analysis-report:contracted',
+    'view:analysis-report:bi-overview',
   ],
   admin: [
     'view:dashboard',
     'view:reports',
     'manage:users',
     'view:analytics',
+    'view:analysis-report:contracted',
+    'view:analysis-report:bi-overview',
   ],
   user: [
     'view:dashboard',
@@ -39,6 +44,8 @@ const defaults: Record<UserRole, string[]> = {
     'view:orders',
     'create:support-ticket',
     'view:analytics',
+    'view:analysis-report:contracted',
+    'view:analysis-report:bi-overview',
   ],
 };
 

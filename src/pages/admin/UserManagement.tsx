@@ -1,24 +1,25 @@
 
 import React, { useEffect, useState } from 'react';
 import { api } from '../../services/api';
-import { User, Permission, UserRole, Company } from '../../types';
+import { User, Permission, UserRole, Company, AnalysisReport } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
 import { Trash2, Edit2, Plus, Check, Search, KeyRound, Copy, Eye, EyeOff, X, Lock } from 'lucide-react';
 import { getDefaultPermissionsForRole } from '../../utils/rbac';
 
-const ALL_PERMISSIONS: Permission[] = [
+const BASE_PERMISSIONS: Permission[] = [
     'view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'view:supplier',
     'create:support-ticket', 'submit:rfq',
-    'manage:users', 'manage:companies', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings'
+    'manage:users', 'manage:companies', 'manage:reports', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings'
 ];
 const ADMIN_CORE_PERMISSIONS: Permission[] = ['view:dashboard', 'view:reports', 'manage:users', 'view:analytics'];
-const SUPADMIN_CONTROLLED_PERMISSIONS: Permission[] = ['system:settings', 'view:finance', 'view:sustainability', 'view:business'];
+const SUPADMIN_CONTROLLED_PERMISSIONS: Permission[] = ['system:settings', 'view:finance', 'view:sustainability', 'view:business', 'manage:reports'];
 
 export const UserManagement: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
     const [companies, setCompanies] = useState<Company[]>([]);
+    const [analysisReports, setAnalysisReports] = useState<AnalysisReport[]>([]);
     const { addToast, openDrawer, closeDrawer, openConfirmDialog } = useUIStore();
     const [searchTerm, setSearchTerm] = useState('');
     const [newUserCredentials, setNewUserCredentials] = useState<{ email: string; temporaryPassword: string } | null>(null);
@@ -29,6 +30,8 @@ export const UserManagement: React.FC = () => {
     const isCoreAdminActor = actor?.role === 'admin' && Boolean(actor?.showOnlyCoreAdminPermissions);
     const assignableRoles: UserRole[] = isSupAdminActor ? ['user', 'admin', 'supadmin'] : (isCoreAdminActor ? ['user'] : ['user', 'admin']);
     const canManageTargetUser = (target: User) => isSupAdminActor || target.role !== 'supadmin';
+    const analysisReportPermissions = analysisReports.map((report) => report.permissionKey);
+    const allPermissions = [...BASE_PERMISSIONS, ...analysisReportPermissions];
 
     useEffect(() => {
         loadData();
@@ -36,9 +39,10 @@ export const UserManagement: React.FC = () => {
 
     const loadData = async () => {
         try {
-            const [u, c] = await Promise.all([api.admin.getUsers(), api.admin.getCompanies()]);
+            const [u, c, reports] = await Promise.all([api.admin.getUsers(), api.admin.getCompanies(), api.admin.getAnalysisReports()]);
             setUsers(u);
             setCompanies(c);
+            setAnalysisReports(reports);
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to load users/entities.';
             addToast({ title: 'Data Load Error', message, type: 'error' });
@@ -155,6 +159,8 @@ export const UserManagement: React.FC = () => {
                 isSupAdminActor={isSupAdminActor}
                 isCoreAdminActor={isCoreAdminActor}
                 actorPermissions={actor?.permissions || []}
+                availablePermissions={allPermissions}
+                analysisReports={analysisReports}
                 onSave={(data) => handleSaveUser(data, !user)}
                 onCancel={closeDrawer}
             />
@@ -394,6 +400,8 @@ const UserForm = ({
     isSupAdminActor,
     isCoreAdminActor,
     actorPermissions,
+    availablePermissions,
+    analysisReports,
     onSave,
     onCancel,
 }: {
@@ -403,12 +411,26 @@ const UserForm = ({
     isSupAdminActor: boolean,
     isCoreAdminActor: boolean,
     actorPermissions: Permission[],
+    availablePermissions: Permission[],
+    analysisReports: AnalysisReport[],
     onSave: (data: Partial<User>) => void,
     onCancel: () => void
 }) => {
+    const getBasicPermissionsForContext = (role: UserRole, isGuest: boolean): Permission[] => {
+        if (role === 'supadmin') return getDefaultPermissionsForRole('supadmin');
+        if (role === 'admin') return ADMIN_CORE_PERMISSIONS;
+        if (role === 'user' && isGuest) return ['submit:rfq', 'create:support-ticket'];
+        return ['view:dashboard', 'view:reports', 'create:support-ticket'];
+    };
+
+    const getAllowedBasicPermissionsForContext = (role: UserRole, isGuest: boolean): Permission[] => {
+        const basic = getBasicPermissionsForContext(role, isGuest);
+        if (isSupAdminActor) return basic;
+        return basic.filter((permission) => actorPermissions.includes(permission));
+    };
+
     const getDefaultFormPermissionsForRole = (role: UserRole): Permission[] => {
-        const defaults = role === 'supadmin' ? getDefaultPermissionsForRole(role) : ADMIN_CORE_PERMISSIONS;
-        return isSupAdminActor ? defaults : defaults.filter((permission) => actorPermissions.includes(permission));
+        return getAllowedBasicPermissionsForContext(role, false);
     };
 
     const inferShowOnlyAdminCore = (formUser?: User): boolean => {
@@ -424,7 +446,7 @@ const UserForm = ({
         companyId: user?.companyId || '',
         isGuest: user?.isGuest || false,
         status: user?.status || 'Active',
-        permissions: user?.permissions || getDefaultFormPermissionsForRole(user?.role || 'user')
+        permissions: user?.permissions || getAllowedBasicPermissionsForContext(user?.role || 'user', user?.isGuest || false)
     });
     const [showOnlyAdminCorePermissions, setShowOnlyAdminCorePermissions] = useState<boolean>(inferShowOnlyAdminCore(user));
 
@@ -437,7 +459,7 @@ const UserForm = ({
             companyId: user?.companyId || '',
             isGuest: user?.isGuest || false,
             status: user?.status || 'Active',
-            permissions: user?.permissions || getDefaultFormPermissionsForRole(user?.role || 'user')
+            permissions: user?.permissions || getAllowedBasicPermissionsForContext(user?.role || 'user', user?.isGuest || false)
         });
         setShowOnlyAdminCorePermissions(inferShowOnlyAdminCore(user));
     }, [user]);
@@ -451,6 +473,26 @@ const UserForm = ({
             return { ...prev, permissions: [...perms, perm] };
         });
     };
+
+    const isPermissionLocked = (perm: Permission): boolean => {
+        const isSupadminControlled = SUPADMIN_CONTROLLED_PERMISSIONS.includes(perm);
+        const actorMissing = !isSupAdminActor && !actorPermissions.includes(perm);
+        return !isSupAdminActor && (isSupadminControlled || actorMissing);
+    };
+
+    const generalPermissions = availablePermissions.filter((permission) => !permission.startsWith('view:analysis-report:'));
+    const visibleGeneralPermissions = generalPermissions.filter((permission) => {
+        if (isSupAdminActor) return true;
+        return actorPermissions.includes(permission) || Boolean((formData.permissions || []).includes(permission));
+    });
+    const biReportEntries = analysisReports.map((report) => ({
+        id: report.id,
+        name: report.name,
+        permission: report.permissionKey,
+    })).filter((entry) => {
+        if (isSupAdminActor) return true;
+        return actorPermissions.includes(entry.permission) || Boolean((formData.permissions || []).includes(entry.permission));
+    });
 
     return (
         <>
@@ -474,12 +516,13 @@ const UserForm = ({
                         <select className="w-full p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-sm text-slate-900 dark:text-white"
                                 value={formData.role} onChange={e => {
                                     const nextRole = e.target.value as UserRole;
+                                    const nextIsGuest = nextRole === 'user' ? !!formData.isGuest : false;
                                     setFormData({
                                         ...formData,
                                         role: nextRole,
-                                        isGuest: nextRole === 'user' ? formData.isGuest : false,
+                                        isGuest: nextIsGuest,
                                         companyId: nextRole === 'supadmin' ? '' : formData.companyId,
-                                        permissions: getDefaultFormPermissionsForRole(nextRole),
+                                        permissions: getAllowedBasicPermissionsForContext(nextRole, nextIsGuest),
                                     });
                                 }}>
                             {(() => {
@@ -511,11 +554,15 @@ const UserForm = ({
                             type="checkbox"
                             checked={!!formData.isGuest}
                             disabled={formData.role !== 'user'}
-                            onChange={(e) => setFormData({
-                                ...formData,
-                                isGuest: e.target.checked,
-                                companyId: e.target.checked ? '' : formData.companyId,
-                            })}
+                            onChange={(e) => {
+                                const nextIsGuest = e.target.checked;
+                                setFormData({
+                                    ...formData,
+                                    isGuest: nextIsGuest,
+                                    companyId: nextIsGuest ? '' : formData.companyId,
+                                    permissions: getAllowedBasicPermissionsForContext(formData.role || 'user', nextIsGuest),
+                                });
+                            }}
                         />
                         Guest user (Global)
                     </label>
@@ -532,8 +579,18 @@ const UserForm = ({
                     </p>
                 </div>
 
+                <div className="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                    <p className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Company Rules</p>
+                    <ul className="mt-2 space-y-1">
+                        <li>`supadmin`: Company not required.</li>
+                        <li>`admin`: Company required. Scoped to selected company.</li>
+                        <li>`user` + `Guest`: Company optional (global access as guest).</li>
+                        <li>`user` + non-guest: Company required.</li>
+                    </ul>
+                </div>
+
                 <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Permissions</label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">General Permissions</label>
                     {isSupAdminActor && (
                         <div className="mb-3">
                             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -541,7 +598,16 @@ const UserForm = ({
                             </label>
                             <select
                                 value={showOnlyAdminCorePermissions ? 'core' : 'all'}
-                                onChange={(e) => setShowOnlyAdminCorePermissions(e.target.value === 'core')}
+                                onChange={(e) => {
+                                    const nextShowCore = e.target.value === 'core';
+                                    setShowOnlyAdminCorePermissions(nextShowCore);
+                                    const role = formData.role || 'user';
+                                    const isGuest = role === 'user' ? !!formData.isGuest : false;
+                                    setFormData((prev) => ({
+                                        ...prev,
+                                        permissions: getAllowedBasicPermissionsForContext(role, isGuest),
+                                    }));
+                                }}
                                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                             >
                                 <option value="all">All permissions</option>
@@ -550,11 +616,11 @@ const UserForm = ({
                         </div>
                     )}
                     <div className="grid grid-cols-2 gap-2">
-                        {ALL_PERMISSIONS.map(p => (
+                        {visibleGeneralPermissions.map(p => (
                             (() => {
                                 const isSupadminControlled = SUPADMIN_CONTROLLED_PERMISSIONS.includes(p);
                                 const actorMissing = !isSupAdminActor && !actorPermissions.includes(p);
-                                const isLocked = !isSupAdminActor && (isSupadminControlled || actorMissing);
+                                const isLocked = isPermissionLocked(p);
                                 const hiddenByCoreAdminActor =
                                     !isSupAdminActor &&
                                     isCoreAdminActor &&
@@ -580,6 +646,41 @@ const UserForm = ({
                                 );
                             })()
                         ))}
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">BI Reports Access</label>
+                    <div className="grid grid-cols-1 gap-2">
+                        {biReportEntries.map((entry) => {
+                            const isLocked = isPermissionLocked(entry.permission);
+                            const selected = (formData.permissions || []).includes(entry.permission);
+                            return (
+                                <label
+                                    key={entry.id}
+                                    className={`flex items-center justify-between rounded border px-3 py-2 text-xs ${
+                                        selected
+                                            ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
+                                            : 'border-gray-200 bg-gray-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                                    } ${isLocked ? 'opacity-60' : ''}`}
+                                    title={isLocked ? 'This BI report permission is locked for current actor.' : entry.permission}
+                                >
+                                    <span className="mr-3">
+                                        <span className="block font-semibold">{entry.name}</span>
+                                        <span className="text-[10px] opacity-80">{entry.permission}</span>
+                                    </span>
+                                    <input
+                                        type="checkbox"
+                                        checked={selected}
+                                        disabled={isLocked}
+                                        onChange={() => !isLocked && togglePermission(entry.permission)}
+                                    />
+                                </label>
+                            );
+                        })}
+                        {biReportEntries.length === 0 && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400">No BI reports configured yet.</p>
+                        )}
                     </div>
                 </div>
             </div>

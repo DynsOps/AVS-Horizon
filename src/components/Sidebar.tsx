@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useMsal } from '@azure/msal-react';
 import { useAuthStore } from '../store/authStore';
@@ -7,7 +7,7 @@ import { Permission } from '../types';
 import { api } from '../services/api';
 import { 
   LayoutDashboard, Ship, Package, ClipboardList, ReceiptText, Landmark,
-  Truck, ShieldAlert, Activity, Settings, LogOut, Anchor, Users, UserCircle, FilePlus2, BarChart3, Building2
+  Truck, ShieldAlert, Activity, Settings, LogOut, Anchor, Users, UserCircle, FilePlus2, BarChart3, Building2, ChevronDown
 } from 'lucide-react';
 
 const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: string }) => (
@@ -42,7 +42,13 @@ export const Sidebar: React.FC = () => {
   const navigate = useNavigate();
   const role = user?.role;
   const hasPermission = (permission: Permission) => Boolean(user?.permissions.includes(permission));
+  const hasAnalysisReportAccess = Boolean(
+    role === 'supadmin' ||
+    user?.permissions.some((permission) => permission.startsWith('view:analysis-report:'))
+  );
   const hasMicrosoftSession = accounts.length > 0;
+  const [supadminOperationsOpen, setSupadminOperationsOpen] = useState(true);
+  const [supadminSupplierOpen, setSupadminSupplierOpen] = useState(true);
 
   const handleSignOut = async () => {
     const userEmail = user?.email;
@@ -102,8 +108,7 @@ export const Sidebar: React.FC = () => {
             {hasPermission('view:sustainability') && <NavItem to="/customer/sustainability" icon={BarChart3} label="Sustainability" />}
             {hasPermission('view:business') && <NavItem to="/customer/business" icon={Settings} label="Business" />}
             {hasPermission('view:reports') && <NavItem to="/customer/reports/consumption" icon={BarChart3} label="Consumption Report" />}
-            {hasPermission('view:reports') && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
-            {hasPermission('view:analytics') && <NavItem to="/customer/analytics" icon={BarChart3} label="BI Reports" />}
+            {hasAnalysisReportAccess && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
             {hasPermission('submit:rfq') && <NavItem to="/guest/rfq" icon={FilePlus2} label="Guest RFQ" />}
 
             {hasPermission('view:supplier') && (
@@ -133,8 +138,7 @@ export const Sidebar: React.FC = () => {
             {hasPermission('view:sustainability') && <NavItem to="/customer/sustainability" icon={BarChart3} label="Sustainability" />}
             {hasPermission('view:business') && <NavItem to="/customer/business" icon={Settings} label="Business" />}
             {hasPermission('view:reports') && <NavItem to="/customer/reports/consumption" icon={BarChart3} label="Consumption Report" />}
-            {hasPermission('view:reports') && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
-            {hasPermission('view:analytics') && <NavItem to="/customer/analytics" icon={BarChart3} label="BI Reports" />}
+            {hasAnalysisReportAccess && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
             {hasPermission('view:supplier') && (
               <>
                 <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 mt-6">Supplier</div>
@@ -150,44 +154,66 @@ export const Sidebar: React.FC = () => {
             {hasPermission('manage:users') && <NavItem to="/admin/users" icon={Users} label="User Management" />}
             {hasPermission('system:settings') && <NavItem to="/admin/security" icon={ShieldAlert} label="Security Logs" />}
             {hasPermission('manage:companies') && <NavItem to="/admin/entities" icon={Building2} label="Entity Management" />}
+            <NavItem to="/admin/reports" icon={BarChart3} label="Report Management" />
             {hasPermission('system:settings') && <NavItem to="/admin/feature-flags" icon={Settings} label="Feature Flags" />}
           </>
         )}
 
         {role === 'supadmin' && (
           <>
-            <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Operations</div>
-            {hasPermission('view:dashboard') && <NavItem to="/customer/dashboard" icon={LayoutDashboard} label="Dashboard" />}
-            {hasPermission('view:operational-list') && <NavItem to="/customer/operational-list" icon={ClipboardList} label="Operational List" />}
-            {hasPermission('view:invoices') && <NavItem to="/customer/invoices" icon={ReceiptText} label="Invoice List" />}
-            {hasPermission('view:port-fees') && <NavItem to="/customer/port-fees" icon={Landmark} label="Port Fee List" />}
-            {hasPermission('view:fleet') && <NavItem to="/customer/fleet" icon={Ship} label="Fleet Management" />}
-            {hasPermission('view:orders') && <NavItem to="/customer/orders" icon={Package} label="Orders" />}
-            {hasPermission('view:orders') && <NavItem to="/customer/historical-orders" icon={ClipboardList} label="Historical Orders" />}
-            {hasPermission('view:shipments') && <NavItem to="/customer/shipments" icon={Truck} label="Shipments" />}
-            {hasPermission('view:finance') && <NavItem to="/customer/finance" icon={Landmark} label="Finance" />}
-            {hasPermission('view:sustainability') && <NavItem to="/customer/sustainability" icon={BarChart3} label="Sustainability" />}
-            {hasPermission('view:business') && <NavItem to="/customer/business" icon={Settings} label="Business" />}
-            {hasPermission('view:reports') && <NavItem to="/customer/reports/consumption" icon={BarChart3} label="Consumption Report" />}
-            {hasPermission('view:reports') && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
-            {hasPermission('view:analytics') && <NavItem to="/customer/analytics" icon={BarChart3} label="BI Reports" />}
-            {hasPermission('submit:rfq') && <NavItem to="/guest/rfq" icon={FilePlus2} label="Guest RFQ" />}
-            {hasPermission('view:supplier') && (
-              <>
-                <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 mt-6">Supplier</div>
-                <NavItem to="/supplier/dashboard" icon={LayoutDashboard} label="Supplier Dashboard" />
-                <NavItem to="/supplier/orders" icon={Package} label="Supplier Orders" />
-                <NavItem to="/supplier/logistics" icon={Truck} label="Supplier Logistics" />
-                <NavItem to="/supplier/performance" icon={BarChart3} label="Supplier Performance" />
-              </>
-            )}
-
-            <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 mt-6">Super Administration</div>
+            <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Super Administration</div>
             {hasPermission('system:settings') && <NavItem to="/admin/system-health" icon={Activity} label="System Health" />}
             {hasPermission('manage:users') && <NavItem to="/admin/users" icon={Users} label="User Management" />}
             {hasPermission('manage:companies') && <NavItem to="/admin/entities" icon={Building2} label="Entity Management" />}
+            <NavItem to="/admin/reports" icon={BarChart3} label="Report Management" />
             {hasPermission('system:settings') && <NavItem to="/admin/security" icon={ShieldAlert} label="Security Logs" />}
             {hasPermission('system:settings') && <NavItem to="/admin/feature-flags" icon={Settings} label="Feature Flags" />}
+
+            <button
+              onClick={() => setSupadminOperationsOpen((prev) => !prev)}
+              className="mt-6 mb-3 w-full px-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center justify-between hover:text-slate-300 transition-colors"
+            >
+              <span>Operations</span>
+              <ChevronDown size={14} className={`transition-transform ${supadminOperationsOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {supadminOperationsOpen && (
+              <>
+                {hasPermission('view:dashboard') && <NavItem to="/customer/dashboard" icon={LayoutDashboard} label="Dashboard" />}
+                {hasPermission('view:operational-list') && <NavItem to="/customer/operational-list" icon={ClipboardList} label="Operational List" />}
+                {hasPermission('view:invoices') && <NavItem to="/customer/invoices" icon={ReceiptText} label="Invoice List" />}
+                {hasPermission('view:port-fees') && <NavItem to="/customer/port-fees" icon={Landmark} label="Port Fee List" />}
+                {hasPermission('view:fleet') && <NavItem to="/customer/fleet" icon={Ship} label="Fleet Management" />}
+                {hasPermission('view:orders') && <NavItem to="/customer/orders" icon={Package} label="Orders" />}
+                {hasPermission('view:orders') && <NavItem to="/customer/historical-orders" icon={ClipboardList} label="Historical Orders" />}
+                {hasPermission('view:shipments') && <NavItem to="/customer/shipments" icon={Truck} label="Shipments" />}
+                {hasPermission('view:finance') && <NavItem to="/customer/finance" icon={Landmark} label="Finance" />}
+                {hasPermission('view:sustainability') && <NavItem to="/customer/sustainability" icon={BarChart3} label="Sustainability" />}
+                {hasPermission('view:business') && <NavItem to="/customer/business" icon={Settings} label="Business" />}
+                {hasPermission('view:reports') && <NavItem to="/customer/reports/consumption" icon={BarChart3} label="Consumption Report" />}
+                {hasAnalysisReportAccess && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
+                {hasPermission('submit:rfq') && <NavItem to="/guest/rfq" icon={FilePlus2} label="Guest RFQ" />}
+              </>
+            )}
+
+            {hasPermission('view:supplier') && (
+              <>
+                <button
+                  onClick={() => setSupadminSupplierOpen((prev) => !prev)}
+                  className="mt-6 mb-3 w-full px-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center justify-between hover:text-slate-300 transition-colors"
+                >
+                  <span>Supplier</span>
+                  <ChevronDown size={14} className={`transition-transform ${supadminSupplierOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {supadminSupplierOpen && (
+                  <>
+                    <NavItem to="/supplier/dashboard" icon={LayoutDashboard} label="Supplier Dashboard" />
+                    <NavItem to="/supplier/orders" icon={Package} label="Supplier Orders" />
+                    <NavItem to="/supplier/logistics" icon={Truck} label="Supplier Logistics" />
+                    <NavItem to="/supplier/performance" icon={BarChart3} label="Supplier Performance" />
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
 

@@ -18,6 +18,9 @@
     "SQL_PASSWORD": "<your-sql-password>",
     "SQL_ENCRYPT": "true",
     "SQL_TRUST_SERVER_CERTIFICATE": "false",
-    "DEV_BYPASS_AUTH": "true"
+    "DEV_BYPASS_AUTH": "true",
+    "POWERBI_TENANT_ID": "<powerbi-tenant-id>",
+    "POWERBI_CLIENT_ID": "<powerbi-service-principal-client-id>",
+    "POWERBI_CLIENT_SECRET": "<powerbi-service-principal-client-secret>"
   }
 }

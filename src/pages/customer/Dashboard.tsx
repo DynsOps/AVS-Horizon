@@ -202,18 +202,18 @@ export const CustomerDashboard: React.FC = () => {
             <div>
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Power BI Reports</p>
               <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                Access is controlled via secure backend configuration.
+                Power BI and analysis tabs are available inside Analysis Report.
               </p>
             </div>
             <Link
-              to="/customer/analytics"
+              to="/customer/reports/analysis"
               className={`rounded-lg px-3 py-2 text-xs font-semibold border ${
                 canAccessBi
                   ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
                   : 'bg-slate-100 text-slate-500 border-slate-200 pointer-events-none'
               }`}
             >
-              Open BI Reports
+              Open Analysis Report
             </Link>
           </div>
         </Card>

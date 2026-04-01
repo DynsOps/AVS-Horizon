@@ -11,6 +11,9 @@ export const env = {
   sqlEncrypt: (process.env.SQL_ENCRYPT || 'true').toLowerCase() === 'true',
   sqlTrustServerCertificate: (process.env.SQL_TRUST_SERVER_CERTIFICATE || 'false').toLowerCase() === 'true',
   devBypassAuth: (process.env.DEV_BYPASS_AUTH || 'false').toLowerCase() === 'true',
+  powerBiTenantId: process.env.POWERBI_TENANT_ID || '',
+  powerBiClientId: process.env.POWERBI_CLIENT_ID || '',
+  powerBiClientSecret: process.env.POWERBI_CLIENT_SECRET || '',
 };
 
 export const assertEnv = (): void => {

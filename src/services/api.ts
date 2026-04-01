@@ -1,5 +1,5 @@
 
-import { KPI, Order, Shipment, Invoice, Vessel, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole } from '../types';
+import { KPI, Order, Shipment, Invoice, Vessel, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport } from '../types';
 import { getDefaultPermissionsForRole } from '../utils/rbac';
 import { useAuthStore } from '../store/authStore';
 
@@ -9,6 +9,7 @@ const MS_ACCESS_TOKEN_KEY = 'avs_ms_access_token';
 const FUNCTION_API_BASE_URL = (import.meta.env.VITE_FUNCTION_API_BASE_URL || '').replace(/\/+$/, '');
 const FORCE_FUNCTION_API = String(import.meta.env.VITE_FORCE_FUNCTION_API || '').toLowerCase() === 'true';
 const DEV_BYPASS_AUTH = String(import.meta.env.VITE_DEV_BYPASS_AUTH || '').toLowerCase() === 'true';
+const DISABLE_MOCK_DATA = String(import.meta.env.VITE_DISABLE_MOCK_DATA ?? 'true').toLowerCase() !== 'false';
 
 const getStoredMicrosoftAccessToken = (): string => {
   if (typeof window === 'undefined') return '';
@@ -16,9 +17,18 @@ const getStoredMicrosoftAccessToken = (): string => {
 };
 
 const shouldUseFunctionApi = (): boolean => {
-  if (!FUNCTION_API_BASE_URL) return false;
+  if (FUNCTION_API_BASE_URL) return true;
+  if (DISABLE_MOCK_DATA) {
+    throw new Error('Mock data is disabled. Set VITE_FUNCTION_API_BASE_URL and run Function API.');
+  }
   if (FORCE_FUNCTION_API) return true;
-  return Boolean(getStoredMicrosoftAccessToken());
+  return false;
+};
+
+const ensureMockAllowed = (feature: string): void => {
+  if (DISABLE_MOCK_DATA) {
+    throw new Error(`Mock data is disabled for ${feature}. This endpoint must come from DB/API.`);
+  }
 };
 
 const callFunctionApi = async <T = any>(path: string, init?: RequestInit): Promise<T> => {
@@ -95,6 +105,7 @@ type LocalDbSnapshot = {
   microsoftTokens: MicrosoftTokenRecord[];
   supportTickets: SupportTicket[];
   guestRFQs: GuestRFQ[];
+  analysisReports: AnalysisReport[];
   orders: Order[];
   shipments: Shipment[];
   invoices: Invoice[];
@@ -289,6 +300,25 @@ let mockGuestRFQs: GuestRFQ[] = [
   },
 ];
 
+let mockAnalysisReports: AnalysisReport[] = [
+  {
+    id: 'AR-001',
+    name: 'Contracted Analysis',
+    description: 'Category distribution for contracted usage.',
+    permissionKey: 'view:analysis-report:contracted',
+    isActive: true,
+    createdAt: '2023-10-01T09:00:00Z',
+  },
+  {
+    id: 'AR-002',
+    name: 'BI Overview',
+    description: 'Embedded Power BI overview report.',
+    permissionKey: 'view:analysis-report:bi-overview',
+    isActive: true,
+    createdAt: '2023-10-02T09:00:00Z',
+  },
+];
+
 let mockOrders: Order[] = [
   { id: 'ORD-001', companyId: 'C-001', vesselName: 'Avs Titan', port: 'Singapore', date: '2023-10-01', status: 'In Transit', amount: 15000, currency: 'USD' },
   { id: 'ORD-002', companyId: 'C-001', vesselName: 'Avs Neptune', port: 'Rotterdam', date: '2023-10-05', status: 'Pending', amount: 4500, currency: 'USD' },
@@ -338,6 +368,7 @@ const makeSnapshot = (): LocalDbSnapshot => ({
   microsoftTokens: [...mockMicrosoftTokens],
   supportTickets: [...mockSupportTickets],
   guestRFQs: [...mockGuestRFQs],
+  analysisReports: [...mockAnalysisReports],
   orders: [...mockOrders],
   shipments: [...mockShipments],
   invoices: [...mockInvoices],
@@ -363,6 +394,7 @@ const hydrateFromLocalDb = () => {
     if (parsed.microsoftTokens) mockMicrosoftTokens = parsed.microsoftTokens;
     if (parsed.supportTickets) mockSupportTickets = parsed.supportTickets;
     if (parsed.guestRFQs) mockGuestRFQs = parsed.guestRFQs;
+    if (parsed.analysisReports) mockAnalysisReports = parsed.analysisReports;
     if (parsed.orders) mockOrders = parsed.orders;
     if (parsed.shipments) mockShipments = parsed.shipments;
     if (parsed.invoices) mockInvoices = parsed.invoices;
@@ -400,6 +432,14 @@ const getActorUser = (): User | null => {
   return useAuthStore.getState().user;
 };
 
+const toPermissionSlug = (value: string): string => {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+};
+
 const canManageRole = (actorRole: UserRole | undefined, targetRole: UserRole): boolean => {
   if (actorRole === 'supadmin') return true;
   if (actorRole === 'admin') return targetRole !== 'supadmin';
@@ -435,6 +475,7 @@ const SUPADMIN_CONTROLLED_PERMISSIONS: Permission[] = [
   'view:finance',
   'view:sustainability',
   'view:business',
+  'manage:reports',
 ];
 
 const getEmailDomain = (email: string): string => {
@@ -513,51 +554,44 @@ const assertPermissionGrantPolicy = (targetPermissions: Permission[], existingPe
 
 export const api = {
   auth: {
-    checkAccess: async (email: string): Promise<User> => {
-      return api.auth.loginWithMicrosoft(email);
+    checkAccess: async (email: string, accessToken?: string): Promise<User> => {
+      return api.auth.loginWithMicrosoft(email, accessToken);
     },
-    loginWithMicrosoft: async (email: string): Promise<User> => {
-      await delay(800);
+    loginWithMicrosoft: async (email: string, accessToken?: string): Promise<User> => {
       const normalizedEmail = email.trim().toLowerCase();
-      let user = mockUsers.find(u => u.email.toLowerCase() === normalizedEmail);
-
-      if (!user) {
-        if (BOOTSTRAP_SUPADMIN_EMAILS.includes(normalizedEmail)) {
-          const newSupadmin = buildAutoProvisionedUser({
-            email: normalizedEmail,
-            role: 'supadmin',
-            permissions: getDefaultPermissionsForRole('supadmin'),
-          });
-          mockUsers.push(newSupadmin);
-          user = newSupadmin;
-        } else {
-          const domain = getEmailDomain(normalizedEmail);
-          const domainUser = findExistingDomainUser(domain);
-          if (domainUser) {
-            const lowPrivilegeUser = buildAutoProvisionedUser({
-              email: normalizedEmail,
-              role: 'user',
-              companyId: domainUser.companyId,
-              permissions: LOWEST_AUTO_PERMISSIONS,
-            });
-            mockUsers.push(lowPrivilegeUser);
-            createAutoAccessRequestTicket(lowPrivilegeUser);
-            user = lowPrivilegeUser;
-          }
+      if (FUNCTION_API_BASE_URL) {
+        const token = accessToken || getStoredMicrosoftAccessToken();
+        const canUseDevBypass = DEV_BYPASS_AUTH && Boolean(normalizedEmail);
+        if (!token && !canUseDevBypass) {
+          throw new Error('Microsoft access token is missing. Please sign in with Microsoft again.');
         }
+
+        const response = await fetch(`${FUNCTION_API_BASE_URL}/api/auth/me`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(canUseDevBypass ? { 'x-dev-user-email': normalizedEmail } : {}),
+          },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload?.error || `Function API request failed (${response.status})`);
+        }
+        const backendUser = payload.user as User;
+        const existingIdx = mockUsers.findIndex((u) => u.id === backendUser.id);
+        if (existingIdx === -1) {
+          mockUsers.push({ ...backendUser });
+        } else {
+          mockUsers[existingIdx] = { ...mockUsers[existingIdx], ...backendUser };
+        }
+        persistLocalDb();
+        return { ...backendUser };
       }
 
-      if (!user) {
-        throw new Error('No access record found for this Microsoft account email/domain.');
-      }
-
-      if (user.status !== 'Active') {
-        throw new Error('This account is not active.');
-      }
-
-      user.lastLogin = new Date().toISOString();
-      persistLocalDb();
-      return { ...user };
+      ensureMockAllowed('Microsoft login');
+      await delay(800);
+      throw new Error('No Function API configured.');
     },
     storeMicrosoftToken: async (payload: { userEmail: string; accessToken: string; scope: string; expiresAt?: string }): Promise<void> => {
       await delay(100);
@@ -620,6 +654,7 @@ export const api = {
         return { ...backendUser };
       }
 
+      ensureMockAllowed('Password login');
       await delay(700);
       const normalizedEmail = email.trim().toLowerCase();
       const user = mockUsers.find((u) => u.email.toLowerCase() === normalizedEmail);
@@ -670,6 +705,7 @@ export const api = {
           }
           return { ...updatedUser };
         }
+        ensureMockAllowed('Profile update');
         await delay(500);
         const index = mockUsers.findIndex(u => u.id === userId);
         if (index !== -1) {
@@ -718,6 +754,7 @@ export const api = {
         return;
       }
 
+      ensureMockAllowed('Password change');
       await delay(500);
       const user = mockUsers.find((u) => u.id === userId);
       if (!user) throw new Error('User not found');
@@ -972,10 +1009,150 @@ export const api = {
         mockCompanies = mockCompanies.filter(c => c.id !== id);
         persistLocalDb();
     },
+    getAnalysisReports: async (): Promise<AnalysisReport[]> => {
+      if (shouldUseFunctionApi()) {
+        const payload = await callFunctionApi<{ reports: AnalysisReport[] }>('api/identity/reports');
+        mockAnalysisReports = payload.reports.map((report) => ({ ...report }));
+        persistLocalDb();
+        return payload.reports;
+      }
+      await delay(250);
+      return [...mockAnalysisReports].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+    createAnalysisReport: async (payload: { name: string; description?: string; embedUrl?: string; workspaceId?: string; reportId?: string; datasetId?: string; defaultRoles?: string[] }): Promise<AnalysisReport> => {
+      if (shouldUseFunctionApi()) {
+        const created = await callFunctionApi<{ report: AnalysisReport }>('api/identity/reports', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        mockAnalysisReports.push({ ...created.report });
+        persistLocalDb();
+        return created.report;
+      }
+      await delay(300);
+      const actor = getActorUser();
+      if (actor?.role !== 'supadmin') {
+        throw new Error('Only supadmin can create analysis reports.');
+      }
+      const normalizedName = payload.name.trim();
+      if (!normalizedName) throw new Error('Report name is required.');
+      const slug = toPermissionSlug(normalizedName);
+      if (!slug) throw new Error('Report name must include alphanumeric characters.');
+      const permissionKey = `view:analysis-report:${slug}` as Permission;
+      const exists = mockAnalysisReports.some((r) => r.permissionKey === permissionKey || r.name.toLowerCase() === normalizedName.toLowerCase());
+      if (exists) throw new Error('A report with the same name/permission already exists.');
+
+      const report: AnalysisReport = {
+        id: `AR-${Date.now().toString().slice(-6)}`,
+        name: normalizedName,
+        description: payload.description?.trim() || '',
+        permissionKey,
+        embedUrl: payload.embedUrl?.trim() || '',
+        workspaceId: payload.workspaceId?.trim() || '',
+        reportId: payload.reportId?.trim() || '',
+        datasetId: payload.datasetId?.trim() || '',
+        defaultRoles: Array.isArray(payload.defaultRoles) ? payload.defaultRoles : [],
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
+      mockAnalysisReports.push(report);
+      persistLocalDb();
+      return report;
+    },
+    updateAnalysisReport: async (id: string, payload: { name: string; description?: string; embedUrl?: string; workspaceId?: string; reportId?: string; datasetId?: string; defaultRoles?: string[] }): Promise<AnalysisReport> => {
+      if (shouldUseFunctionApi()) {
+        const updated = await callFunctionApi<{ report: AnalysisReport }>(`api/identity/reports/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        const target = mockAnalysisReports.find((r) => r.id === id);
+        mockAnalysisReports = mockAnalysisReports.map((r) => (r.id === id ? { ...updated.report } : r));
+        if (target && target.permissionKey !== updated.report.permissionKey) {
+          mockUsers = mockUsers.map((u) => ({
+            ...u,
+            permissions: u.permissions.map((p) => (p === target.permissionKey ? updated.report.permissionKey : p)),
+          }));
+        }
+        persistLocalDb();
+        return updated.report;
+      }
+      await delay(250);
+      const actor = getActorUser();
+      if (actor?.role !== 'supadmin') {
+        throw new Error('Only supadmin can update analysis reports.');
+      }
+      const target = mockAnalysisReports.find((r) => r.id === id);
+      if (!target) throw new Error('Report not found.');
+
+      const normalizedName = payload.name.trim();
+      if (!normalizedName) throw new Error('Report name is required.');
+      const slug = toPermissionSlug(normalizedName);
+      if (!slug) throw new Error('Report name must include alphanumeric characters.');
+      const nextPermissionKey = `view:analysis-report:${slug}` as Permission;
+      const exists = mockAnalysisReports.some(
+        (r) =>
+          r.id !== id &&
+          (r.permissionKey === nextPermissionKey || r.name.toLowerCase() === normalizedName.toLowerCase())
+      );
+      if (exists) throw new Error('A report with the same name/permission already exists.');
+
+      const updated: AnalysisReport = {
+        ...target,
+        name: normalizedName,
+        description: payload.description?.trim() || '',
+        embedUrl: payload.embedUrl?.trim() || '',
+        workspaceId: payload.workspaceId?.trim() || '',
+        reportId: payload.reportId?.trim() || '',
+        datasetId: payload.datasetId?.trim() || '',
+        defaultRoles: Array.isArray(payload.defaultRoles) ? payload.defaultRoles : [],
+        permissionKey: nextPermissionKey,
+      };
+      mockAnalysisReports = mockAnalysisReports.map((r) => (r.id === id ? updated : r));
+      if (target.permissionKey !== updated.permissionKey) {
+        mockUsers = mockUsers.map((u) => ({
+          ...u,
+          permissions: u.permissions.map((p) => (p === target.permissionKey ? updated.permissionKey : p)),
+        }));
+      }
+      persistLocalDb();
+      return updated;
+    },
+    deleteAnalysisReport: async (id: string): Promise<void> => {
+      if (shouldUseFunctionApi()) {
+        await callFunctionApi<{ success: boolean }>(`api/identity/reports/${id}`, {
+          method: 'DELETE',
+        });
+        const target = mockAnalysisReports.find((r) => r.id === id);
+        mockAnalysisReports = mockAnalysisReports.filter((r) => r.id !== id);
+        if (target) {
+          mockUsers = mockUsers.map((u) => ({
+            ...u,
+            permissions: u.permissions.filter((p) => p !== target.permissionKey),
+          }));
+        }
+        persistLocalDb();
+        return;
+      }
+      await delay(250);
+      const actor = getActorUser();
+      if (actor?.role !== 'supadmin') {
+        throw new Error('Only supadmin can delete analysis reports.');
+      }
+      const target = mockAnalysisReports.find((r) => r.id === id);
+      if (!target) throw new Error('Report not found.');
+
+      mockAnalysisReports = mockAnalysisReports.filter((r) => r.id !== id);
+      mockUsers = mockUsers.map((u) => ({
+        ...u,
+        permissions: u.permissions.filter((p) => p !== target.permissionKey),
+      }));
+      persistLocalDb();
+    },
     getSystemHealth: async (): Promise<SystemHealthPayload> => {
       if (shouldUseFunctionApi()) {
         return callFunctionApi<SystemHealthPayload>('api/system-health');
       }
+      ensureMockAllowed('System health');
       await delay(250);
       return {
         generatedAt: new Date().toISOString(),
@@ -994,15 +1171,29 @@ export const api = {
           const payload = await api.admin.getSystemHealth();
           return payload.logs;
         } catch {
+          ensureMockAllowed('System logs');
           return mockLogs;
         }
       }
+      ensureMockAllowed('System logs');
       await delay(300);
       return mockLogs;
     },
   },
   customer: {
+    getAnalysisReports: async (): Promise<AnalysisReport[]> => {
+      if (shouldUseFunctionApi()) {
+        const payload = await callFunctionApi<{ reports: AnalysisReport[] }>('api/reports/analysis');
+        mockAnalysisReports = payload.reports.map((report) => ({ ...report }));
+        persistLocalDb();
+        return payload.reports;
+      }
+      ensureMockAllowed('Analysis reports');
+      await delay(200);
+      return [...mockAnalysisReports].filter((r) => r.isActive);
+    },
     getKPIs: async (companyId?: string): Promise<KPI[]> => {
+      ensureMockAllowed('Customer KPIs');
       await delay(500);
       const scopedOrders = byCompanyScope(mockOrders, companyId);
       const scopedShipments = byCompanyScope(mockShipments, companyId);
@@ -1014,16 +1205,19 @@ export const api = {
       ];
     },
     getOrders: async (companyId?: string): Promise<Order[]> => {
+      ensureMockAllowed('Customer orders');
       await delay(600);
       return byCompanyScope(mockOrders, companyId);
     },
     getHistoricalOrders: async (companyId?: string): Promise<Order[]> => {
+      ensureMockAllowed('Historical orders');
       await delay(450);
       return byCompanyScope(mockOrders, companyId)
         .filter((o) => o.status === 'Delivered' || o.status === 'Cancelled')
         .sort((a, b) => b.date.localeCompare(a.date));
     },
     createOrder: async (order: Omit<Order, 'id'>): Promise<Order> => {
+        ensureMockAllowed('Create order');
         await delay(500);
         const newOrder = { ...order, id: `ORD-${Date.now().toString().slice(-4)}` };
         mockOrders.unshift(newOrder); // Add to top
@@ -1031,18 +1225,22 @@ export const api = {
         return newOrder;
     },
     getFleet: async (companyId?: string): Promise<Vessel[]> => {
+      ensureMockAllowed('Fleet');
       await delay(400);
       return byCompanyScope(mockVessels, companyId);
     },
     getShipments: async (companyId?: string): Promise<Shipment[]> => {
+      ensureMockAllowed('Shipments');
       await delay(500);
       return byCompanyScope(mockShipments, companyId);
     },
     getInvoices: async (companyId?: string): Promise<Invoice[]> => {
+      ensureMockAllowed('Invoices');
       await delay(500);
       return byCompanyScope(mockInvoices, companyId);
     },
     getPortFees: async (companyId?: string): Promise<Array<{ port: string; vesselCount: number; totalFee: number; currency: string }>> => {
+      ensureMockAllowed('Port fees');
       await delay(350);
       const scopedOrders = byCompanyScope(mockOrders, companyId);
       const byPort = scopedOrders.reduce<Record<string, { vesselNames: Set<string>; totalAmount: number }>>((acc, order) => {
@@ -1063,6 +1261,7 @@ export const api = {
         .sort((a, b) => b.totalFee - a.totalFee);
     },
     getContractedConsumptionReport: async (companyId?: string): Promise<Array<{ month: string; consumed: number; contracted: number }>> => {
+      ensureMockAllowed('Consumption report');
       await delay(400);
       const scopedOrders = byCompanyScope(mockOrders, companyId);
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
@@ -1073,6 +1272,7 @@ export const api = {
       });
     },
     getContractedAnalysisReport: async (companyId?: string): Promise<Array<{ category: string; value: number }>> => {
+      ensureMockAllowed('Contracted analysis report');
       await delay(350);
       const scopedOrders = byCompanyScope(mockOrders, companyId);
       const total = scopedOrders.reduce((sum, o) => sum + o.amount, 0) || 1;
@@ -1090,6 +1290,7 @@ export const api = {
   },
   supplier: {
     getKPIs: async (): Promise<KPI[]> => {
+      ensureMockAllowed('Supplier KPIs');
       await delay(500);
       return [
         { label: 'Total Revenue', value: '$450k', trend: 8, status: 'up' },
@@ -1098,18 +1299,21 @@ export const api = {
       ];
     },
     getOrders: async (): Promise<Order[]> => {
+      ensureMockAllowed('Supplier orders');
       await delay(500);
       return mockOrders.filter(o => o.amount < 10000); 
     }
   },
   support: {
     getTicketsByUser: async (userId: string): Promise<SupportTicket[]> => {
+      ensureMockAllowed('Support tickets');
       await delay(300);
       return mockSupportTickets
         .filter(ticket => ticket.createdByUserId === userId)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
     createTicket: async (payload: Omit<SupportTicket, 'id' | 'createdAt' | 'status'>): Promise<SupportTicket> => {
+      ensureMockAllowed('Create support ticket');
       await delay(400);
       const ticket: SupportTicket = {
         ...payload,
@@ -1124,6 +1328,7 @@ export const api = {
   },
   guest: {
     generateSuggestedProducts: async (input: { vesselName: string; port: string; details: string }): Promise<SuggestedItem[]> => {
+      ensureMockAllowed('Suggested products');
       await delay(350);
       const text = `${input.vesselName} ${input.port} ${input.details}`.toLowerCase();
       const suggestions: SuggestedItem[] = [
@@ -1140,6 +1345,7 @@ export const api = {
       return suggestions;
     },
     submitRFQ: async (payload: Omit<GuestRFQ, 'id' | 'createdAt'>): Promise<GuestRFQ> => {
+      ensureMockAllowed('Submit RFQ');
       await delay(450);
       const rfq: GuestRFQ = {
         ...payload,
@@ -1151,10 +1357,23 @@ export const api = {
       return rfq;
     },
     getMyRFQs: async (userId: string): Promise<GuestRFQ[]> => {
+      ensureMockAllowed('My RFQs');
       await delay(250);
       return mockGuestRFQs
         .filter(rfq => rfq.createdByUserId === userId)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+  },
+  powerbi: {
+    getEmbedConfig: async (reportConfigId: string): Promise<{
+      report: { id: string; name: string; permissionKey: string };
+      embedConfig: { type: 'report'; reportId: string; embedUrl: string; tokenType: 'Embed'; accessToken: string; expiration: string };
+      rls: { username: string; roles: string[] };
+    }> => {
+      return callFunctionApi('api/powerbi/embed-config', {
+        method: 'POST',
+        body: JSON.stringify({ reportConfigId }),
+      });
     },
   },
 };

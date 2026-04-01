@@ -1,9 +1,18 @@
 import { Permission, User, UserRole } from '../types';
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  user: ['view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'edit:orders', 'create:support-ticket'],
-  admin: ['view:dashboard', 'view:reports', 'manage:users', 'view:analytics'],
-  supadmin: ['view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'view:supplier', 'create:support-ticket', 'submit:rfq', 'manage:users', 'manage:companies', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings'],
+  user: [
+    'view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'edit:orders', 'create:support-ticket',
+    'view:analysis-report:contracted', 'view:analysis-report:bi-overview',
+  ],
+  admin: [
+    'view:dashboard', 'view:reports', 'manage:users', 'view:analytics',
+    'view:analysis-report:contracted', 'view:analysis-report:bi-overview',
+  ],
+  supadmin: [
+    'view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'view:supplier', 'create:support-ticket', 'submit:rfq', 'manage:users', 'manage:companies', 'manage:reports', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings',
+    'view:analysis-report:contracted', 'view:analysis-report:bi-overview',
+  ],
 };
 
 export const getDefaultRouteForRole = (role: UserRole): string => {

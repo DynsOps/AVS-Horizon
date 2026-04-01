@@ -17,7 +17,6 @@ import { PortFeeList } from './src/pages/customer/PortFeeList';
 import { HistoricalOrders } from './src/pages/customer/HistoricalOrders';
 import { ContractedConsumptionReport } from './src/pages/customer/ContractedConsumptionReport';
 import { ContractedAnalysisReport } from './src/pages/customer/ContractedAnalysisReport';
-import { Analytics } from './src/pages/customer/Analytics';
 import { CustomerOrders } from './src/pages/customer/Orders';
 import { Fleet } from './src/pages/customer/Fleet';
 import { Shipments } from './src/pages/customer/Shipments';
@@ -35,6 +34,7 @@ import { SystemHealth } from './src/pages/admin/SystemHealth';
 import { Security } from './src/pages/admin/Security';
 import { UserManagement } from './src/pages/admin/UserManagement';
 import { EntityManagement } from './src/pages/admin/EntityManagement';
+import { ReportManagement } from './src/pages/admin/ReportManagement';
 import { Permission, UserRole } from './src/types';
 import { getDefaultRouteForUser, hasPermissions, hasRoleAccess } from './src/utils/rbac';
 import { MsalAuthBridge } from './src/auth/MsalAuthBridge';
@@ -101,7 +101,7 @@ const App: React.FC = () => {
             <Route path="historical-orders" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:orders']}><HistoricalOrders /></ProtectedRoute>} />
             <Route path="reports/consumption" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:reports']}><ContractedConsumptionReport /></ProtectedRoute>} />
             <Route path="reports/analysis" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:reports']}><ContractedAnalysisReport /></ProtectedRoute>} />
-            <Route path="analytics" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:analytics']}><Analytics /></ProtectedRoute>} />
+            <Route path="analytics" element={<Navigate to="/customer/reports/analysis" replace />} />
             <Route path="fleet" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:fleet']}><Fleet /></ProtectedRoute>} />
             <Route path="orders" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:orders']}><CustomerOrders /></ProtectedRoute>} />
             <Route path="shipments" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:shipments']}><Shipments /></ProtectedRoute>} />
@@ -124,6 +124,7 @@ const App: React.FC = () => {
             <Route path="system-health" element={<ProtectedRoute allowedRoles={['admin', 'supadmin']} requiredPermissions={['system:settings']}><SystemHealth /></ProtectedRoute>} />
             <Route path="users" element={<ProtectedRoute allowedRoles={['admin', 'supadmin']} requiredPermissions={['manage:users']}><UserManagement /></ProtectedRoute>} />
             <Route path="entities" element={<ProtectedRoute allowedRoles={['supadmin']} requiredPermissions={['manage:companies']}><EntityManagement /></ProtectedRoute>} />
+            <Route path="reports" element={<ProtectedRoute allowedRoles={['supadmin']}><ReportManagement /></ProtectedRoute>} />
             <Route path="feature-flags" element={<ProtectedRoute allowedRoles={['supadmin']} requiredPermissions={['system:settings']}><div className="p-6">Feature Flags Management</div></ProtectedRoute>} />
           </Route>
 

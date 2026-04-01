@@ -4,6 +4,8 @@ AVS Horizon; React + Vite frontend ve Azure Functions tabanli backend (function-
 
 Bu README, repo clone edildikten sonra yeni bir developer'in kendi bilgisayarinda projeyi kod degisikligi yapmadan calistirabilmesi icin hazirlanmistir.
 
+Hizli kurulum dokumani: [SETUP.md](./SETUP.md)
+
 ## Mimari Ozet
 
 ### Frontend
@@ -78,6 +80,12 @@ npm run dev
 
 Tarayicida ac:
 - `http://localhost:5173` veya terminalde yazan Vite URL'i
+
+### C. Tek komutla ikisini birden calistir
+```bash
+npm install
+npm run dev:all
+```
 
 ## Login Modlari
 

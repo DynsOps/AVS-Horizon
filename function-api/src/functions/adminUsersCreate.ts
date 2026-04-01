@@ -27,6 +27,7 @@ const SUPADMIN_CONTROLLED_PERMISSIONS = new Set<string>([
   'view:finance',
   'view:sustainability',
   'view:business',
+  'manage:reports',
 ]);
 
 export async function createAdminUser(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {

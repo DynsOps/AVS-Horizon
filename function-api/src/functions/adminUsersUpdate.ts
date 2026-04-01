@@ -34,6 +34,7 @@ const SUPADMIN_CONTROLLED_PERMISSIONS = new Set<string>([
   'view:finance',
   'view:sustainability',
   'view:business',
+  'manage:reports',
 ]);
 
 const canManageRole = (actorRole: UserRole, targetRole: UserRole): boolean => {

@@ -20,7 +20,9 @@ export type Permission =
   | 'view:business'
   | 'edit:orders' 
   | 'view:analytics'
-  | 'system:settings';
+  | 'system:settings'
+  | 'manage:reports'
+  | `view:analysis-report:${string}`;
 
 export interface Company {
   id: string;
@@ -124,6 +126,20 @@ export interface GuestRFQ {
   details: string;
   suggestedItems?: string[];
   attachments?: RFQAttachment[];
+  createdAt: string;
+}
+
+export interface AnalysisReport {
+  id: string;
+  name: string;
+  description?: string;
+  permissionKey: Permission;
+  embedUrl?: string;
+  workspaceId?: string;
+  reportId?: string;
+  datasetId?: string;
+  defaultRoles?: string[];
+  isActive: boolean;
   createdAt: string;
 }
 
