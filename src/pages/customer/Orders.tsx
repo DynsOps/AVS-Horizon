@@ -8,12 +8,13 @@ import { useAuthStore } from '../../store/authStore';
 
 export const CustomerOrders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
-  const { openDrawer, addToast } = useUIStore();
+  const { openDrawer, addToast, dashboardCompanyId } = useUIStore();
   const { user } = useAuthStore();
+  const effectiveCompanyId = dashboardCompanyId || user?.companyId;
 
   useEffect(() => {
-    api.customer.getOrders(user?.companyId).then(setOrders);
-  }, [user?.companyId]);
+    api.customer.getOrders(effectiveCompanyId).then(setOrders);
+  }, [effectiveCompanyId]);
 
   const handleRowClick = (order: Order) => {
     openDrawer(

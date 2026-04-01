@@ -1,18 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
+import { useUIStore } from '../../store/uiStore';
 import { api } from '../../services/api';
 import { Order } from '../../types';
 import { History, Search } from 'lucide-react';
 
 export const HistoricalOrders: React.FC = () => {
   const { user } = useAuthStore();
+  const { dashboardCompanyId } = useUIStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState('');
+  const effectiveCompanyId = dashboardCompanyId || user?.companyId;
 
   useEffect(() => {
-    api.customer.getHistoricalOrders(user?.companyId).then(setOrders);
-  }, [user?.companyId]);
+    api.customer.getHistoricalOrders(effectiveCompanyId).then(setOrders);
+  }, [effectiveCompanyId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

@@ -7,6 +7,7 @@ import { generateReportEmbedToken } from '../lib/powerbi';
 
 type EmbedConfigBody = {
   reportConfigId?: string;
+  companyId?: string;
 };
 
 type ReportRow = {
@@ -32,6 +33,7 @@ export async function powerBiEmbedConfig(request: HttpRequest, context: Invocati
 
     const body = (await request.json()) as EmbedConfigBody;
     const reportConfigId = (body.reportConfigId || '').trim();
+    const selectedCompanyId = (body.companyId || '').trim();
     if (!reportConfigId) return errorResponse(400, 'reportConfigId is required.');
 
     await ensureAnalysisReportsTable();
@@ -74,8 +76,9 @@ export async function powerBiEmbedConfig(request: HttpRequest, context: Invocati
     let rlsUsername: string | null = null;
 
     if (rlsRoles.length > 0) {
-      if (!actor.companyId) {
-        return errorResponse(400, 'RLS report requires user to be linked with a company.');
+      const effectiveCompanyId = actor.role === 'supadmin' ? selectedCompanyId : (actor.companyId || '');
+      if (!effectiveCompanyId) {
+        return errorResponse(400, 'RLS report requires a selected company.');
       }
 
       const companyResult = await runQuery<CompanyRow>(
@@ -84,7 +87,7 @@ export async function powerBiEmbedConfig(request: HttpRequest, context: Invocati
         FROM dbo.companies
         WHERE id = @companyId
         `,
-        { companyId: actor.companyId }
+        { companyId: effectiveCompanyId }
       );
       const companyName = (companyResult.recordset[0]?.name || '').trim();
       if (!companyName) {

@@ -10,12 +10,13 @@ export const Fleet: React.FC = () => {
   const [fleet, setFleet] = useState<Vessel[]>([]);
   const [selectedVessel, setSelectedVessel] = useState<string | null>(null);
   const { user } = useAuthStore();
-  const { addToast } = useUIStore();
+  const { addToast, dashboardCompanyId } = useUIStore();
   const shownAlertsRef = useRef<Set<string>>(new Set());
+  const effectiveCompanyId = dashboardCompanyId || user?.companyId;
 
   useEffect(() => {
-    api.customer.getFleet(user?.companyId).then(setFleet);
-  }, [user?.companyId]);
+    api.customer.getFleet(effectiveCompanyId).then(setFleet);
+  }, [effectiveCompanyId]);
 
   const vesselPositions: Record<string, { x: number; y: number; lat: string; lng: string }> = {
     'V-001': { x: 62, y: 38, lat: '1.290270', lng: '103.851959' },

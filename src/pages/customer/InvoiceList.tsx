@@ -8,12 +8,13 @@ import { useUIStore } from '../../store/uiStore';
 
 export const InvoiceList: React.FC = () => {
   const { user } = useAuthStore();
-  const { addToast } = useUIStore();
+  const { addToast, dashboardCompanyId } = useUIStore();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const effectiveCompanyId = dashboardCompanyId || user?.companyId;
 
   useEffect(() => {
-    api.customer.getInvoices(user?.companyId).then(setInvoices);
-  }, [user?.companyId]);
+    api.customer.getInvoices(effectiveCompanyId).then(setInvoices);
+  }, [effectiveCompanyId]);
 
   return (
     <div className="space-y-6">

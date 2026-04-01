@@ -5,15 +5,18 @@ import { Card } from '../../components/ui/Card';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
+import { useUIStore } from '../../store/uiStore';
 
 export const Shipments: React.FC = () => {
     const [shipments, setShipments] = useState<Shipment[]>([]);
     const { isDarkMode } = useThemeStore();
     const { user } = useAuthStore();
+    const { dashboardCompanyId } = useUIStore();
+    const effectiveCompanyId = dashboardCompanyId || user?.companyId;
     
     useEffect(() => {
-        api.customer.getShipments(user?.companyId).then(setShipments);
-    }, [user?.companyId]);
+        api.customer.getShipments(effectiveCompanyId).then(setShipments);
+    }, [effectiveCompanyId]);
 
     const scorecardData = [
         { name: 'On Time', value: 85 },

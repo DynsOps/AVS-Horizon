@@ -2,6 +2,7 @@
 import { KPI, Order, Shipment, Invoice, Vessel, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport } from '../types';
 import { getDefaultPermissionsForRole } from '../utils/rbac';
 import { useAuthStore } from '../store/authStore';
+import { useUIStore } from '../store/uiStore';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const LOCAL_DB_KEY = 'avs_horizon_local_db_v2';
@@ -1368,11 +1369,15 @@ export const api = {
     getEmbedConfig: async (reportConfigId: string): Promise<{
       report: { id: string; name: string; permissionKey: string };
       embedConfig: { type: 'report'; reportId: string; embedUrl: string; tokenType: 'Embed'; accessToken: string; expiration: string };
-      rls: { username: string; roles: string[] };
+      rls: { username: string | null; roles: string[] };
     }> => {
+      const selectedCompanyId = useUIStore.getState().dashboardCompanyId;
       return callFunctionApi('api/powerbi/embed-config', {
         method: 'POST',
-        body: JSON.stringify({ reportConfigId }),
+        body: JSON.stringify({
+          reportConfigId,
+          ...(selectedCompanyId ? { companyId: selectedCompanyId } : {}),
+        }),
       });
     },
   },

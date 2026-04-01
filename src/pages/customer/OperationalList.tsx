@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
+import { useUIStore } from '../../store/uiStore';
 import { api } from '../../services/api';
 import { Order, Shipment } from '../../types';
 
@@ -15,19 +16,21 @@ type OperationalRow = {
 
 export const OperationalList: React.FC = () => {
   const { user } = useAuthStore();
+  const { dashboardCompanyId } = useUIStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
+  const effectiveCompanyId = dashboardCompanyId || user?.companyId;
 
   useEffect(() => {
-    if (!user?.companyId) return;
+    if (!effectiveCompanyId) return;
     Promise.all([
-      api.customer.getOrders(user.companyId),
-      api.customer.getShipments(user.companyId),
+      api.customer.getOrders(effectiveCompanyId),
+      api.customer.getShipments(effectiveCompanyId),
     ]).then(([o, s]) => {
       setOrders(o);
       setShipments(s);
     });
-  }, [user?.companyId]);
+  }, [effectiveCompanyId]);
 
   const rows = useMemo<OperationalRow[]>(() => {
     const orderRows = orders.map((o) => ({

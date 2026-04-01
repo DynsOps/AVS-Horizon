@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
+import { useUIStore } from '../../store/uiStore';
 import { api } from '../../services/api';
 import { Ship } from 'lucide-react';
 
@@ -13,11 +14,13 @@ type PortFeeRow = {
 
 export const PortFeeList: React.FC = () => {
   const { user } = useAuthStore();
+  const { dashboardCompanyId } = useUIStore();
   const [rows, setRows] = useState<PortFeeRow[]>([]);
+  const effectiveCompanyId = dashboardCompanyId || user?.companyId;
 
   useEffect(() => {
-    api.customer.getPortFees(user?.companyId).then(setRows);
-  }, [user?.companyId]);
+    api.customer.getPortFees(effectiveCompanyId).then(setRows);
+  }, [effectiveCompanyId]);
 
   return (
     <div className="space-y-6">

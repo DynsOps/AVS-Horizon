@@ -107,13 +107,31 @@ const getTokenClaims = async (token: string): Promise<JwtPayload> => {
   });
 };
 
+const normalizeExtEmail = (value: string): string => {
+  const candidate = value.trim().toLowerCase();
+  const extMarker = '#ext#@';
+  const markerIndex = candidate.indexOf(extMarker);
+  if (markerIndex === -1) return candidate;
+
+  const left = candidate.slice(0, markerIndex);
+  const splitIndex = left.lastIndexOf('_');
+  if (splitIndex === -1) return candidate;
+
+  const localPart = left.slice(0, splitIndex);
+  const domainPart = left.slice(splitIndex + 1);
+  if (!localPart || !domainPart || domainPart.includes('@')) return candidate;
+
+  return `${localPart}@${domainPart}`;
+};
+
 const getClaimEmail = (claims: JwtPayload): string | null => {
-  const preferred = claims.preferred_username;
-  const email = claims.email;
-  const upn = claims.upn;
-  const candidate = preferred || email || upn;
-  if (typeof candidate !== 'string') return null;
-  return candidate.trim().toLowerCase();
+  const orderedCandidates = [claims.email, claims.preferred_username, claims.upn, claims.unique_name];
+  for (const raw of orderedCandidates) {
+    if (typeof raw !== 'string') continue;
+    const normalized = normalizeExtEmail(raw);
+    if (normalized.includes('@')) return normalized;
+  }
+  return null;
 };
 
 const getUserByEmail = async (email: string): Promise<AuthUser | null> => {
@@ -302,7 +320,7 @@ export const authenticateRequest = async (request: HttpRequest): Promise<AuthUse
     }
     const devUser = await getUserByEmail(devEmail);
     if (!devUser) {
-      throw new Error('No access record found for this Microsoft account email.');
+      throw new Error(`No access record found for this Microsoft account email: ${devEmail}`);
     }
     return devUser;
   }
@@ -325,7 +343,7 @@ export const authenticateRequest = async (request: HttpRequest): Promise<AuthUse
     }
   }
   if (!user) {
-    throw new Error('No access record found for this Microsoft account email.');
+    throw new Error(`No access record found for this Microsoft account email: ${email}`);
   }
 
   return user;
