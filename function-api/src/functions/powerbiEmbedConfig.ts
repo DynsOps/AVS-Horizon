@@ -19,6 +19,10 @@ type ReportRow = {
   defaultRoles: string | null;
 };
 
+type CompanyRow = {
+  name: string;
+};
+
 export async function powerBiEmbedConfig(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const actor = await authenticateRequest(request);
@@ -66,13 +70,35 @@ export async function powerBiEmbedConfig(request: HttpRequest, context: Invocati
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
-    const rlsRoles = roles.length > 0 ? roles : ['Customer'];
+    const rlsRoles = roles;
+    let rlsUsername: string | null = null;
+
+    if (rlsRoles.length > 0) {
+      if (!actor.companyId) {
+        return errorResponse(400, 'RLS report requires user to be linked with a company.');
+      }
+
+      const companyResult = await runQuery<CompanyRow>(
+        `
+        SELECT TOP 1 name
+        FROM dbo.companies
+        WHERE id = @companyId
+        `,
+        { companyId: actor.companyId }
+      );
+      const companyName = (companyResult.recordset[0]?.name || '').trim();
+      if (!companyName) {
+        return errorResponse(400, 'RLS company name not found for current user.');
+      }
+
+      rlsUsername = companyName;
+    }
 
     const tokenPayload = await generateReportEmbedToken({
       workspaceId: report.workspaceId,
       reportId: report.reportId,
       datasetId: report.datasetId,
-      username: actor.email,
+      username: rlsUsername || undefined,
       roles: rlsRoles,
     });
 
@@ -91,7 +117,7 @@ export async function powerBiEmbedConfig(request: HttpRequest, context: Invocati
         expiration: tokenPayload.expiration,
       },
       rls: {
-        username: actor.email,
+        username: rlsUsername,
         roles: rlsRoles,
       },
     });

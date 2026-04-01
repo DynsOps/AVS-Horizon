@@ -88,7 +88,7 @@ export const AppShell: React.FC = () => {
       {confirmDialog.isOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-slate-900/45 backdrop-blur-sm"
+            className="absolute inset-0 bg-white/65 backdrop-blur-sm dark:bg-black/65"
             onClick={() => resolveConfirmDialog(false)}
           />
           <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">

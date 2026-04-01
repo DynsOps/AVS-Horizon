@@ -47,11 +47,34 @@ export const generateReportEmbedToken = async (params: {
   workspaceId: string;
   reportId: string;
   datasetId: string;
-  username: string;
-  roles: string[];
+  username?: string;
+  roles?: string[];
 }): Promise<{ embedToken: string; expiration: string; embedUrl: string }> => {
   const accessToken = await getPowerBiAccessToken();
   const url = `https://api.powerbi.com/v1.0/myorg/groups/${params.workspaceId}/reports/${params.reportId}/GenerateToken`;
+  const roles = (params.roles || []).map((role) => role.trim()).filter(Boolean);
+  const useEffectiveIdentity = Boolean(params.username && roles.length > 0);
+
+  const requestBody: {
+    accessLevel: 'View';
+    identities?: Array<{
+      username: string;
+      roles: string[];
+      datasets: string[];
+    }>;
+  } = {
+    accessLevel: 'View',
+  };
+
+  if (useEffectiveIdentity) {
+    requestBody.identities = [
+      {
+        username: params.username as string,
+        roles,
+        datasets: [params.datasetId],
+      },
+    ];
+  }
 
   const response = await fetch(url, {
     method: 'POST',
@@ -59,21 +82,36 @@ export const generateReportEmbedToken = async (params: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      accessLevel: 'View',
-      identities: [
-        {
-          username: params.username,
-          roles: params.roles,
-          datasets: [params.datasetId],
-        },
-      ],
-    }),
+    body: JSON.stringify(requestBody),
   });
 
-  const payload = (await response.json().catch(() => ({}))) as Partial<GenerateTokenResponse> & { message?: string };
+  const payload = (await response.json().catch(() => ({}))) as
+    Partial<GenerateTokenResponse> & {
+      message?: string;
+      error?: {
+        code?: string;
+        message?: string;
+        pbi?: {
+          error?: {
+            code?: string;
+            message?: string;
+            details?: Array<{ code?: string; message?: string }>;
+          };
+        };
+      };
+    };
   if (!response.ok || !payload.token || !payload.expiration) {
-    throw new Error(payload.message || `Power BI GenerateToken failed (${response.status})`);
+    const details = payload.error?.pbi?.error?.details
+      ?.map((item) => item.message || item.code)
+      .filter(Boolean)
+      .join(' | ');
+    const reason =
+      payload.error?.pbi?.error?.message ||
+      payload.error?.message ||
+      payload.message ||
+      details ||
+      'Unknown Power BI error';
+    throw new Error(`Power BI GenerateToken failed (${response.status}): ${reason}`);
   }
 
   return {

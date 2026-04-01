@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Card } from '../../components/ui/Card';
 import { AnalysisReport } from '../../types';
 import { api } from '../../services/api';
@@ -229,10 +230,10 @@ export const ReportManagement: React.FC = () => {
         </div>
       </Card>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4">
-          <div className="w-full max-w-xl rounded-xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-            <div className="mb-4 flex items-center justify-between">
+      {isModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[2147483646] flex items-start justify-center overflow-y-auto bg-white/75 p-4 backdrop-blur-sm dark:bg-black/75 md:p-6">
+          <div className="relative z-[2147483647] my-2 w-full max-w-2xl max-h-[calc(100vh-2rem)] overflow-visible rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 md:my-4 md:max-h-[calc(100vh-3rem)]">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-slate-800">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                 {modalMode === 'edit' ? 'Edit Report' : 'Add Report'}
               </h2>
@@ -245,6 +246,7 @@ export const ReportManagement: React.FC = () => {
               </button>
             </div>
 
+            <div className="overflow-visible px-5 py-4">
             <div className="grid gap-4">
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Report Name</label>
@@ -315,7 +317,7 @@ export const ReportManagement: React.FC = () => {
                     >
                       <CircleHelp size={14} />
                     </button>
-                    <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-72 -translate-x-1/2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 shadow-lg group-hover:block group-focus-within:block dark:border-blue-800/60 dark:bg-blue-900/20 dark:text-blue-300">
+                    <div className="pointer-events-none absolute left-1/2 top-full z-[2147483647] mt-2 hidden w-72 -translate-x-1/2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 shadow-lg group-hover:block group-focus-within:block dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                       <p className="font-semibold">Dataset ID nasıl bulunur?</p>
                       <p className="mt-1">1. Power BI Service'te reportu aç.</p>
                       <p>2. Workspace içindeki Dataset (Semantic model) detayına gir.</p>
@@ -350,7 +352,7 @@ export const ReportManagement: React.FC = () => {
                   Comma-separated role list used in Power BI RLS identities.
                 </p>
               </div>
-              <div className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
+              <div className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                 IDs bulma rehberi:{' '}
                 <a
                   href="https://learn.microsoft.com/power-bi/developer/embedded/embed-customer-app#how-to-get-the-power-bi-objects"
@@ -371,8 +373,9 @@ export const ReportManagement: React.FC = () => {
                 </a>
               </div>
             </div>
+            </div>
 
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="flex justify-end gap-2 border-t border-gray-200 px-5 py-4 dark:border-slate-800">
               <button
                 onClick={closeModal}
                 className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -389,7 +392,8 @@ export const ReportManagement: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
