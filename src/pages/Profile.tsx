@@ -4,20 +4,13 @@ import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useUIStore } from '../store/uiStore';
-import { User as UserIcon, Mail, Shield, Building, Save, Loader2, Lock, KeyRound, BadgeCheck, ChevronDown } from 'lucide-react';
+import { User as UserIcon, Mail, Shield, Building, Save, Loader2 } from 'lucide-react';
 
 export const Profile: React.FC = () => {
     const { user, login } = useAuthStore();
     const { addToast } = useUIStore();
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [isChangingPassword, setIsChangingPassword] = useState(false);
-    const [isPasswordSectionOpen, setIsPasswordSectionOpen] = useState(false);
-    const [passwordForm, setPasswordForm] = useState({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
-    });
     
     // Form state
     const [formData, setFormData] = useState({
@@ -43,30 +36,6 @@ export const Profile: React.FC = () => {
             addToast({ title: 'Error', message, type: 'error' });
         } finally {
             setIsLoading(false);
-        }
-    };
-
-    const handlePasswordChange = async () => {
-        if (!user) return;
-        if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
-            addToast({ title: 'Validation Error', message: 'Please fill all password fields.', type: 'error' });
-            return;
-        }
-        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-            addToast({ title: 'Validation Error', message: 'New password and confirmation do not match.', type: 'error' });
-            return;
-        }
-
-        setIsChangingPassword(true);
-        try {
-            await api.auth.changePassword(user.id, passwordForm.currentPassword, passwordForm.newPassword);
-            addToast({ title: 'Success', message: 'Password changed successfully.', type: 'success' });
-            setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to change password.';
-            addToast({ title: 'Error', message, type: 'error' });
-        } finally {
-            setIsChangingPassword(false);
         }
     };
 
@@ -199,72 +168,13 @@ export const Profile: React.FC = () => {
                                 <span>Last Login</span>
                                 <span className="font-mono">{user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}</span>
                             </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 flex justify-between border-b border-gray-100 dark:border-slate-800 pb-1">
-                                <span>Password Last Changed</span>
-                                <span className="font-mono">{user.passwordLastChangedAt ? new Date(user.passwordLastChangedAt).toLocaleString() : 'Never'}</span>
-                            </div>
                         </div>
                         <div className="mt-4 rounded-xl border border-indigo-200/70 bg-gradient-to-br from-indigo-50 to-sky-50 p-4 dark:border-indigo-900/50 dark:from-indigo-950/30 dark:to-sky-950/20">
-                            <button
-                                type="button"
-                                onClick={() => setIsPasswordSectionOpen((prev) => !prev)}
-                                className="mb-2 flex w-full items-center justify-between rounded-lg px-1 py-1 text-left hover:bg-indigo-100/40 dark:hover:bg-indigo-900/20"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <div className="rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/40">
-                                        <KeyRound size={14} className="text-indigo-600 dark:text-indigo-300" />
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Change Password</p>
-                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Use at least 8 characters.</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
-                                        <BadgeCheck size={10} />
-                                        Secure
-                                    </span>
-                                    <ChevronDown
-                                        size={14}
-                                        className={`text-indigo-500 transition-transform ${isPasswordSectionOpen ? 'rotate-180' : ''}`}
-                                    />
-                                </div>
-                            </button>
-                            {isPasswordSectionOpen && (
-                                <>
-                                    <div className="space-y-2">
-                                        <input
-                                            type="password"
-                                            placeholder="Current password"
-                                            value={passwordForm.currentPassword}
-                                            onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                                            className="w-full rounded-lg border border-indigo-100 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-indigo-300 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                                        />
-                                        <input
-                                            type="password"
-                                            placeholder="New password"
-                                            value={passwordForm.newPassword}
-                                            onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                                            className="w-full rounded-lg border border-indigo-100 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-indigo-300 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                                        />
-                                        <input
-                                            type="password"
-                                            placeholder="Confirm new password"
-                                            value={passwordForm.confirmPassword}
-                                            onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                                            className="w-full rounded-lg border border-indigo-100 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-indigo-300 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                                        />
-                                    </div>
-                                    <button
-                                        onClick={handlePasswordChange}
-                                        disabled={isChangingPassword}
-                                        className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-70"
-                                    >
-                                        {isChangingPassword ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
-                                        Update Password
-                                    </button>
-                                </>
-                            )}
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Credentials managed by Entra ID</p>
+                            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                Password changes, MFA enrollment, conditional access, and account recovery are handled on the Entra-hosted identity pages.
+                                AVS Horizon stores only your portal profile and authorization data.
+                            </p>
                         </div>
                     </div>
                 </div>

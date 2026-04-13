@@ -1,8 +1,9 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../lib/auth';
-import { runQuery } from '../lib/db';
+import { runScopedQuery } from '../lib/db';
 import { errorResponse, ok } from '../lib/http';
 import { UserRole, getDefaultPermissionsForRole } from '../lib/rbac';
+import { deriveAccessState, getProvisioningSourceForEmail, isPersonalEmailDomain, normalizeEmail, ProvisioningSource } from '../lib/identity';
 
 type UpdateUserBody = {
   name?: string;
@@ -13,6 +14,7 @@ type UpdateUserBody = {
   companyId?: string | null;
   status?: 'Active' | 'Inactive' | 'Suspended';
   permissions?: string[];
+  provisioningMode?: 'corporate_precreated' | 'external_local_account';
 };
 
 type TargetUser = {
@@ -20,13 +22,12 @@ type TargetUser = {
   name: string;
   role: UserRole;
   email: string;
+  entraObjectId: string | null;
   companyId: string | null;
   isGuest: boolean;
   showOnlyCoreAdminPermissions: boolean;
   status: 'Active' | 'Inactive' | 'Suspended';
-  powerBiAccess: 'none' | 'viewer' | 'editor';
-  powerBiWorkspaceId: string | null;
-  powerBiReportId: string | null;
+  provisioningSource: ProvisioningSource;
 };
 
 const SUPADMIN_CONTROLLED_PERMISSIONS = new Set<string>([
@@ -54,20 +55,20 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
     if (!userId) return errorResponse(400, 'User id is required.');
 
     const body = (await request.json()) as UpdateUserBody;
-    const targetResult = await runQuery<TargetUser>(
+    const targetResult = await runScopedQuery<TargetUser>(
+      { role: actor.role, companyId: actor.companyId, userId: actor.id },
       `
       SELECT TOP 1
         id,
         display_name AS name,
         role,
         email,
+        entra_object_id AS entraObjectId,
         company_id AS companyId,
         is_guest AS isGuest,
         show_only_core_admin_permissions AS showOnlyCoreAdminPermissions,
         status,
-        power_bi_access AS powerBiAccess,
-        power_bi_workspace_id AS powerBiWorkspaceId,
-        power_bi_report_id AS powerBiReportId
+        provisioning_source AS provisioningSource
       FROM dbo.users
       WHERE id = @userId
       `,
@@ -89,12 +90,13 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
       return errorResponse(403, 'Only supadmin can manage supadmin users.');
     }
 
-    const nextEmail = (body.email || target.email).trim().toLowerCase();
+    const nextEmail = normalizeEmail(body.email || target.email);
     const nextName = (body.name || target.name).trim();
     if (!nextName) return errorResponse(400, 'Name is required.');
     if (!nextEmail) return errorResponse(400, 'Email is required.');
     if (nextEmail !== target.email.toLowerCase()) {
-      const existsResult = await runQuery<{ count: number }>(
+      const existsResult = await runScopedQuery<{ count: number }>(
+        { role: actor.role, companyId: actor.companyId, userId: actor.id },
         'SELECT COUNT(1) AS count FROM dbo.users WHERE LOWER(email) = @email AND id <> @userId',
         { email: nextEmail, userId }
       );
@@ -125,14 +127,26 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
       return errorResponse(400, 'Company is required for admin and non-guest user roles.');
     }
 
-    const currentPermissionsResult = await runQuery<{ permission: string }>(
+    const currentPermissionsResult = await runScopedQuery<{ permission: string }>(
+      { role: actor.role, companyId: actor.companyId, userId: actor.id },
       'SELECT permission FROM dbo.user_permissions WHERE user_id = @userId',
       { userId }
     );
     const currentPermissions = currentPermissionsResult.recordset.map((p) => p.permission);
-    const requestedPermissions = (body.permissions && body.permissions.length > 0)
+    const requestedPermissions = body.permissions !== undefined
       ? body.permissions
       : (body.role ? getDefaultPermissionsForRole(nextRole) : currentPermissions);
+    const nextProvisioningSource: ProvisioningSource = body.provisioningMode
+      ? body.provisioningMode
+      : (target.provisioningSource || getProvisioningSourceForEmail(nextEmail));
+
+    if (nextProvisioningSource === 'corporate_precreated' && isPersonalEmailDomain(nextEmail)) {
+      return errorResponse(400, 'Personal email addresses must use external_local_account provisioning.');
+    }
+
+    if (target.provisioningSource !== nextProvisioningSource && target.entraObjectId) {
+      return errorResponse(400, 'Changing an existing linked account between corporate and external local provisioning is not supported.');
+    }
 
     if (actor.role === 'admin') {
       const actorSet = new Set(actor.permissions);
@@ -147,7 +161,14 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
       }
     }
 
-    await runQuery(
+    const nextAccessState = deriveAccessState({
+      provisioningSource: nextProvisioningSource,
+      permissions: requestedPermissions,
+      hasLinkedIdentity: Boolean(target.entraObjectId),
+    });
+
+    await runScopedQuery(
+      { role: actor.role, companyId: actor.companyId, userId: actor.id },
       `
       UPDATE dbo.users
       SET
@@ -158,6 +179,8 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
         show_only_core_admin_permissions = @showOnlyCoreAdminPermissions,
         company_id = @companyId,
         status = @status,
+        provisioning_source = @provisioningSource,
+        access_state = @accessState,
         power_bi_access = 'none',
         power_bi_workspace_id = NULL,
         power_bi_report_id = NULL,
@@ -173,12 +196,22 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
         showOnlyCoreAdminPermissions: nextShowOnlyCoreAdminPermissions,
         companyId: nextRole === 'supadmin' ? null : (nextRole === 'user' && nextIsGuest ? null : scopedCompanyId || null),
         status: body.status || target.status,
+        provisioningSource: nextProvisioningSource,
+        accessState: nextAccessState,
       }
     );
 
-    await runQuery('DELETE FROM dbo.user_permissions WHERE user_id = @userId', { userId });
+    await runScopedQuery(
+      { role: actor.role, companyId: actor.companyId, userId: actor.id },
+      'DELETE FROM dbo.user_permissions WHERE user_id = @userId',
+      { userId }
+    );
     for (const permission of requestedPermissions) {
-      await runQuery('INSERT INTO dbo.user_permissions (user_id, permission) VALUES (@userId, @permission)', { userId, permission });
+      await runScopedQuery(
+        { role: actor.role, companyId: actor.companyId, userId: actor.id },
+        'INSERT INTO dbo.user_permissions (user_id, permission) VALUES (@userId, @permission)',
+        { userId, permission }
+      );
     }
 
     return ok({ success: true });

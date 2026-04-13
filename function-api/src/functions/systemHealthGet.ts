@@ -40,12 +40,12 @@ export async function getSystemHealth(request: HttpRequest, context: InvocationC
     const logs: HealthLog[] = [];
     const services: HealthService[] = [];
 
-    const authStatus: HealthStatus = env.azureTenantId && env.azureAudience ? 'ok' : 'warn';
+    const authStatus: HealthStatus = env.azureClientId && env.azureAudience ? 'ok' : 'warn';
     services.push({
       key: 'auth-service',
       label: 'Auth Service',
       status: authStatus,
-      details: authStatus === 'ok' ? 'Azure AD settings configured.' : 'Azure AD env vars incomplete.',
+      details: authStatus === 'ok' ? 'Microsoft auth settings configured.' : 'Microsoft auth env vars incomplete.',
       latencyMs: null,
     });
     logs.push({

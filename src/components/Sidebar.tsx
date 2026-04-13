@@ -1,10 +1,12 @@
 
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useMsal } from '@azure/msal-react';
+import { clearHostedSignInProviderState, getCurrentHostedSignInProvider } from '../auth/providerSession';
+import { externalMsalInstance, workforceMsalInstance } from '../auth/msalInstance';
 import { useAuthStore } from '../store/authStore';
 import { Permission } from '../types';
 import { api } from '../services/api';
+import { isPendingAccessUser } from '../utils/rbac';
 import { 
   LayoutDashboard, Ship, Package, ClipboardList, ReceiptText, Landmark,
   Truck, ShieldAlert, Activity, Settings, LogOut, Anchor, Users, UserCircle, FilePlus2, BarChart3, Building2, ChevronDown
@@ -38,29 +40,33 @@ const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: stri
 
 export const Sidebar: React.FC = () => {
   const { user, logout } = useAuthStore();
-  const { instance, accounts } = useMsal();
   const navigate = useNavigate();
   const role = user?.role;
   const hasPermission = (permission: Permission) => Boolean(user?.permissions.includes(permission));
+  const isPendingUser = Boolean(user && isPendingAccessUser(user));
   const hasAnalysisReportAccess = Boolean(
     role === 'supadmin' ||
     user?.permissions.some((permission) => permission.startsWith('view:analysis-report:'))
   );
-  const hasMicrosoftSession = accounts.length > 0;
+  const hasHostedSession =
+    externalMsalInstance.getAllAccounts().length > 0 || workforceMsalInstance.getAllAccounts().length > 0;
   const [supadminOperationsOpen, setSupadminOperationsOpen] = useState(true);
   const [supadminSupplierOpen, setSupadminSupplierOpen] = useState(true);
 
   const handleSignOut = async () => {
     const userEmail = user?.email;
     if (userEmail) {
-      await api.auth.clearMicrosoftToken(userEmail);
+      await api.auth.clearHostedToken(userEmail);
     } else {
-      await api.auth.clearMicrosoftToken();
+      await api.auth.clearHostedToken();
     }
 
     logout();
+    const provider = getCurrentHostedSignInProvider();
+    clearHostedSignInProviderState();
 
-    if (hasMicrosoftSession) {
+    if (hasHostedSession) {
+      const instance = provider === 'microsoft_federated' ? workforceMsalInstance : externalMsalInstance;
       await instance.logoutRedirect({
         postLogoutRedirectUri: `${window.location.origin}/#/login`,
       });
@@ -93,7 +99,7 @@ export const Sidebar: React.FC = () => {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-6 relative z-10 custom-scrollbar">
-        {role === 'user' && (
+        {!isPendingUser && role === 'user' && (
           <>
             <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Operations</div>
             {hasPermission('view:dashboard') && <NavItem to="/customer/dashboard" icon={LayoutDashboard} label="Dashboard" />}
@@ -123,7 +129,7 @@ export const Sidebar: React.FC = () => {
           </>
         )}
 
-        {role === 'admin' && (
+        {!isPendingUser && role === 'admin' && (
           <>
             <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Operations</div>
             {hasPermission('view:dashboard') && <NavItem to="/customer/dashboard" icon={LayoutDashboard} label="Dashboard" />}
@@ -159,7 +165,7 @@ export const Sidebar: React.FC = () => {
           </>
         )}
 
-        {role === 'supadmin' && (
+        {!isPendingUser && role === 'supadmin' && (
           <>
             <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Super Administration</div>
             {hasPermission('system:settings') && <NavItem to="/admin/system-health" icon={Activity} label="System Health" />}

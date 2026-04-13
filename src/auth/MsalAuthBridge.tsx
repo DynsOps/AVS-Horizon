@@ -1,49 +1,76 @@
 import React, { useEffect, useRef } from 'react';
-import { InteractionStatus } from '@azure/msal-browser';
-import { useMsal } from '@azure/msal-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { apiTokenRequest } from './authConfig';
+import {
+  externalLocalIdentityTokenRequest,
+  workforceIdentityTokenRequest,
+} from './authConfig';
+import { externalMsalInstance, workforceMsalInstance } from './msalInstance';
+import {
+  clearCurrentHostedSignInProvider,
+  clearPendingHostedSignInProvider,
+  getCurrentHostedSignInProvider,
+  getPendingHostedSignInProvider,
+  HostedSignInProvider,
+  setCurrentHostedSignInProvider,
+} from './providerSession';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { getDefaultRouteForUser } from '../utils/rbac';
 
 export const MsalAuthBridge: React.FC = () => {
-  const { instance, accounts, inProgress } = useMsal();
-  const { user, isAuthenticated, login } = useAuthStore();
+  const { user, isAuthenticated, login, beginAuthResolution, setAuthError, clearAuthFeedback } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const processedAccountRef = useRef<string | null>(null);
-  const failedAccountRef = useRef<string | null>(null);
 
   useEffect(() => {
     const syncMicrosoftSession = async () => {
-      if (inProgress !== InteractionStatus.None) return;
-      if (!accounts.length) {
+      const externalAccount = externalMsalInstance.getActiveAccount() || externalMsalInstance.getAllAccounts()[0] || null;
+      const workforceAccount = workforceMsalInstance.getActiveAccount() || workforceMsalInstance.getAllAccounts()[0] || null;
+
+      if (!externalAccount && !workforceAccount) {
         processedAccountRef.current = null;
-        failedAccountRef.current = null;
+        clearPendingHostedSignInProvider();
+        clearCurrentHostedSignInProvider();
+        clearAuthFeedback();
         return;
       }
 
-      const activeAccount = instance.getActiveAccount() || accounts[0];
+      const pendingProvider = getPendingHostedSignInProvider();
+      const currentProvider = getCurrentHostedSignInProvider();
+
+      const resolveProvider = (): HostedSignInProvider | null => {
+        if (pendingProvider === 'microsoft_federated' || pendingProvider === 'external_local') return pendingProvider;
+        if (currentProvider === 'microsoft_federated' || currentProvider === 'external_local') return currentProvider;
+        if (workforceAccount) return 'microsoft_federated';
+        if (externalAccount) return 'external_local';
+        return null;
+      };
+
+      const selectedProvider = resolveProvider();
+      if (!selectedProvider) return;
+
+      const activeAccount = selectedProvider === 'microsoft_federated' ? workforceAccount : externalAccount;
       if (!activeAccount) return;
 
-      const accountKey = activeAccount.homeAccountId;
-      const alreadyAuthenticated = isAuthenticated && user?.email.toLowerCase() === (activeAccount.username || '').toLowerCase();
-      if (failedAccountRef.current === accountKey && !alreadyAuthenticated) {
-        return;
-      }
+      const instance = selectedProvider === 'microsoft_federated' ? workforceMsalInstance : externalMsalInstance;
+      const tokenRequest =
+        selectedProvider === 'microsoft_federated'
+          ? { ...workforceIdentityTokenRequest, account: activeAccount }
+          : { ...externalLocalIdentityTokenRequest, account: activeAccount };
+
+      const accountKey = `${selectedProvider}:${activeAccount.homeAccountId}`;
+      const emailFromAccount = (activeAccount.username || '').toLowerCase();
+      const alreadyAuthenticated = isAuthenticated && user?.email.toLowerCase() === emailFromAccount;
       if (processedAccountRef.current === accountKey && alreadyAuthenticated) {
         return;
       }
 
       try {
-        // Mark account as processed before silent call to avoid repeated retries on render loops.
         processedAccountRef.current = accountKey;
-        const tokenResult = await instance.acquireTokenSilent({
-          ...apiTokenRequest,
-          account: activeAccount,
-        });
+        beginAuthResolution();
 
+        const tokenResult = await instance.acquireTokenSilent(tokenRequest);
         const claims = tokenResult.idTokenClaims as Record<string, unknown> | undefined;
         const emailCandidate =
           (claims?.preferred_username as string | undefined) ||
@@ -51,37 +78,42 @@ export const MsalAuthBridge: React.FC = () => {
           activeAccount.username;
 
         if (!emailCandidate) {
-          throw new Error('Microsoft account email claim is missing.');
+          throw new Error('Sign-in token is missing an email claim.');
         }
 
-        await api.auth.storeMicrosoftToken({
+        await api.auth.storeHostedToken({
           userEmail: emailCandidate,
-          accessToken: tokenResult.accessToken,
+          bearerToken: tokenResult.idToken,
           scope: tokenResult.scopes.join(' '),
           expiresAt: tokenResult.expiresOn?.toISOString(),
+          provider: selectedProvider,
         });
-        const appUser = await api.auth.checkAccess(emailCandidate, tokenResult.accessToken);
+
+        const appUser = await api.auth.checkAccess(emailCandidate, tokenResult.idToken);
 
         login(appUser);
         processedAccountRef.current = accountKey;
-        failedAccountRef.current = null;
+        setCurrentHostedSignInProvider(selectedProvider);
+        clearPendingHostedSignInProvider();
 
         if (location.pathname === '/login') {
           navigate(getDefaultRouteForUser(appUser), { replace: true });
         }
       } catch (error) {
-        const errorCode = (error as { errorCode?: string } | null)?.errorCode;
-        if (errorCode === 'timed_out' || errorCode === 'monitor_window_timeout') {
-          failedAccountRef.current = accountKey;
-        } else {
-          processedAccountRef.current = null;
-        }
-        console.error('Microsoft auth bridge failed:', error);
+        processedAccountRef.current = null;
+        clearPendingHostedSignInProvider();
+        const errorMessage = error instanceof Error ? error.message : 'Sign-in could not be completed.';
+        const normalizedMessage =
+          /No access record found|not allowed|unauthorized|forbidden|401|403/i.test(errorMessage)
+            ? 'Bu e-posta adresi icin portal erisim kaydi bulunamadi.'
+            : errorMessage;
+        setAuthError(normalizedMessage);
+        console.error('Hosted auth bridge failed:', error);
       }
     };
 
     void syncMicrosoftSession();
-  }, [accounts, inProgress, instance, isAuthenticated, location.pathname, login, navigate, user?.email]);
+  }, [beginAuthResolution, clearAuthFeedback, isAuthenticated, location.pathname, login, navigate, setAuthError, user?.email]);
 
   return null;
 };

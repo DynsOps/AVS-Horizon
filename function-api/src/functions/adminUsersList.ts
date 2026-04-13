@@ -1,23 +1,27 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../lib/auth';
-import { runQuery } from '../lib/db';
+import { runScopedQuery } from '../lib/db';
 import { errorResponse, ok } from '../lib/http';
+import { IdentityProviderType, ProvisioningSource } from '../lib/identity';
 
 type DbUserRow = {
   id: string;
   name: string;
   email: string;
+  entraObjectId: string | null;
   role: 'supadmin' | 'admin' | 'user';
   isGuest: boolean;
   showOnlyCoreAdminPermissions: boolean;
   companyId: string | null;
   status: 'Active' | 'Inactive' | 'Suspended';
+  provisioningSource: ProvisioningSource;
+  accessState: 'invited' | 'pending' | 'active';
+  identityProviderType: IdentityProviderType;
+  identityTenantId: string | null;
   powerBiAccess: 'none' | 'viewer' | 'editor';
   powerBiWorkspaceId: string | null;
   powerBiReportId: string | null;
-  temporaryPassword: string | null;
   lastLogin: string | null;
-  passwordLastChangedAt: string | null;
 };
 
 export async function listAdminUsers(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
@@ -32,31 +36,34 @@ export async function listAdminUsers(request: HttpRequest, context: InvocationCo
       return ok({ users: [] });
     }
 
-    const usersResult = await runQuery<DbUserRow>(
+    const usersResult = await runScopedQuery<DbUserRow>(
+      { role: actor.role, companyId: actor.companyId, userId: actor.id },
       `
       SELECT
         id,
         display_name AS name,
         email,
+        entra_object_id AS entraObjectId,
         role,
         is_guest AS isGuest,
         show_only_core_admin_permissions AS showOnlyCoreAdminPermissions,
         company_id AS companyId,
         status,
+        provisioning_source AS provisioningSource,
+        access_state AS accessState,
+        identity_provider_type AS identityProviderType,
+        identity_tenant_id AS identityTenantId,
         power_bi_access AS powerBiAccess,
         power_bi_workspace_id AS powerBiWorkspaceId,
         power_bi_report_id AS powerBiReportId,
-        temporary_password AS temporaryPassword,
-        CONVERT(varchar(33), last_login_at, 127) AS lastLogin,
-        CONVERT(varchar(33), password_last_changed_at, 127) AS passwordLastChangedAt
+        CONVERT(varchar(33), last_login_at, 127) AS lastLogin
       FROM dbo.users
-      ${isAdminActor ? 'WHERE company_id = @companyId' : ''}
       ORDER BY created_at DESC
-      `,
-      isAdminActor ? { companyId: actor.companyId } : undefined
+      `
     );
 
-    const permissionsResult = await runQuery<{ userId: string; permission: string }>(
+    const permissionsResult = await runScopedQuery<{ userId: string; permission: string }>(
+      { role: actor.role, companyId: actor.companyId, userId: actor.id },
       'SELECT user_id AS userId, permission FROM dbo.user_permissions'
     );
     const permissionMap = new Map<string, string[]>();
@@ -70,6 +77,7 @@ export async function listAdminUsers(request: HttpRequest, context: InvocationCo
       users: usersResult.recordset.map((user) => ({
         ...user,
         companyId: user.companyId || '',
+        identityTenantId: user.identityTenantId || '',
         powerBiWorkspaceId: user.powerBiWorkspaceId || '',
         powerBiReportId: user.powerBiReportId || '',
         permissions: permissionMap.get(user.id) || [],

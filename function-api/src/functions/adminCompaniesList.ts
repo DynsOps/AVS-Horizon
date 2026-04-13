@@ -1,6 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../lib/auth';
-import { runQuery } from '../lib/db';
+import { runScopedQuery } from '../lib/db';
 import { errorResponse, ok } from '../lib/http';
 
 type CompanyRow = {
@@ -10,6 +10,8 @@ type CompanyRow = {
   country: string;
   contactEmail: string;
   status: 'Active' | 'Inactive';
+  domainsCsv: string | null;
+  latestCreatedAt: string;
 };
 
 export async function listAdminCompanies(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
@@ -22,23 +24,33 @@ export async function listAdminCompanies(request: HttpRequest, context: Invocati
     const isAdminActor = actor.role === 'admin';
     if (isAdminActor && !actor.companyId) return ok({ companies: [] });
 
-    const result = await runQuery<CompanyRow>(
+    const result = await runScopedQuery<CompanyRow>(
+      { role: actor.role, companyId: actor.companyId, userId: actor.id },
       `
       SELECT
-        id,
-        name,
-        type,
-        country,
-        contact_email AS contactEmail,
-        status
-      FROM dbo.companies
-      ${isAdminActor ? 'WHERE id = @companyId' : ''}
-      ORDER BY created_at DESC
+        c.id,
+        c.name,
+        c.type,
+        c.country,
+        c.contact_email AS contactEmail,
+        c.status,
+        STRING_AGG(cd.domain, ',') AS domainsCsv,
+        MAX(c.created_at) AS latestCreatedAt
+      FROM dbo.companies c
+      LEFT JOIN dbo.company_domains cd ON cd.company_id = c.id
+      ${isAdminActor ? 'WHERE c.id = @companyId' : ''}
+      GROUP BY c.id, c.name, c.type, c.country, c.contact_email, c.status
+      ORDER BY latestCreatedAt DESC
       `,
       isAdminActor ? { companyId: actor.companyId } : undefined
     );
 
-    return ok({ companies: result.recordset });
+    return ok({
+      companies: result.recordset.map((company) => ({
+        ...company,
+        domains: (company.domainsCsv || '').split(',').map((item) => item.trim()).filter(Boolean),
+      })),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     context.error('identity/companies list failed', message);
