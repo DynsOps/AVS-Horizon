@@ -35,8 +35,13 @@ jobs:
         env:
           VITE_AZURE_AD_TENANT_ID: ${{ secrets.VITE_AZURE_AD_TENANT_ID }}
           VITE_AZURE_AD_CLIENT_ID: ${{ secrets.VITE_AZURE_AD_CLIENT_ID }}
+          VITE_AZURE_AD_AUTHORITY: ${{ secrets.VITE_AZURE_AD_AUTHORITY }}
           VITE_AZURE_AD_REDIRECT_URI: ${{ secrets.VITE_AZURE_AD_REDIRECT_URI }}
           VITE_AZURE_AD_SCOPE: ${{ secrets.VITE_AZURE_AD_SCOPE }}
+          VITE_EXTERNAL_ID_AUTHORITY: ${{ secrets.VITE_EXTERNAL_ID_AUTHORITY }}
+          VITE_EXTERNAL_ID_CLIENT_ID: ${{ secrets.VITE_EXTERNAL_ID_CLIENT_ID }}
+          VITE_EXTERNAL_ID_REDIRECT_URI: ${{ secrets.VITE_EXTERNAL_ID_REDIRECT_URI }}
+          VITE_EXTERNAL_ID_SCOPE: ${{ secrets.VITE_EXTERNAL_ID_SCOPE }}
           VITE_FUNCTION_API_BASE_URL: ${{ secrets.VITE_FUNCTION_API_BASE_URL }}
 
   close_pull_request_job:
