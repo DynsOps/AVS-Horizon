@@ -156,6 +156,19 @@ run('external local and federated microsoft login start with identity scopes and
   assert.match(authConfigSource, /export const externalApiTokenRequest: RedirectRequest = \{[\s\S]*scopes: externalApiScopes,/);
 });
 
+run('frontend keeps provider intent while routing both login buttons through the same msal instance', () => {
+  const loginPath = path.resolve(process.cwd(), '..', 'src', 'pages', 'Login.tsx');
+  const loginSource = fs.readFileSync(loginPath, 'utf8');
+  const bridgePath = path.resolve(process.cwd(), '..', 'src', 'auth', 'MsalAuthBridge.tsx');
+  const bridgeSource = fs.readFileSync(bridgePath, 'utf8');
+
+  assert.match(loginSource, /setPendingHostedSignInProvider\('external_local'\)/);
+  assert.match(loginSource, /setPendingHostedSignInProvider\('microsoft_federated'\)/);
+  assert.doesNotMatch(loginSource, /externalLocalMsalInstance/);
+  assert.match(bridgeSource, /const resolveProvider = \(\): HostedSignInProvider \| null => \{/);
+  assert.match(bridgeSource, /return 'external_local';/);
+});
+
 run('frontend bootstrap keeps the app renderable when redirect handling fails', () => {
   const indexPath = path.resolve(process.cwd(), '..', 'index.tsx');
   const indexSource = fs.readFileSync(indexPath, 'utf8');
