@@ -1,20 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { api } from '../../services/api';
-import { Company } from '../../types';
+import { BootstrapCredentials, Company } from '../../types';
 import { useUIStore } from '../../store/uiStore';
-import { Plus, Edit2, Trash2, Building2, Mail, Globe, Tag } from 'lucide-react';
+import { Plus, Edit2, Trash2, Building2, Mail, Globe, Tag, KeyRound, Copy, Eye, EyeOff, X } from 'lucide-react';
 import { getDefaultPermissionsForRole } from '../../utils/rbac';
 
 type CreateEntityPayload = Omit<Company, 'id'> & {
   createCompanyAdmin?: boolean;
   adminName?: string;
   adminEmail?: string;
+  adminProvisioningMode?: 'corporate_precreated' | 'external_local_account';
 };
+
+const PERSONAL_EMAIL_PATTERN = /@(gmail|googlemail|hotmail|outlook|live|msn|icloud|me|yahoo|yandex|protonmail|proton)\./i;
+
+const getDefaultProvisioningSource = (email?: string): 'corporate_precreated' | 'external_local_account' =>
+  email && PERSONAL_EMAIL_PATTERN.test(email) ? 'external_local_account' : 'corporate_precreated';
 
 export const EntityManagement: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [newAdminCredentials, setNewAdminCredentials] = useState<BootstrapCredentials | null>(null);
+  const [showNewAdminCredentialPassword, setShowNewAdminCredentialPassword] = useState(false);
   const { addToast, openDrawer, closeDrawer, openConfirmDialog } = useUIStore();
 
   const loadCompanies = async () => {
@@ -42,7 +50,10 @@ export const EntityManagement: React.FC = () => {
 
       if (createCompanyAdmin) {
         try {
-          const { temporaryPassword } = await api.admin.createUser({
+          const adminProvisioningMode =
+            payload.adminProvisioningMode ||
+            getDefaultProvisioningSource(adminEmail);
+          const { bootstrapCredentials } = await api.admin.createUser({
             name: (adminName || '').trim(),
             email: (adminEmail || '').trim().toLowerCase(),
             role: 'admin',
@@ -51,10 +62,15 @@ export const EntityManagement: React.FC = () => {
             status: 'Active',
             permissions: getDefaultPermissionsForRole('admin'),
             showOnlyCoreAdminPermissions: false,
+            provisioningSource: adminProvisioningMode,
           });
+          setNewAdminCredentials(bootstrapCredentials || null);
+          setShowNewAdminCredentialPassword(false);
           addToast({
             title: 'Company Admin Created',
-            message: `Temporary password: ${temporaryPassword}`,
+            message: adminProvisioningMode === 'external_local_account'
+              ? 'Company admin local account created. Share the one-time temporary password securely.'
+              : 'Company admin created. First sign-in will be completed through Entra.',
             type: 'success',
           });
         } catch (adminError) {
@@ -146,6 +162,57 @@ export const EntityManagement: React.FC = () => {
         </button>
       </div>
 
+      {newAdminCredentials && (
+        <Card className="border-amber-200/70 bg-gradient-to-r from-amber-50 to-orange-50 dark:border-amber-700/50 dark:from-amber-950/30 dark:to-orange-950/20">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-lg bg-amber-100 p-2 dark:bg-amber-900/30">
+                <KeyRound size={16} className="text-amber-700 dark:text-amber-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">Company Admin Temporary Password</p>
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                  <span className="font-medium">{newAdminCredentials.email}</span> is now an External ID local account. Share this one-time password securely.
+                </p>
+                <code className="mt-2 inline-block rounded border border-amber-300/70 bg-white/70 px-2 py-1 text-sm font-semibold tracking-wide text-amber-800 dark:border-amber-700/60 dark:bg-slate-900 dark:text-amber-300">
+                  {showNewAdminCredentialPassword ? newAdminCredentials.temporaryPassword : '**********'}
+                </code>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowNewAdminCredentialPassword((prev) => !prev)}
+                className="flex items-center gap-2 rounded-lg border border-amber-300/80 bg-white px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:bg-slate-900 dark:text-amber-300 dark:hover:bg-slate-800"
+              >
+                {showNewAdminCredentialPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                {showNewAdminCredentialPassword ? 'Hide Password' : 'Show Password'}
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(newAdminCredentials.temporaryPassword);
+                    addToast({ title: 'Copied', message: 'Temporary password copied.', type: 'success' });
+                  } catch {
+                    addToast({ title: 'Copy Failed', message: 'Clipboard access not available.', type: 'error' });
+                  }
+                }}
+                className="flex items-center gap-2 rounded-lg border border-amber-300/80 bg-white px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:bg-slate-900 dark:text-amber-300 dark:hover:bg-slate-800"
+              >
+                <Copy size={14} />
+                Copy Password
+              </button>
+              <button
+                onClick={() => setNewAdminCredentials(null)}
+                className="rounded-lg border border-amber-300/80 bg-white p-2 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:bg-slate-900 dark:text-amber-300 dark:hover:bg-slate-800"
+                title="Dismiss"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card className="overflow-hidden" noPadding>
         <table className="w-full border-collapse text-left">
           <thead className="border-b border-gray-200 bg-gray-50 dark:border-slate-800 dark:bg-slate-800/50">
@@ -154,6 +221,7 @@ export const EntityManagement: React.FC = () => {
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Type</th>
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Country</th>
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Contact</th>
+              <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Domains</th>
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th>
               <th className="px-6 py-3" />
             </tr>
@@ -168,6 +236,9 @@ export const EntityManagement: React.FC = () => {
                 <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{company.type}</td>
                 <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{company.country}</td>
                 <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{company.contactEmail}</td>
+                <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">
+                  {company.domains && company.domains.length > 0 ? company.domains.join(', ') : 'No allowlist'}
+                </td>
                 <td className="px-6 py-4">
                   <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
                     company.status === 'Active'
@@ -189,7 +260,7 @@ export const EntityManagement: React.FC = () => {
             ))}
             {!isLoading && companies.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                <td colSpan={7} className="px-6 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                   No entities found.
                 </td>
               </tr>
@@ -213,6 +284,7 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
   const [country, setCountry] = useState(company?.country || 'Germany');
   const [contactEmail, setContactEmail] = useState(company?.contactEmail || '');
   const [status, setStatus] = useState<Company['status']>(company?.status || 'Active');
+  const [domainsText, setDomainsText] = useState((company?.domains || []).join(', '));
   const [createCompanyAdmin, setCreateCompanyAdmin] = useState(!company);
   const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
@@ -243,6 +315,7 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
       country: country.trim(),
       contactEmail: normalizedEmail,
       status,
+      domains: domainsText.split(',').map((item) => item.trim().toLowerCase().replace(/^@+/, '')).filter(Boolean),
       createCompanyAdmin: !company ? createCompanyAdmin : undefined,
       adminName: !company ? adminName.trim() : undefined,
       adminEmail: !company ? adminEmail.trim().toLowerCase() : undefined,
@@ -344,6 +417,19 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
               placeholder="ops@company.com"
             />
           </div>
+        </label>
+
+        <label className="space-y-1.5">
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Allowlisted Domains</span>
+          <textarea
+            value={domainsText}
+            onChange={(e) => setDomainsText(e.target.value)}
+            className="min-h-[88px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            placeholder="arkas.com.tr, sub.arkas.com.tr"
+          />
+          <p className="text-[11px] text-slate-500">
+            Corporate users from these domains can be auto-created with pending access on first Microsoft sign-in.
+          </p>
         </label>
 
         {!company && (

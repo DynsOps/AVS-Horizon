@@ -13,6 +13,8 @@ BEGIN
         is_guest BIT NOT NULL CONSTRAINT DF_users_is_guest DEFAULT (0),
         show_only_core_admin_permissions BIT NOT NULL CONSTRAINT DF_users_show_only_core_admin_permissions DEFAULT (0),
         company_id NVARCHAR(64) NULL,
+        identity_provider_type NVARCHAR(40) NOT NULL CONSTRAINT DF_users_identity_provider_type DEFAULT ('workforce_federated'),
+        identity_tenant_id NVARCHAR(128) NULL,
         status NVARCHAR(20) NOT NULL CONSTRAINT DF_users_status DEFAULT ('Active'),
         temporary_password NVARCHAR(128) NULL,
         password_hash NVARCHAR(512) NULL,
@@ -36,6 +38,12 @@ GO
 IF COL_LENGTH('dbo.users', 'email') IS NULL
 BEGIN
     ALTER TABLE dbo.users ADD email NVARCHAR(320) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.users', 'entra_object_id') IS NULL
+BEGIN
+    ALTER TABLE dbo.users ADD entra_object_id NVARCHAR(128) NULL;
 END;
 GO
 
@@ -63,9 +71,33 @@ BEGIN
 END;
 GO
 
+IF COL_LENGTH('dbo.users', 'identity_provider_type') IS NULL
+BEGIN
+    ALTER TABLE dbo.users ADD identity_provider_type NVARCHAR(40) NOT NULL CONSTRAINT DF_users_identity_provider_type_align DEFAULT ('workforce_federated');
+END;
+GO
+
+IF COL_LENGTH('dbo.users', 'identity_tenant_id') IS NULL
+BEGIN
+    ALTER TABLE dbo.users ADD identity_tenant_id NVARCHAR(128) NULL;
+END;
+GO
+
 IF COL_LENGTH('dbo.users', 'status') IS NULL
 BEGIN
     ALTER TABLE dbo.users ADD status NVARCHAR(20) NOT NULL CONSTRAINT DF_users_status_align DEFAULT ('Active');
+END;
+GO
+
+IF COL_LENGTH('dbo.users', 'provisioning_source') IS NULL
+BEGIN
+    ALTER TABLE dbo.users ADD provisioning_source NVARCHAR(40) NOT NULL CONSTRAINT DF_users_provisioning_source_align DEFAULT ('corporate_precreated');
+END;
+GO
+
+IF COL_LENGTH('dbo.users', 'access_state') IS NULL
+BEGIN
+    ALTER TABLE dbo.users ADD access_state NVARCHAR(20) NOT NULL CONSTRAINT DF_users_access_state_align DEFAULT ('active');
 END;
 GO
 
@@ -191,8 +223,58 @@ BEGIN
 END;
 GO
 
+IF OBJECT_ID('dbo.company_domains', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.company_domains (
+        id NVARCHAR(64) NOT NULL PRIMARY KEY,
+        company_id NVARCHAR(64) NOT NULL,
+        domain NVARCHAR(320) NOT NULL,
+        created_at DATETIME2 NOT NULL CONSTRAINT DF_company_domains_created_at_align DEFAULT (SYSUTCDATETIME()),
+        updated_at DATETIME2 NOT NULL CONSTRAINT DF_company_domains_updated_at_align DEFAULT (SYSUTCDATETIME()),
+        CONSTRAINT FK_company_domains_company_align FOREIGN KEY (company_id) REFERENCES dbo.companies(id) ON DELETE CASCADE
+    );
+END;
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_users_email' AND object_id = OBJECT_ID('dbo.users'))
 BEGIN
     CREATE UNIQUE INDEX UX_users_email ON dbo.users(email);
 END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_users_entra_object_id' AND object_id = OBJECT_ID('dbo.users'))
+BEGIN
+    CREATE UNIQUE INDEX UX_users_entra_object_id ON dbo.users(entra_object_id) WHERE entra_object_id IS NOT NULL;
+END;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_company_domains_company_domain' AND object_id = OBJECT_ID('dbo.company_domains'))
+BEGIN
+    CREATE UNIQUE INDEX UX_company_domains_company_domain ON dbo.company_domains(company_id, domain);
+END;
+GO
+
+UPDATE dbo.users
+SET provisioning_source = CASE
+        WHEN LOWER(email) IN ('dynamicsops14@avsglobalsupply.com') THEN 'bootstrap_supadmin'
+        ELSE 'corporate_precreated'
+    END
+WHERE provisioning_source IS NULL OR LTRIM(RTRIM(provisioning_source)) = '';
+GO
+
+UPDATE dbo.users
+SET access_state = CASE
+        WHEN status <> 'Active' THEN 'pending'
+        WHEN EXISTS (SELECT 1 FROM dbo.user_permissions up WHERE up.user_id = dbo.users.id) THEN 'active'
+        ELSE 'pending'
+    END
+WHERE access_state IS NULL OR LTRIM(RTRIM(access_state)) = '';
+GO
+
+UPDATE dbo.users
+SET identity_provider_type = CASE
+        WHEN provisioning_source IN ('invited_personal', 'external_local_account') THEN 'external_local'
+        ELSE 'workforce_federated'
+    END
+WHERE identity_provider_type IS NULL OR LTRIM(RTRIM(identity_provider_type)) = '';
 GO

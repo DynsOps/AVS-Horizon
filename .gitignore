@@ -14,6 +14,7 @@ dist-ssr
 .azurite
 .azure-cli-config
 .worktrees/
+docs/superpowers
 
 # Editor directories and files
 .vscode/*

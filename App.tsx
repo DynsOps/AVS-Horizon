@@ -1,10 +1,11 @@
 
 import React, { useEffect } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from './src/store/authStore';
 import { useThemeStore } from './src/store/themeStore';
 import { Login } from './src/pages/Login';
 import { AppShell } from './src/layouts/AppShell';
+import { AccessPending } from './src/pages/AccessPending';
 
 // Common Pages
 import { Profile } from './src/pages/Profile';
@@ -36,7 +37,7 @@ import { UserManagement } from './src/pages/admin/UserManagement';
 import { EntityManagement } from './src/pages/admin/EntityManagement';
 import { ReportManagement } from './src/pages/admin/ReportManagement';
 import { Permission, UserRole } from './src/types';
-import { getDefaultRouteForUser, hasPermissions, hasRoleAccess } from './src/utils/rbac';
+import { getDefaultRouteForUser, hasPermissions, hasRoleAccess, isPendingAccessUser } from './src/utils/rbac';
 import { MsalAuthBridge } from './src/auth/MsalAuthBridge';
 
 // Guard Component
@@ -50,9 +51,14 @@ const ProtectedRoute = ({
   requiredPermissions?: Permission[],
 }) => {
   const { user, isAuthenticated } = useAuthStore();
+  const location = useLocation();
   
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (location.pathname !== '/access-pending' && isPendingAccessUser(user)) {
+    return <Navigate to="/access-pending" replace />;
   }
 
   if (allowedRoles && allowedRoles.length > 0 && !hasRoleAccess(user.role, allowedRoles)) {
@@ -89,6 +95,7 @@ const App: React.FC = () => {
         <Route element={<AppShell />}>
           
           {/* Common Routes */}
+          <Route path="/access-pending" element={<ProtectedRoute><AccessPending /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/guest/rfq" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['submit:rfq']}><GuestRFQPage /></ProtectedRoute>} />
 

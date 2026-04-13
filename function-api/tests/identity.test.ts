@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  buildAcceptedAudiences,
-  getCorporateIdentityConflict,
-  isMicrosoftWorkforceIssuer,
-} from '../src/lib/auth';
+import { buildAcceptedAudiences, getCorporateIdentityConflict, isMicrosoftWorkforceIssuer } from '../src/lib/auth';
 import {
   buildSessionContextPrefix,
   deriveAccessState,
@@ -138,25 +134,28 @@ run('buildAcceptedAudiences accepts both GUID and api:// audiences for Entra app
   ]);
 });
 
-run('frontend unified external id config does not require a workforce client id', () => {
+run('frontend keeps separate workforce and external id MSAL configs', () => {
   const authConfigPath = path.resolve(process.cwd(), '..', 'src', 'auth', 'authConfig.ts');
   const authConfigSource = fs.readFileSync(authConfigPath, 'utf8');
 
   assert.match(authConfigSource, /export const externalMsalConfig: Configuration = \{/);
-  assert.doesNotMatch(authConfigSource, /export const workforceMsalConfig: Configuration = \{/);
-  assert.doesNotMatch(authConfigSource, /VITE_AZURE_AD_CLIENT_ID/);
+  assert.match(authConfigSource, /export const workforceMsalConfig: Configuration = \{/);
+  assert.match(authConfigSource, /VITE_AZURE_AD_CLIENT_ID/);
 });
 
-run('external local and federated microsoft login start with identity scopes and request API scope later', () => {
+run('external local and workforce microsoft login start with identity scopes only', () => {
   const authConfigPath = path.resolve(process.cwd(), '..', 'src', 'auth', 'authConfig.ts');
   const authConfigSource = fs.readFileSync(authConfigPath, 'utf8');
 
-  assert.match(authConfigSource, /export const externalLocalLoginRequest: RedirectRequest = \{[\s\S]*scopes: \['openid', 'profile', 'email'\]/);
-  assert.match(authConfigSource, /export const federatedMicrosoftLoginRequest: RedirectRequest = \{[\s\S]*scopes: \['openid', 'profile', 'email'\]/);
-  assert.match(authConfigSource, /export const externalApiTokenRequest: RedirectRequest = \{[\s\S]*scopes: externalApiScopes,/);
+  assert.match(authConfigSource, /const identityScopes = \['openid', 'profile', 'email'\];/);
+  assert.match(authConfigSource, /export const externalLocalLoginRequest: RedirectRequest = \{[\s\S]*scopes: identityScopes,/);
+  assert.match(authConfigSource, /export const workforceLoginRequest: RedirectRequest = \{[\s\S]*scopes: identityScopes,/);
+  assert.match(authConfigSource, /export const externalLocalIdentityTokenRequest: SilentRequest = \{/);
+  assert.match(authConfigSource, /export const workforceIdentityTokenRequest: SilentRequest = \{/);
+  assert.doesNotMatch(authConfigSource, /externalApiTokenRequest/);
 });
 
-run('frontend keeps provider intent while routing both login buttons through the same msal instance', () => {
+run('frontend routes microsoft and external local buttons through separate MSAL instances', () => {
   const loginPath = path.resolve(process.cwd(), '..', 'src', 'pages', 'Login.tsx');
   const loginSource = fs.readFileSync(loginPath, 'utf8');
   const bridgePath = path.resolve(process.cwd(), '..', 'src', 'auth', 'MsalAuthBridge.tsx');
@@ -164,9 +163,11 @@ run('frontend keeps provider intent while routing both login buttons through the
 
   assert.match(loginSource, /setPendingHostedSignInProvider\('external_local'\)/);
   assert.match(loginSource, /setPendingHostedSignInProvider\('microsoft_federated'\)/);
-  assert.doesNotMatch(loginSource, /externalLocalMsalInstance/);
+  assert.match(loginSource, /externalMsalInstance\.loginRedirect/);
+  assert.match(loginSource, /workforceMsalInstance\.loginRedirect/);
   assert.match(bridgeSource, /const resolveProvider = \(\): HostedSignInProvider \| null => \{/);
-  assert.match(bridgeSource, /return 'external_local';/);
+  assert.match(bridgeSource, /const tokenResult = await instance\.acquireTokenSilent/);
+  assert.match(bridgeSource, /tokenResult\.idToken/);
 });
 
 run('frontend bootstrap keeps the app renderable when redirect handling fails', () => {
@@ -178,7 +179,18 @@ run('frontend bootstrap keeps the app renderable when redirect handling fails', 
   assert.match(indexSource, /finally\s*\{/);
 });
 
-run('isMicrosoftWorkforceIssuer accepts multitenant Microsoft issuers only', () => {
+run('backend token validation accepts both external id and workforce microsoft issuers', () => {
+  const authPath = path.resolve(process.cwd(), 'src', 'lib', 'auth.ts');
+  const authSource = fs.readFileSync(authPath, 'utf8');
+
+  assert.match(authSource, /External ID token validation is not configured\./);
+  assert.match(authSource, /providerType: 'external_local'/);
+  assert.match(authSource, /jwksUri: env\.externalIdJwksUri/);
+  assert.match(authSource, /providerType: 'workforce_federated'/);
+  assert.match(authSource, /login\.microsoftonline\.com\/common\/discovery\/v2\.0\/keys/);
+});
+
+run('workforce issuer matcher accepts multitenant microsoft issuers only', () => {
   assert.equal(isMicrosoftWorkforceIssuer('https://login.microsoftonline.com/c34a6030-b1b7-44bf-b80e-fee46e464e73/v2.0'), true);
   assert.equal(isMicrosoftWorkforceIssuer('https://sts.windows.net/c34a6030-b1b7-44bf-b80e-fee46e464e73/'), true);
   assert.equal(
@@ -189,7 +201,27 @@ run('isMicrosoftWorkforceIssuer accepts multitenant Microsoft issuers only', () 
   );
 });
 
-run('corporate identity binding rejects mismatched object ids before email fallback can link the wrong user', () => {
+run('identity binding allows same email to sign in with a different provider', () => {
+  assert.equal(
+    getCorporateIdentityConflict(
+      {
+        email: 'muharrem.baylan@365technology.net',
+        entraObjectId: null,
+        identityProviderType: 'workforce_federated',
+        identityTenantId: null,
+      },
+      {
+        email: 'muharrem.baylan@365technology.net',
+        entraObjectId: 'oid-1',
+        providerType: 'external_local',
+        identityTenantId: 'tenant-a',
+      }
+    ),
+    null
+  );
+});
+
+run('identity binding rejects mismatched object ids inside the same provider', () => {
   assert.equal(
     getCorporateIdentityConflict(
       {
@@ -221,11 +253,11 @@ run('corporate identity binding rejects mismatched tenant ids and allows first s
       {
         email: 'user@customercorp.com',
         entraObjectId: 'oid-1',
-        providerType: 'workforce_federated',
+        providerType: 'external_local',
         identityTenantId: 'tenant-b',
       }
     ),
-    'Microsoft account tenant mismatch for user@customercorp.com.'
+    null
   );
 
   assert.equal(
@@ -239,10 +271,28 @@ run('corporate identity binding rejects mismatched tenant ids and allows first s
       {
         email: 'user@customercorp.com',
         entraObjectId: 'oid-1',
-        providerType: 'workforce_federated',
+        providerType: 'external_local',
         identityTenantId: 'tenant-a',
       }
     ),
     null
+  );
+
+  assert.equal(
+    getCorporateIdentityConflict(
+      {
+        email: 'user@customercorp.com',
+        entraObjectId: 'oid-1',
+        identityProviderType: 'external_local',
+        identityTenantId: 'tenant-a',
+      },
+      {
+        email: 'user@customercorp.com',
+        entraObjectId: 'oid-1',
+        providerType: 'external_local',
+        identityTenantId: 'tenant-b',
+      }
+    ),
+    'Microsoft account tenant mismatch for user@customercorp.com.'
   );
 });

@@ -1,4 +1,4 @@
-import { Configuration, RedirectRequest } from '@azure/msal-browser';
+import { Configuration, RedirectRequest, SilentRequest } from '@azure/msal-browser';
 
 const env = import.meta.env;
 
@@ -28,29 +28,33 @@ const getAuthorityHost = (value: string): string => {
   }
 };
 
+const hasPlaceholderValue = (value: string): boolean => value.includes('<') || value.includes('>');
+
 const externalAuthority = normalizeExternalBrowserAuthority(env.VITE_EXTERNAL_ID_AUTHORITY || '');
 const externalClientId = env.VITE_EXTERNAL_ID_CLIENT_ID || '';
 const externalRedirectUri = env.VITE_EXTERNAL_ID_REDIRECT_URI || window.location.origin;
-const externalScopeValue = env.VITE_EXTERNAL_ID_SCOPE || '';
-const externalMicrosoftIdpHint = env.VITE_EXTERNAL_ID_MICROSOFT_IDP_HINT || 'microsoft';
-const hasPlaceholderValue = (value: string): boolean => value.includes('<') || value.includes('>');
+const externalMicrosoftIdpHint = env.VITE_EXTERNAL_ID_MICROSOFT_IDP_HINT || '';
 const externalAuthorityHost = getAuthorityHost(externalAuthority);
+
+const workforceAuthority = (env.VITE_AZURE_AD_AUTHORITY || 'https://login.microsoftonline.com/organizations').replace(/\/+$/, '');
+const workforceClientId = env.VITE_AZURE_AD_CLIENT_ID || '';
+const workforceRedirectUri = env.VITE_AZURE_AD_REDIRECT_URI || window.location.origin;
+
 export const isExternalLocalAuthConfigured = Boolean(
   externalAuthority &&
-  externalClientId &&
-  !hasPlaceholderValue(externalAuthority) &&
-  !hasPlaceholderValue(externalClientId)
+    externalClientId &&
+    !hasPlaceholderValue(externalAuthority) &&
+    !hasPlaceholderValue(externalClientId)
 );
-const configuredExternalScopes = externalScopeValue
-  .split(/[ ,]+/)
-  .map((scope: string) => scope.trim())
-  .filter(Boolean);
 
-const externalApiScopes = configuredExternalScopes.filter((scope: string) => scope.startsWith('api://'));
+export const isWorkforceAuthConfigured = Boolean(
+  workforceAuthority &&
+    workforceClientId &&
+    !hasPlaceholderValue(workforceAuthority) &&
+    !hasPlaceholderValue(workforceClientId)
+);
 
-if (!externalClientId) {
-  console.warn('MSAL is missing VITE_EXTERNAL_ID_CLIENT_ID.');
-}
+const identityScopes = ['openid', 'profile', 'email'];
 
 export const externalMsalConfig: Configuration = {
   auth: {
@@ -66,22 +70,47 @@ export const externalMsalConfig: Configuration = {
   },
 };
 
+export const workforceMsalConfig: Configuration = {
+  auth: {
+    clientId: workforceClientId,
+    authority: workforceAuthority,
+    redirectUri: workforceRedirectUri,
+    navigateToLoginRequestUrl: true,
+  },
+  cache: {
+    cacheLocation: 'sessionStorage',
+    storeAuthStateInCookie: false,
+  },
+};
+
 export const externalLocalLoginRequest: RedirectRequest = {
-  scopes: ['openid', 'profile', 'email'],
+  scopes: identityScopes,
   authority: isExternalLocalAuthConfigured ? externalAuthority : undefined,
 };
 
-export const federatedMicrosoftLoginRequest: RedirectRequest = {
-  scopes: ['openid', 'profile', 'email'],
+export const externalLocalIdentityTokenRequest: SilentRequest = {
+  scopes: identityScopes,
   authority: isExternalLocalAuthConfigured ? externalAuthority : undefined,
-  extraQueryParameters: externalMicrosoftIdpHint
-    ? {
+};
+
+export const workforceLoginRequest: RedirectRequest = {
+  scopes: identityScopes,
+  authority: isWorkforceAuthConfigured ? workforceAuthority : undefined,
+};
+
+export const workforceIdentityTokenRequest: SilentRequest = {
+  scopes: identityScopes,
+  authority: isWorkforceAuthConfigured ? workforceAuthority : undefined,
+};
+
+export const federatedMicrosoftLoginRequest: RedirectRequest = externalMicrosoftIdpHint
+  ? {
+      ...externalLocalLoginRequest,
+      extraQueryParameters: {
         idp: externalMicrosoftIdpHint,
-      }
-    : undefined,
-};
-
-export const externalApiTokenRequest: RedirectRequest = {
-  scopes: externalApiScopes,
-  authority: isExternalLocalAuthConfigured ? externalAuthority : undefined,
-};
+      },
+    }
+  : {
+      ...workforceLoginRequest,
+      prompt: 'select_account',
+    };

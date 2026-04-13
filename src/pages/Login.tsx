@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
-import { useMsal } from '@azure/msal-react';
 import { Anchor, Loader2, LockKeyhole, Mail } from 'lucide-react';
-import { externalLocalLoginRequest, federatedMicrosoftLoginRequest, isExternalLocalAuthConfigured } from '../auth/authConfig';
+import {
+  externalLocalLoginRequest,
+  isExternalLocalAuthConfigured,
+  isWorkforceAuthConfigured,
+  workforceLoginRequest,
+} from '../auth/authConfig';
+import { externalMsalInstance, workforceMsalInstance } from '../auth/msalInstance';
 import { clearPendingHostedSignInProvider, setPendingHostedSignInProvider } from '../auth/providerSession';
 import { useAuthStore } from '../store/authStore';
 
@@ -10,7 +15,6 @@ export const Login: React.FC = () => {
   const [isMicrosoftLoading, setIsMicrosoftLoading] = useState(false);
   const [isLocalLoading, setIsLocalLoading] = useState(false);
   const [error, setError] = useState('');
-  const { instance } = useMsal();
   const { authStatus, authError, clearAuthFeedback } = useAuthStore();
   const isResolvingRedirect = authStatus === 'resolving';
 
@@ -29,14 +33,17 @@ export const Login: React.FC = () => {
           throw new Error('Local account sign-in is not configured yet. Complete the External ID authority settings first.');
         }
         setPendingHostedSignInProvider('external_local');
-        await instance.loginRedirect({
+        await externalMsalInstance.loginRedirect({
           ...externalLocalLoginRequest,
           ...(email.trim() ? { loginHint: email.trim() } : {}),
         });
       } else {
+        if (!isWorkforceAuthConfigured) {
+          throw new Error('Continue with Microsoft is not configured yet. Complete the workforce Entra app settings first.');
+        }
         setPendingHostedSignInProvider('microsoft_federated');
-        await instance.loginRedirect({
-          ...federatedMicrosoftLoginRequest,
+        await workforceMsalInstance.loginRedirect({
+          ...workforceLoginRequest,
           ...(email.trim() ? { loginHint: email.trim() } : {}),
           prompt: 'select_account',
         });
@@ -120,7 +127,7 @@ export const Login: React.FC = () => {
             <button
               type="button"
               onClick={() => void continueWithHostedSignIn('microsoft')}
-              disabled={isMicrosoftLoading || isResolvingRedirect}
+              disabled={isMicrosoftLoading || isResolvingRedirect || !isWorkforceAuthConfigured}
               className="flex w-full items-center justify-center gap-3 rounded-full border border-slate-600 bg-slate-800/70 py-2.5 text-sm font-medium text-slate-100 transition-colors hover:bg-slate-800 disabled:opacity-70"
             >
               <span className="grid grid-cols-2 gap-[2px]">

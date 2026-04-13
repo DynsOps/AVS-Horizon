@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { authenticateRequest } from '../lib/auth';
 import { runQuery } from '../lib/db';
 import { created, errorResponse } from '../lib/http';
+import { normalizeDomain } from '../lib/identity';
 
 type CreateCompanyBody = {
   name?: string;
@@ -10,6 +11,7 @@ type CreateCompanyBody = {
   country?: string;
   contactEmail?: string;
   status?: 'Active' | 'Inactive';
+  domains?: string[];
 };
 
 export async function createAdminCompany(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
@@ -28,6 +30,7 @@ export async function createAdminCompany(request: HttpRequest, context: Invocati
     const country = (body.country || '').trim();
     const contactEmail = (body.contactEmail || '').trim().toLowerCase();
     const status = body.status || 'Active';
+    const domains = Array.from(new Set((body.domains || []).map(normalizeDomain).filter(Boolean)));
 
     if (!name || !type || !country || !contactEmail) {
       return errorResponse(400, 'name, type, country and contactEmail are required.');
@@ -47,8 +50,22 @@ export async function createAdminCompany(request: HttpRequest, context: Invocati
       { id, name, type, country, contactEmail, status }
     );
 
+    for (const domain of domains) {
+      await runQuery(
+        `
+        INSERT INTO dbo.company_domains (id, company_id, domain, created_at, updated_at)
+        VALUES (@id, @companyId, @domain, SYSUTCDATETIME(), SYSUTCDATETIME())
+        `,
+        {
+          id: `CD-${randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`,
+          companyId: id,
+          domain,
+        }
+      );
+    }
+
     return created({
-      company: { id, name, type, country, contactEmail, status },
+      company: { id, name, type, country, contactEmail, status, domains },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';

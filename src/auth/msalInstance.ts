@@ -1,4 +1,5 @@
 import { PublicClientApplication } from '@azure/msal-browser';
-import { externalMsalConfig } from './authConfig';
+import { externalMsalConfig, workforceMsalConfig } from './authConfig';
 
-export const msalInstance = new PublicClientApplication(externalMsalConfig);
+export const externalMsalInstance = new PublicClientApplication(externalMsalConfig);
+export const workforceMsalInstance = new PublicClientApplication(workforceMsalConfig);

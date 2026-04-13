@@ -1,6 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../lib/auth';
-import { runQuery } from '../lib/db';
+import { runScopedQuery } from '../lib/db';
 import { errorResponse, ok } from '../lib/http';
 import { UserRole } from '../lib/rbac';
 
@@ -22,7 +22,8 @@ export async function deleteAdminUser(request: HttpRequest, context: InvocationC
     const userId = request.params.id;
     if (!userId) return errorResponse(400, 'User id is required.');
 
-    const targetResult = await runQuery<TargetUser>(
+    const targetResult = await runScopedQuery<TargetUser>(
+      { role: actor.role, companyId: actor.companyId, userId: actor.id },
       'SELECT TOP 1 id, role, company_id AS companyId FROM dbo.users WHERE id = @userId',
       { userId }
     );
@@ -40,7 +41,11 @@ export async function deleteAdminUser(request: HttpRequest, context: InvocationC
       return errorResponse(403, 'Only supadmin can delete supadmin users.');
     }
 
-    await runQuery('DELETE FROM dbo.users WHERE id = @userId', { userId });
+    await runScopedQuery(
+      { role: actor.role, companyId: actor.companyId, userId: actor.id },
+      'DELETE FROM dbo.users WHERE id = @userId',
+      { userId }
+    );
     return ok({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';

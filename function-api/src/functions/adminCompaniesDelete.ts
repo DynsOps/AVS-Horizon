@@ -1,6 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../lib/auth';
-import { runQuery } from '../lib/db';
+import { runQuery, runScopedQuery } from '../lib/db';
 import { errorResponse, ok } from '../lib/http';
 
 export async function deleteAdminCompany(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
@@ -16,7 +16,8 @@ export async function deleteAdminCompany(request: HttpRequest, context: Invocati
     const companyId = request.params.id;
     if (!companyId) return errorResponse(400, 'Company id is required.');
 
-    const inUseResult = await runQuery<{ count: number }>(
+    const inUseResult = await runScopedQuery<{ count: number }>(
+      { role: actor.role, companyId: actor.companyId, userId: actor.id },
       'SELECT COUNT(1) AS count FROM dbo.users WHERE company_id = @companyId',
       { companyId }
     );
@@ -24,6 +25,7 @@ export async function deleteAdminCompany(request: HttpRequest, context: Invocati
       return errorResponse(409, 'Company is assigned to existing users. Remove assignments first.');
     }
 
+    await runQuery('DELETE FROM dbo.company_domains WHERE company_id = @companyId', { companyId });
     await runQuery('DELETE FROM dbo.companies WHERE id = @companyId', { companyId });
     return ok({ success: true });
   } catch (error) {

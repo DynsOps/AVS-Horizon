@@ -20,7 +20,13 @@ export const getDefaultRouteForRole = (role: UserRole): string => {
   return '/admin/system-health';
 };
 
-export const getDefaultRouteForUser = (user: Pick<User, 'role' | 'isGuest'>): string => {
+export const isPendingAccessUser = (user: Pick<User, 'accessState' | 'permissions'>): boolean => {
+  if (user.accessState && user.accessState !== 'active') return true;
+  return user.permissions.length === 0;
+};
+
+export const getDefaultRouteForUser = (user: Pick<User, 'role' | 'isGuest' | 'accessState' | 'permissions'>): string => {
+  if (isPendingAccessUser(user)) return '/access-pending';
   if (user.role === 'user' && user.isGuest) return '/guest/rfq';
   return getDefaultRouteForRole(user.role);
 };

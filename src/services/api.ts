@@ -1,20 +1,20 @@
 
-import { KPI, Order, Shipment, Invoice, Vessel, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport } from '../types';
+import { KPI, Order, Shipment, Invoice, Vessel, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport, BootstrapCredentials } from '../types';
 import { getDefaultPermissionsForRole } from '../utils/rbac';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const LOCAL_DB_KEY = 'avs_horizon_local_db_v2';
-const MS_ACCESS_TOKEN_KEY = 'avs_ms_access_token';
+const AUTH_BEARER_TOKEN_KEY = 'avs_auth_bearer_token';
 const FUNCTION_API_BASE_URL = (import.meta.env.VITE_FUNCTION_API_BASE_URL || '').replace(/\/+$/, '');
 const FORCE_FUNCTION_API = String(import.meta.env.VITE_FORCE_FUNCTION_API || '').toLowerCase() === 'true';
 const DEV_BYPASS_AUTH = String(import.meta.env.VITE_DEV_BYPASS_AUTH || '').toLowerCase() === 'true';
 const DISABLE_MOCK_DATA = String(import.meta.env.VITE_DISABLE_MOCK_DATA ?? 'true').toLowerCase() !== 'false';
 
-const getStoredMicrosoftAccessToken = (): string => {
+const getStoredAuthBearerToken = (): string => {
   if (typeof window === 'undefined') return '';
-  return window.localStorage.getItem(MS_ACCESS_TOKEN_KEY) || '';
+  return window.localStorage.getItem(AUTH_BEARER_TOKEN_KEY) || '';
 };
 
 const shouldUseFunctionApi = (): boolean => {
@@ -37,7 +37,7 @@ const callFunctionApi = async <T = any>(path: string, init?: RequestInit): Promi
     throw new Error('Function API base URL is not configured.');
   }
 
-  const token = getStoredMicrosoftAccessToken();
+  const token = getStoredAuthBearerToken();
   const devUserEmail = useAuthStore.getState().user?.email || '';
   const canUseDevBypass = DEV_BYPASS_AUTH && Boolean(devUserEmail);
   if (!token && !canUseDevBypass) {
@@ -116,10 +116,11 @@ type LocalDbSnapshot = {
 
 type MicrosoftTokenRecord = {
   userEmail: string;
-  accessToken: string;
+  bearerToken: string;
   scope: string;
   expiresAt?: string;
   updatedAt: string;
+  provider?: 'microsoft_federated' | 'external_local';
 };
 
 type SystemHealthService = {
@@ -484,6 +485,38 @@ const getEmailDomain = (email: string): string => {
   return parts.length > 1 ? parts[1].toLowerCase() : '';
 };
 
+const isPersonalEmailDomain = (email: string): boolean => {
+  const domain = getEmailDomain(email);
+  return [
+    'gmail.com',
+    'googlemail.com',
+    'hotmail.com',
+    'outlook.com',
+    'live.com',
+    'msn.com',
+    'icloud.com',
+    'me.com',
+    'yahoo.com',
+    'yandex.com',
+    'proton.me',
+    'protonmail.com',
+  ].includes(domain);
+};
+
+const deriveAccessState = (params: {
+  provisioningSource: NonNullable<User['provisioningSource']>;
+  permissions: Permission[];
+  hasLinkedIdentity: boolean;
+}): NonNullable<User['accessState']> => {
+  if ((params.provisioningSource === 'invited_personal' || params.provisioningSource === 'external_local_account') && !params.hasLinkedIdentity) {
+    return 'invited';
+  }
+  return params.permissions.length > 0 ? 'active' : 'pending';
+};
+
+const getDefaultProvisioningSource = (email: string): NonNullable<User['provisioningSource']> =>
+  isPersonalEmailDomain(email) ? 'external_local_account' : 'corporate_precreated';
+
 const buildAutoProvisionedUser = (params: { email: string; role: UserRole; companyId?: string; permissions: Permission[] }): User => {
   const domain = getEmailDomain(params.email);
   const inferredName = params.email.split('@')[0]
@@ -499,12 +532,13 @@ const buildAutoProvisionedUser = (params: { email: string; role: UserRole; compa
     status: 'Active',
     companyId: params.companyId || '',
     permissions: params.permissions,
+    provisioningSource: 'auto_domain',
+    accessState: 'pending',
     isGuest: false,
     powerBiAccess: 'none',
     powerBiWorkspaceId: '',
     powerBiReportId: '',
     lastLogin: new Date().toISOString(),
-    passwordLastChangedAt: new Date().toISOString(),
   };
 };
 
@@ -555,16 +589,16 @@ const assertPermissionGrantPolicy = (targetPermissions: Permission[], existingPe
 
 export const api = {
   auth: {
-    checkAccess: async (email: string, accessToken?: string): Promise<User> => {
-      return api.auth.loginWithMicrosoft(email, accessToken);
+    checkAccess: async (email: string, bearerToken?: string): Promise<User> => {
+      return api.auth.loginWithMicrosoft(email, bearerToken);
     },
-    loginWithMicrosoft: async (email: string, accessToken?: string): Promise<User> => {
+    loginWithMicrosoft: async (email: string, bearerToken?: string): Promise<User> => {
       const normalizedEmail = email.trim().toLowerCase();
       if (FUNCTION_API_BASE_URL) {
-        const token = accessToken || getStoredMicrosoftAccessToken();
+        const token = bearerToken || getStoredAuthBearerToken();
         const canUseDevBypass = DEV_BYPASS_AUTH && Boolean(normalizedEmail);
         if (!token && !canUseDevBypass) {
-          throw new Error('Microsoft access token is missing. Please sign in with Microsoft again.');
+          throw new Error('Sign-in token is missing. Please sign in again.');
         }
 
         const response = await fetch(`${FUNCTION_API_BASE_URL}/api/auth/me`, {
@@ -594,15 +628,22 @@ export const api = {
       await delay(800);
       throw new Error('No Function API configured.');
     },
-    storeMicrosoftToken: async (payload: { userEmail: string; accessToken: string; scope: string; expiresAt?: string }): Promise<void> => {
+    storeHostedToken: async (payload: {
+      userEmail: string;
+      bearerToken: string;
+      scope: string;
+      expiresAt?: string;
+      provider?: 'microsoft_federated' | 'external_local';
+    }): Promise<void> => {
       await delay(100);
       const normalizedEmail = payload.userEmail.trim().toLowerCase();
       const nextToken: MicrosoftTokenRecord = {
         userEmail: normalizedEmail,
-        accessToken: payload.accessToken,
+        bearerToken: payload.bearerToken,
         scope: payload.scope,
         expiresAt: payload.expiresAt,
         updatedAt: new Date().toISOString(),
+        provider: payload.provider,
       };
       const idx = mockMicrosoftTokens.findIndex((token) => token.userEmail === normalizedEmail);
       if (idx === -1) {
@@ -611,16 +652,16 @@ export const api = {
         mockMicrosoftTokens[idx] = nextToken;
       }
       if (typeof window !== 'undefined') {
-        window.localStorage.setItem(MS_ACCESS_TOKEN_KEY, payload.accessToken);
+        window.localStorage.setItem(AUTH_BEARER_TOKEN_KEY, payload.bearerToken);
       }
       persistLocalDb();
     },
-    getMicrosoftToken: async (userEmail: string): Promise<MicrosoftTokenRecord | null> => {
+    getHostedToken: async (userEmail: string): Promise<MicrosoftTokenRecord | null> => {
       await delay(50);
       const normalizedEmail = userEmail.trim().toLowerCase();
       return mockMicrosoftTokens.find((token) => token.userEmail === normalizedEmail) || null;
     },
-    clearMicrosoftToken: async (userEmail?: string): Promise<void> => {
+    clearHostedToken: async (userEmail?: string): Promise<void> => {
       await delay(50);
       if (userEmail) {
         const normalizedEmail = userEmail.trim().toLowerCase();
@@ -629,53 +670,12 @@ export const api = {
         mockMicrosoftTokens = [];
       }
       if (typeof window !== 'undefined') {
-        window.localStorage.removeItem(MS_ACCESS_TOKEN_KEY);
+        window.localStorage.removeItem(AUTH_BEARER_TOKEN_KEY);
       }
       persistLocalDb();
     },
-    loginWithPassword: async (email: string, password: string): Promise<User> => {
-      if (FUNCTION_API_BASE_URL) {
-        const normalizedEmail = email.trim().toLowerCase();
-        const payload = await callFunctionApiPublic<{ user: User }>('api/auth/login-password', {
-          method: 'POST',
-          body: JSON.stringify({
-            email: normalizedEmail,
-            password,
-          }),
-        });
-
-        const backendUser = payload.user;
-        const existingIdx = mockUsers.findIndex((u) => u.id === backendUser.id);
-        if (existingIdx === -1) {
-          mockUsers.push({ ...backendUser });
-        } else {
-          mockUsers[existingIdx] = { ...mockUsers[existingIdx], ...backendUser };
-        }
-        persistLocalDb();
-        return { ...backendUser };
-      }
-
-      ensureMockAllowed('Password login');
-      await delay(700);
-      const normalizedEmail = email.trim().toLowerCase();
-      const user = mockUsers.find((u) => u.email.toLowerCase() === normalizedEmail);
-
-      if (!user) {
-        throw new Error('Invalid email or password.');
-      }
-      if (user.status !== 'Active') {
-        throw new Error('This account is not active.');
-      }
-      if (!password) {
-        throw new Error('Password is required.');
-      }
-      if (mockPasswords[user.id] !== password) {
-        throw new Error('Invalid email or password.');
-      }
-
-      user.lastLogin = new Date().toISOString();
-      persistLocalDb();
-      return { ...user };
+    loginWithPassword: async (): Promise<User> => {
+      throw new Error('Password login is managed by Entra ID. Use the hosted Entra sign-in flow.');
     },
     // Backward compatible alias (used by earlier screens)
     login: async (email: string): Promise<User> => {
@@ -683,21 +683,12 @@ export const api = {
     },
     updateProfile: async (userId: string, data: Partial<User>): Promise<User> => {
         if (FUNCTION_API_BASE_URL) {
-          const storedToken = getStoredMicrosoftAccessToken();
-          const payload = storedToken
-            ? await callFunctionApi<{ user: User }>('api/auth/profile', {
-                method: 'PATCH',
-                body: JSON.stringify({
-                  name: (data.name || '').trim(),
-                }),
-              })
-            : await callFunctionApiPublic<{ user: User }>('api/auth/profile-password', {
-                method: 'PATCH',
-                body: JSON.stringify({
-                  email: (useAuthStore.getState().user?.email || '').trim().toLowerCase(),
-                  name: (data.name || '').trim(),
-                }),
-              });
+          const payload = await callFunctionApi<{ user: User }>('api/auth/profile', {
+            method: 'PATCH',
+            body: JSON.stringify({
+              name: (data.name || '').trim(),
+            }),
+          });
           const updatedUser = payload.user;
           const index = mockUsers.findIndex((u) => u.id === userId);
           if (index !== -1) {
@@ -720,54 +711,8 @@ export const api = {
         }
         throw new Error('User not found');
     },
-    changePassword: async (userId: string, currentPassword: string, newPassword: string): Promise<void> => {
-      if (FUNCTION_API_BASE_URL) {
-        const storedToken = getStoredMicrosoftAccessToken();
-        if (storedToken) {
-          await callFunctionApi('api/auth/change-password', {
-            method: 'POST',
-            body: JSON.stringify({
-              currentPassword,
-              newPassword,
-            }),
-          });
-        } else {
-          const activeUser = useAuthStore.getState().user;
-          if (!activeUser?.email) {
-            throw new Error('Authenticated user context is missing.');
-          }
-          await callFunctionApiPublic('api/auth/change-password-password', {
-            method: 'POST',
-            body: JSON.stringify({
-              email: activeUser.email,
-              currentPassword,
-              newPassword,
-            }),
-          });
-        }
-
-        const user = mockUsers.find((u) => u.id === userId);
-        if (user) {
-          user.passwordLastChangedAt = new Date().toISOString();
-          user.temporaryPassword = undefined;
-          persistLocalDb();
-        }
-        return;
-      }
-
-      ensureMockAllowed('Password change');
-      await delay(500);
-      const user = mockUsers.find((u) => u.id === userId);
-      if (!user) throw new Error('User not found');
-      if (!currentPassword || !newPassword) throw new Error('Current and new password are required.');
-      if (newPassword.length < 8) throw new Error('New password must be at least 8 characters.');
-      if (mockPasswords[userId] !== currentPassword) throw new Error('Current password is incorrect.');
-      if (currentPassword === newPassword) throw new Error('New password must be different from current password.');
-
-      mockPasswords[userId] = newPassword;
-      user.passwordLastChangedAt = new Date().toISOString();
-      user.temporaryPassword = undefined;
-      persistLocalDb();
+    changePassword: async (): Promise<void> => {
+      throw new Error('Password change is managed by Entra ID. Use the hosted Entra account settings.');
     },
   },
   admin: {
@@ -785,11 +730,15 @@ export const api = {
       }
       return [...mockUsers];
     },
-    createUser: async (user: Omit<User, 'id'>): Promise<{ user: User; temporaryPassword: string }> => {
+    createUser: async (user: Omit<User, 'id'>): Promise<{ user: User; bootstrapCredentials?: BootstrapCredentials | null }> => {
         if (shouldUseFunctionApi()) {
-            const payload = await callFunctionApi<{ user: User; temporaryPassword: string }>('api/identity/users', {
+            const { provisioningSource, ...rest } = user;
+            const payload = await callFunctionApi<{ user: User; bootstrapCredentials?: BootstrapCredentials | null }>('api/identity/users', {
                 method: 'POST',
-                body: JSON.stringify(user),
+                body: JSON.stringify({
+                  ...rest,
+                  ...(provisioningSource ? { provisioningMode: provisioningSource } : {}),
+                }),
             });
             const createdUser = payload.user;
             const existingIdx = mockUsers.findIndex((u) => u.id === createdUser.id);
@@ -822,26 +771,41 @@ export const api = {
         if (user.role === 'user' && hasCompanyAdminPermissions && (!scopedCompanyId || sanitizedIsGuest)) {
             throw new Error('Company Admin users must be non-guest and linked to a company.');
         }
-        const temporaryPassword = `AVS-${Math.random().toString(36).slice(-8)}`;
+        const provisioningSource = user.provisioningSource || getDefaultProvisioningSource(user.email);
+        const accessState = deriveAccessState({
+          provisioningSource,
+          permissions: requestedPermissions,
+          hasLinkedIdentity: false,
+        });
+        const bootstrapCredentials = provisioningSource === 'external_local_account'
+          ? {
+              email: user.email,
+              temporaryPassword: `AVS-${Math.random().toString(36).slice(2, 8).toUpperCase()}-${Date.now().toString().slice(-4)}`,
+            }
+          : null;
         const newUser: User = { 
             ...user, 
             id: `u-${Date.now()}`, 
-            temporaryPassword,
             permissions: requestedPermissions,
             isGuest: sanitizedIsGuest,
             companyId: user.role === 'supadmin' ? '' : scopedCompanyId,
-            passwordLastChangedAt: new Date().toISOString(),
+            provisioningSource,
+            accessState,
+            identityProviderType: provisioningSource === 'external_local_account' ? 'external_local' : 'workforce_federated',
         };
         mockUsers.push(newUser);
-        mockPasswords[newUser.id] = temporaryPassword;
         persistLocalDb();
-        return { user: newUser, temporaryPassword };
+        return { user: newUser, bootstrapCredentials };
     },
     updateUser: async (id: string, updates: Partial<User>): Promise<User> => {
         if (shouldUseFunctionApi()) {
+            const { provisioningSource, ...rest } = updates;
             await callFunctionApi<{ success: boolean }>(`api/identity/users/${id}`, {
                 method: 'PATCH',
-                body: JSON.stringify(updates),
+                body: JSON.stringify({
+                  ...rest,
+                  ...(provisioningSource ? { provisioningMode: provisioningSource } : {}),
+                }),
             });
             const refreshed = await api.admin.getUsers();
             const updated = refreshed.find((u) => u.id === id);
@@ -913,29 +877,8 @@ export const api = {
       mockMicrosoftTokens = mockMicrosoftTokens.filter((token) => token.userEmail !== targetUser.email.toLowerCase());
       persistLocalDb();
     },
-    resetUserPassword: async (id: string): Promise<{ email: string; temporaryPassword: string }> => {
-      if (shouldUseFunctionApi()) {
-        const payload = await callFunctionApi<{ email: string; temporaryPassword: string }>(`api/identity/users/${id}/reset-password`, {
-          method: 'POST',
-        });
-        const user = mockUsers.find((u) => u.id === id);
-        if (user) {
-          user.temporaryPassword = payload.temporaryPassword;
-          user.passwordLastChangedAt = new Date().toISOString();
-        }
-        persistLocalDb();
-        return payload;
-      }
-      await delay(300);
-      const targetUser = mockUsers.find((u) => u.id === id);
-      if (!targetUser) throw new Error('User not found');
-      assertCanManageUser(targetUser, 'update');
-      const temporaryPassword = `AVS-${Math.random().toString(36).slice(-8)}`;
-      targetUser.temporaryPassword = temporaryPassword;
-      targetUser.passwordLastChangedAt = new Date().toISOString();
-      mockPasswords[id] = temporaryPassword;
-      persistLocalDb();
-      return { email: targetUser.email, temporaryPassword };
+    resetUserPassword: async (): Promise<never> => {
+      throw new Error('Password reset is managed by Entra ID. Use the hosted Entra reset flow.');
     },
     getCompanies: async (): Promise<Company[]> => {
         if (shouldUseFunctionApi()) {

@@ -1,8 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { MsalProvider } from '@azure/msal-react';
 import App from './App';
-import { msalInstance } from './src/auth/msalInstance';
+import { externalMsalInstance, workforceMsalInstance } from './src/auth/msalInstance';
 import { clearHostedSignInProviderState } from './src/auth/providerSession';
 import { useAuthStore } from './src/store/authStore';
 
@@ -16,9 +15,7 @@ const root = ReactDOM.createRoot(rootElement);
 const renderApp = () => {
   root.render(
     <React.StrictMode>
-      <MsalProvider instance={msalInstance}>
-        <App />
-      </MsalProvider>
+      <App />
     </React.StrictMode>
   );
 };
@@ -27,15 +24,19 @@ const normalizeBootstrapError = (error: unknown): string => {
   const message = error instanceof Error ? error.message : 'Microsoft sign-in could not be completed.';
 
   if (/AADSTS500207/i.test(message)) {
-    return 'Continue with Microsoft su anda External ID tenantindaki federated Microsoft provider ile eslesmiyor.';
+    return 'Sign in su anda External ID otoritesiyle eslesmiyor. External local account ayarlarini kontrol edelim.';
+  }
+
+  if (/AADSTS650059/i.test(message)) {
+    return 'Continue with Microsoft icin kullandigin workforce SPA uygulamasi multitenant ya da dogru redirect ayariyla eslesmiyor.';
   }
 
   return message;
 };
 
 const safeHandleRedirectPromise = async (
-  instanceLabel: 'external',
-  handler: () => Promise<Awaited<ReturnType<typeof msalInstance.handleRedirectPromise>>>
+  instanceLabel: 'external' | 'workforce',
+  handler: () => Promise<any>
 ) => {
   try {
     return await handler();
@@ -51,10 +52,19 @@ const safeHandleRedirectPromise = async (
 
 const bootstrap = async () => {
   try {
-    await msalInstance.initialize();
-    const redirectResult = await safeHandleRedirectPromise('external', () => msalInstance.handleRedirectPromise());
-    if (redirectResult?.account) {
-      msalInstance.setActiveAccount(redirectResult.account);
+    await externalMsalInstance.initialize();
+    await workforceMsalInstance.initialize();
+
+    const externalRedirectResult = await safeHandleRedirectPromise('external', () => externalMsalInstance.handleRedirectPromise());
+    if (externalRedirectResult?.account) {
+      externalMsalInstance.setActiveAccount(externalRedirectResult.account);
+      workforceMsalInstance.setActiveAccount(null);
+    }
+
+    const workforceRedirectResult = await safeHandleRedirectPromise('workforce', () => workforceMsalInstance.handleRedirectPromise());
+    if (workforceRedirectResult?.account) {
+      workforceMsalInstance.setActiveAccount(workforceRedirectResult.account);
+      externalMsalInstance.setActiveAccount(null);
     }
   } catch (error) {
     clearHostedSignInProviderState();

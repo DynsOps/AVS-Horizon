@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useMsal } from '@azure/msal-react';
-import { clearHostedSignInProviderState } from '../auth/providerSession';
+import { clearHostedSignInProviderState, getCurrentHostedSignInProvider } from '../auth/providerSession';
+import { externalMsalInstance, workforceMsalInstance } from '../auth/msalInstance';
 import { useAuthStore } from '../store/authStore';
 import { Permission } from '../types';
 import { api } from '../services/api';
@@ -40,7 +40,6 @@ const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: stri
 
 export const Sidebar: React.FC = () => {
   const { user, logout } = useAuthStore();
-  const { instance, accounts } = useMsal();
   const navigate = useNavigate();
   const role = user?.role;
   const hasPermission = (permission: Permission) => Boolean(user?.permissions.includes(permission));
@@ -49,22 +48,25 @@ export const Sidebar: React.FC = () => {
     role === 'supadmin' ||
     user?.permissions.some((permission) => permission.startsWith('view:analysis-report:'))
   );
-  const hasHostedSession = accounts.length > 0;
+  const hasHostedSession =
+    externalMsalInstance.getAllAccounts().length > 0 || workforceMsalInstance.getAllAccounts().length > 0;
   const [supadminOperationsOpen, setSupadminOperationsOpen] = useState(true);
   const [supadminSupplierOpen, setSupadminSupplierOpen] = useState(true);
 
   const handleSignOut = async () => {
     const userEmail = user?.email;
     if (userEmail) {
-      await api.auth.clearMicrosoftToken(userEmail);
+      await api.auth.clearHostedToken(userEmail);
     } else {
-      await api.auth.clearMicrosoftToken();
+      await api.auth.clearHostedToken();
     }
 
     logout();
+    const provider = getCurrentHostedSignInProvider();
     clearHostedSignInProviderState();
 
     if (hasHostedSession) {
+      const instance = provider === 'microsoft_federated' ? workforceMsalInstance : externalMsalInstance;
       await instance.logoutRedirect({
         postLogoutRedirectUri: `${window.location.origin}/#/login`,
       });

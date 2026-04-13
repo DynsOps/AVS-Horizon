@@ -1,5 +1,13 @@
 
 export type UserRole = 'supadmin' | 'admin' | 'user';
+export type ProvisioningSource =
+  | 'bootstrap_supadmin'
+  | 'corporate_precreated'
+  | 'invited_personal'
+  | 'external_local_account'
+  | 'auto_domain';
+export type AccessState = 'invited' | 'pending' | 'active';
+export type IdentityProviderType = 'workforce_federated' | 'external_local';
 
 export type Permission = 
   | 'view:dashboard'
@@ -31,12 +39,21 @@ export interface Company {
   country: string;
   contactEmail: string;
   status: 'Active' | 'Inactive';
+  domains?: string[];
+}
+
+export interface BootstrapCredentials {
+  email: string;
+  temporaryPassword: string;
 }
 
 export interface User {
   id: string;
   name: string;
   email: string;
+  entraObjectId?: string;
+  identityProviderType?: IdentityProviderType;
+  identityTenantId?: string;
   role: UserRole;
   isGuest?: boolean;
   showOnlyCoreAdminPermissions?: boolean;
@@ -45,10 +62,12 @@ export interface User {
   powerBiReportId?: string;
   avatarUrl?: string;
   companyId?: string; // Links to Company
-  temporaryPassword?: string;
   permissions: Permission[];
   status: 'Active' | 'Inactive' | 'Suspended';
+  provisioningSource?: ProvisioningSource;
+  accessState?: AccessState;
   lastLogin?: string;
+  temporaryPassword?: string;
   passwordLastChangedAt?: string;
 }
 

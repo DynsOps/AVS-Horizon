@@ -1,6 +1,7 @@
 import sql, { IResult } from 'mssql';
 import { DefaultAzureCredential } from '@azure/identity';
 import { env } from './env';
+import { buildSessionContextPrefix, SessionContext } from './identity';
 
 const credential = new DefaultAzureCredential();
 let pooledConnection: Promise<sql.ConnectionPool> | null = null;
@@ -106,4 +107,13 @@ export const runQuery = async <T = any>(query: string, params?: QueryParams): Pr
     }
     throw error;
   }
+};
+
+export const runScopedQuery = async <T = any>(
+  context: SessionContext,
+  query: string,
+  params?: QueryParams
+): Promise<IResult<T>> => {
+  const scopedQuery = `${buildSessionContextPrefix(context)}\n${query}`;
+  return runQuery<T>(scopedQuery, params);
 };
