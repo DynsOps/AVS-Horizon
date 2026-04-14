@@ -2,12 +2,12 @@
 export type UserRole = 'supadmin' | 'admin' | 'user';
 export type ProvisioningSource =
   | 'bootstrap_supadmin'
-  | 'corporate_precreated'
+  | 'corporate_precreated' // legacy rows only
   | 'invited_personal'
   | 'external_local_account'
   | 'auto_domain';
 export type AccessState = 'invited' | 'pending' | 'active';
-export type IdentityProviderType = 'workforce_federated' | 'external_local';
+export type IdentityProviderType = 'workforce_federated' | 'external_local'; // workforce_federated kept for legacy rows
 
 export type Permission = 
   | 'view:dashboard'
@@ -45,6 +45,19 @@ export interface Company {
 export interface BootstrapCredentials {
   email: string;
   temporaryPassword: string;
+}
+
+export interface WelcomeEmailNotification {
+  sent: boolean;
+  error?: string;
+}
+
+export interface UserCreateResponse {
+  user: User;
+  bootstrapCredentials?: BootstrapCredentials | null;
+  notifications?: {
+    welcomeEmail?: WelcomeEmailNotification;
+  };
 }
 
 export interface User {

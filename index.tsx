@@ -1,8 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { externalMsalInstance, workforceMsalInstance } from './src/auth/msalInstance';
-import { clearHostedSignInProviderState } from './src/auth/providerSession';
+import { externalMsalInstance } from './src/auth/msalInstance';
 import { useAuthStore } from './src/store/authStore';
 
 const rootElement = document.getElementById('root');
@@ -11,6 +10,30 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
+
+const cleanupLegacyAuthStorage = () => {
+  if (typeof window === 'undefined') return;
+
+  const removeKeys = (storage: Storage, keys: string[]) => {
+    keys.forEach((key) => storage.removeItem(key));
+  };
+
+  removeKeys(window.localStorage, ['avs_auth_current_provider']);
+  removeKeys(window.sessionStorage, ['avs_auth_pending_provider']);
+
+  const legacyWorkforceClientId = 'd2d4d4d0-1bd6-44be-bcde-a9e4a2650150';
+  const cleanupMsalKeys = (storage: Storage) => {
+    for (let index = storage.length - 1; index >= 0; index -= 1) {
+      const key = storage.key(index);
+      if (key && key.includes(legacyWorkforceClientId)) {
+        storage.removeItem(key);
+      }
+    }
+  };
+
+  cleanupMsalKeys(window.sessionStorage);
+  cleanupMsalKeys(window.localStorage);
+};
 
 const renderApp = () => {
   root.render(
@@ -21,29 +44,22 @@ const renderApp = () => {
 };
 
 const normalizeBootstrapError = (error: unknown): string => {
-  const message = error instanceof Error ? error.message : 'Microsoft sign-in could not be completed.';
+  const message = error instanceof Error ? error.message : 'Sign-in could not be completed.';
 
   if (/AADSTS500207/i.test(message)) {
     return 'Sign in su anda External ID otoritesiyle eslesmiyor. External local account ayarlarini kontrol edelim.';
   }
 
-  if (/AADSTS650059/i.test(message)) {
-    return 'Continue with Microsoft icin kullandigin workforce SPA uygulamasi multitenant ya da dogru redirect ayariyla eslesmiyor.';
-  }
-
   return message;
 };
 
-const safeHandleRedirectPromise = async (
-  instanceLabel: 'external' | 'workforce',
-  handler: () => Promise<any>
-) => {
+const safeHandleRedirectPromise = async (handler: () => Promise<any>) => {
   try {
     return await handler();
   } catch (error) {
     const errorCode = (error as { errorCode?: string } | null)?.errorCode;
     if (errorCode === 'authority_mismatch') {
-      console.warn(`Ignoring ${instanceLabel} redirect mismatch and continuing with the alternate MSAL authority.`, error);
+      console.warn('Ignoring redirect authority mismatch for External ID.', error);
       return null;
     }
     throw error;
@@ -52,22 +68,14 @@ const safeHandleRedirectPromise = async (
 
 const bootstrap = async () => {
   try {
+    cleanupLegacyAuthStorage();
     await externalMsalInstance.initialize();
-    await workforceMsalInstance.initialize();
 
-    const externalRedirectResult = await safeHandleRedirectPromise('external', () => externalMsalInstance.handleRedirectPromise());
+    const externalRedirectResult = await safeHandleRedirectPromise(() => externalMsalInstance.handleRedirectPromise());
     if (externalRedirectResult?.account) {
       externalMsalInstance.setActiveAccount(externalRedirectResult.account);
-      workforceMsalInstance.setActiveAccount(null);
-    }
-
-    const workforceRedirectResult = await safeHandleRedirectPromise('workforce', () => workforceMsalInstance.handleRedirectPromise());
-    if (workforceRedirectResult?.account) {
-      workforceMsalInstance.setActiveAccount(workforceRedirectResult.account);
-      externalMsalInstance.setActiveAccount(null);
     }
   } catch (error) {
-    clearHostedSignInProviderState();
     useAuthStore.getState().setAuthError(normalizeBootstrapError(error));
     console.error('MSAL bootstrap failed:', error);
 

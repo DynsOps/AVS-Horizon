@@ -48,7 +48,7 @@ export const SystemHealth: React.FC = () => {
                         timestamp: new Date().toISOString(),
                         level: 'WARN',
                         service: 'SystemHealth',
-                        message: 'Function API token is missing. Sign in with Microsoft or disable forced Function API mode.',
+                        message: 'Function API token is missing. Complete hosted sign-in or disable forced Function API mode.',
                     }]);
                 }
             }

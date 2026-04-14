@@ -1,7 +1,4 @@
 export const env = {
-  azureTenantId: process.env.AZURE_AD_TENANT_ID || '',
-  azureClientId: process.env.AZURE_AD_CLIENT_ID || '',
-  azureAudience: process.env.AZURE_AD_AUDIENCE || process.env.AZURE_AD_CLIENT_ID || '',
   externalIdTenantId: process.env.EXTERNAL_ID_TENANT_ID || '',
   externalIdClientId: process.env.EXTERNAL_ID_CLIENT_ID || '',
   externalIdClientSecret: process.env.EXTERNAL_ID_CLIENT_SECRET || '',
@@ -9,11 +6,17 @@ export const env = {
   externalIdAuthority: (process.env.EXTERNAL_ID_AUTHORITY || '').replace(/\/+$/, ''),
   externalIdJwksUri: process.env.EXTERNAL_ID_JWKS_URI || '',
   externalIdIssuerDomain: process.env.EXTERNAL_ID_ISSUER_DOMAIN || '',
+  mailTenantId: process.env.MAIL_TENANT_ID || process.env.EXTERNAL_ID_TENANT_ID || '',
+  mailClientId: process.env.MAIL_CLIENT_ID || process.env.EXTERNAL_ID_CLIENT_ID || '',
+  mailClientSecret: process.env.MAIL_CLIENT_SECRET || process.env.EXTERNAL_ID_CLIENT_SECRET || '',
+  mailAuthority: (process.env.MAIL_AUTHORITY || '').replace(/\/+$/, ''),
+  mailSender: process.env.MAIL_SENDER || process.env.EXTERNAL_ID_MAIL_SENDER || '',
+  mailLoginUrl: process.env.MAIL_LOGIN_URL || '',
+  mailGraphScope: process.env.MAIL_GRAPH_SCOPE || 'https://graph.microsoft.com/.default',
   externalIdIssuers: (process.env.EXTERNAL_ID_ISSUERS || '')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean),
-  externalIdUserFlow: process.env.EXTERNAL_ID_USER_FLOW || '',
   externalIdGraphScope: process.env.EXTERNAL_ID_GRAPH_SCOPE || 'https://graph.microsoft.com/.default',
   sqlServer: process.env.SQL_SERVER || '',
   sqlPort: Number(process.env.SQL_PORT || '1433'),
@@ -43,4 +46,11 @@ export const assertExternalIdEnv = (): void => {
   if (!env.externalIdClientSecret) throw new Error('Missing EXTERNAL_ID_CLIENT_SECRET');
   if (!env.externalIdAuthority) throw new Error('Missing EXTERNAL_ID_AUTHORITY');
   if (!env.externalIdIssuerDomain) throw new Error('Missing EXTERNAL_ID_ISSUER_DOMAIN');
+};
+
+export const assertMailEnv = (): void => {
+  if (!env.mailTenantId) throw new Error('Missing MAIL_TENANT_ID or EXTERNAL_ID_TENANT_ID');
+  if (!env.mailClientId) throw new Error('Missing MAIL_CLIENT_ID or EXTERNAL_ID_CLIENT_ID');
+  if (!env.mailClientSecret) throw new Error('Missing MAIL_CLIENT_SECRET or EXTERNAL_ID_CLIENT_SECRET');
+  if (!env.mailSender) throw new Error('Missing MAIL_SENDER or EXTERNAL_ID_MAIL_SENDER');
 };

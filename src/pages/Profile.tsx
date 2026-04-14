@@ -94,7 +94,7 @@ export const Profile: React.FC = () => {
                                     />
                                 </div>
                                 <p className="text-[11px] text-slate-500 mt-1">
-                                    Email is managed by Microsoft identity and cannot be edited here.
+                                    Email is managed by Entra hosted identity and cannot be edited here.
                                 </p>
                             </div>
 

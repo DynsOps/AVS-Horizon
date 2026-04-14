@@ -77,16 +77,6 @@ type TokenValidationResult = {
 
 const cachedJwksClients = new Map<string, JwksClient>();
 
-export const isMicrosoftWorkforceIssuer = (issuer: string): boolean => {
-  const normalizedIssuer = issuer.trim();
-  if (!normalizedIssuer) return false;
-
-  return (
-    /^https:\/\/login\.microsoftonline\.com\/[0-9a-f-]+\/v2\.0$/i.test(normalizedIssuer) ||
-    /^https:\/\/sts\.windows\.net\/[0-9a-f-]+\/$/i.test(normalizedIssuer)
-  );
-};
-
 export const buildAcceptedAudiences = (audience: string, clientId?: string): [string, ...string[]] => {
   const candidates = new Set<string>();
   const normalizedAudience = (audience || '').trim();
@@ -135,7 +125,7 @@ export const getCorporateIdentityConflict = (
     incoming.entraObjectId &&
     user.entraObjectId !== incoming.entraObjectId
   ) {
-    return `Microsoft account identity mismatch for ${incoming.email}.`;
+    return `Identity mismatch for ${incoming.email}.`;
   }
 
   if (
@@ -144,7 +134,7 @@ export const getCorporateIdentityConflict = (
     user.identityTenantId &&
     user.identityTenantId !== incoming.identityTenantId
   ) {
-    return `Microsoft account tenant mismatch for ${incoming.email}.`;
+    return `Tenant mismatch for ${incoming.email}.`;
   }
 
   return null;
@@ -170,7 +160,7 @@ const getTokenProviderConfigs = (): TokenProviderConfig[] => {
     throw new Error('External ID token validation is not configured.');
   }
 
-  const providers: TokenProviderConfig[] = [
+  return [
     {
       providerType: 'external_local',
       audiences: buildAcceptedAudiences(env.externalIdAudience, env.externalIdClientId),
@@ -179,17 +169,6 @@ const getTokenProviderConfigs = (): TokenProviderConfig[] => {
       tenantId: env.externalIdTenantId || null,
     },
   ];
-
-  if (env.azureAudience || env.azureClientId) {
-    providers.push({
-      providerType: 'workforce_federated',
-      audiences: buildAcceptedAudiences(env.azureAudience, env.azureClientId),
-      jwksUri: 'https://login.microsoftonline.com/common/discovery/v2.0/keys',
-      issuerMatcher: isMicrosoftWorkforceIssuer,
-    });
-  }
-
-  return providers;
 };
 
 const getBearerToken = (request: HttpRequest): string | null => {

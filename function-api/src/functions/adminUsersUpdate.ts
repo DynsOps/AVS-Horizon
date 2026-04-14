@@ -3,7 +3,7 @@ import { authenticateRequest } from '../lib/auth';
 import { runScopedQuery } from '../lib/db';
 import { errorResponse, ok } from '../lib/http';
 import { UserRole, getDefaultPermissionsForRole } from '../lib/rbac';
-import { deriveAccessState, getProvisioningSourceForEmail, isPersonalEmailDomain, normalizeEmail, ProvisioningSource } from '../lib/identity';
+import { deriveAccessState, getProvisioningSourceForEmail, normalizeEmail, ProvisioningSource } from '../lib/identity';
 
 type UpdateUserBody = {
   name?: string;
@@ -14,7 +14,7 @@ type UpdateUserBody = {
   companyId?: string | null;
   status?: 'Active' | 'Inactive' | 'Suspended';
   permissions?: string[];
-  provisioningMode?: 'corporate_precreated' | 'external_local_account';
+  provisioningMode?: 'external_local_account';
 };
 
 type TargetUser = {
@@ -37,6 +37,12 @@ const SUPADMIN_CONTROLLED_PERMISSIONS = new Set<string>([
   'view:business',
   'manage:reports',
 ]);
+const COMPANY_ADMIN_BASE_PERMISSIONS = new Set(['view:dashboard', 'view:reports', 'create:support-ticket']);
+
+const getCompanyAdminAllowedPermissions = (actorPermissions: string[]): Set<string> => {
+  const actorReportPermissions = actorPermissions.filter((permission) => permission.startsWith('view:analysis-report:'));
+  return new Set([...COMPANY_ADMIN_BASE_PERMISSIONS, ...actorReportPermissions]);
+};
 
 const canManageRole = (actorRole: UserRole, targetRole: UserRole): boolean => {
   if (actorRole === 'supadmin') return true;
@@ -80,6 +86,9 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
     const isAdminActor = actor.role === 'admin';
     if (isAdminActor) {
       if (!actor.companyId) return errorResponse(403, 'Admin user is not linked to a company.');
+      if (target.role !== 'user') {
+        return errorResponse(403, 'Admin can only manage standard user accounts.');
+      }
       if (target.companyId !== actor.companyId) {
         return errorResponse(403, 'Admin can only manage users in their own company.');
       }
@@ -88,6 +97,9 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
     const nextRole = body.role || target.role;
     if (!canManageRole(actor.role, target.role) || !canManageRole(actor.role, nextRole)) {
       return errorResponse(403, 'Only supadmin can manage supadmin users.');
+    }
+    if (isAdminActor && nextRole !== 'user') {
+      return errorResponse(403, 'Admin can only manage standard user accounts.');
     }
 
     const nextEmail = normalizeEmail(body.email || target.email);
@@ -106,16 +118,16 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
     }
 
     const nextIsGuest = nextRole === 'user'
-      ? (typeof body.isGuest === 'boolean' ? body.isGuest : target.isGuest)
+      ? (isAdminActor ? false : (typeof body.isGuest === 'boolean' ? body.isGuest : target.isGuest))
       : false;
     const nextShowOnlyCoreAdminPermissions = nextRole === 'admin'
-      ? (typeof body.showOnlyCoreAdminPermissions === 'boolean'
+      ? (isAdminActor ? false : (typeof body.showOnlyCoreAdminPermissions === 'boolean'
         ? body.showOnlyCoreAdminPermissions
-        : target.showOnlyCoreAdminPermissions)
+        : target.showOnlyCoreAdminPermissions))
       : false;
     const nextCompanyId = body.companyId !== undefined ? body.companyId : target.companyId;
     if (isAdminActor) {
-      if (nextRole === 'user' && nextIsGuest) {
+      if (body.isGuest) {
         return errorResponse(403, 'Admin cannot assign guest scope.');
       }
       if (nextCompanyId && nextCompanyId !== actor.companyId) {
@@ -123,7 +135,8 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
       }
     }
     const scopedCompanyId = isAdminActor ? actor.companyId : nextCompanyId;
-    if ((nextRole === 'user' && !nextIsGuest && !scopedCompanyId) || (nextRole === 'admin' && !scopedCompanyId)) {
+    const normalizedRole: UserRole = isAdminActor ? 'user' : nextRole;
+    if ((normalizedRole === 'user' && !nextIsGuest && !scopedCompanyId) || (normalizedRole === 'admin' && !scopedCompanyId)) {
       return errorResponse(400, 'Company is required for admin and non-guest user roles.');
     }
 
@@ -135,27 +148,31 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
     const currentPermissions = currentPermissionsResult.recordset.map((p) => p.permission);
     const requestedPermissions = body.permissions !== undefined
       ? body.permissions
-      : (body.role ? getDefaultPermissionsForRole(nextRole) : currentPermissions);
-    const nextProvisioningSource: ProvisioningSource = body.provisioningMode
-      ? body.provisioningMode
-      : (target.provisioningSource || getProvisioningSourceForEmail(nextEmail));
-
-    if (nextProvisioningSource === 'corporate_precreated' && isPersonalEmailDomain(nextEmail)) {
-      return errorResponse(400, 'Personal email addresses must use external_local_account provisioning.');
+      : (body.role ? getDefaultPermissionsForRole(normalizedRole) : currentPermissions);
+    if (isAdminActor) {
+      const allowedPermissions = getCompanyAdminAllowedPermissions(actor.permissions);
+      const existingSet = new Set(currentPermissions);
+      const disallowedByRole = requestedPermissions.filter((permission) => !allowedPermissions.has(permission) && !existingSet.has(permission));
+      if (disallowedByRole.length > 0) {
+        return errorResponse(403, 'Admin can only grant user-role permissions.');
+      }
     }
+    const effectivePermissions = isAdminActor
+      ? requestedPermissions
+      : requestedPermissions;
+    const nextProvisioningSource: ProvisioningSource = isAdminActor
+      ? (target.provisioningSource || 'external_local_account')
+      : (body.provisioningMode
+      ? body.provisioningMode
+      : (target.provisioningSource || getProvisioningSourceForEmail(nextEmail)));
 
     if (target.provisioningSource !== nextProvisioningSource && target.entraObjectId) {
       return errorResponse(400, 'Changing an existing linked account between corporate and external local provisioning is not supported.');
     }
 
     if (actor.role === 'admin') {
-      const actorSet = new Set(actor.permissions);
       const existingSet = new Set(currentPermissions);
-      const disallowedByActor = requestedPermissions.filter((permission) => !actorSet.has(permission) && !existingSet.has(permission));
-      if (disallowedByActor.length > 0) {
-        return errorResponse(403, `Admin can only grant permissions they already have: ${disallowedByActor.join(', ')}`);
-      }
-      const disallowedControlled = requestedPermissions.filter((permission) => SUPADMIN_CONTROLLED_PERMISSIONS.has(permission) && !existingSet.has(permission));
+      const disallowedControlled = effectivePermissions.filter((permission) => SUPADMIN_CONTROLLED_PERMISSIONS.has(permission) && !existingSet.has(permission));
       if (disallowedControlled.length > 0) {
         return errorResponse(403, `Only supadmin can grant controlled permissions: ${disallowedControlled.join(', ')}`);
       }
@@ -163,7 +180,7 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
 
     const nextAccessState = deriveAccessState({
       provisioningSource: nextProvisioningSource,
-      permissions: requestedPermissions,
+      permissions: effectivePermissions,
       hasLinkedIdentity: Boolean(target.entraObjectId),
     });
 
@@ -191,10 +208,10 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
         userId,
         displayName: nextName,
         email: nextEmail,
-        role: nextRole,
+        role: normalizedRole,
         isGuest: nextIsGuest,
         showOnlyCoreAdminPermissions: nextShowOnlyCoreAdminPermissions,
-        companyId: nextRole === 'supadmin' ? null : (nextRole === 'user' && nextIsGuest ? null : scopedCompanyId || null),
+        companyId: normalizedRole === 'supadmin' ? null : (normalizedRole === 'user' && nextIsGuest ? null : scopedCompanyId || null),
         status: body.status || target.status,
         provisioningSource: nextProvisioningSource,
         accessState: nextAccessState,
@@ -206,7 +223,7 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
       'DELETE FROM dbo.user_permissions WHERE user_id = @userId',
       { userId }
     );
-    for (const permission of requestedPermissions) {
+    for (const permission of effectivePermissions) {
       await runScopedQuery(
         { role: actor.role, companyId: actor.companyId, userId: actor.id },
         'INSERT INTO dbo.user_permissions (user_id, permission) VALUES (@userId, @permission)',

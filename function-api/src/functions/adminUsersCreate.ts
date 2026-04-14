@@ -2,14 +2,15 @@ import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 import { randomUUID } from 'crypto';
 import { authenticateRequest } from '../lib/auth';
 import { runScopedQuery } from '../lib/db';
+import { env } from '../lib/env';
 import { createExternalLocalAccount, deleteExternalIdentityUser } from '../lib/externalIdentity';
 import { created, errorResponse } from '../lib/http';
+import { sendWelcomeCredentialsEmail } from '../lib/mail';
 import { UserRole, getDefaultPermissionsForRole } from '../lib/rbac';
 import {
   deriveAccessState,
   getIdentityProviderTypeForProvisioningSource,
   getProvisioningSourceForEmail,
-  isPersonalEmailDomain,
   normalizeEmail,
   ProvisioningSource,
 } from '../lib/identity';
@@ -23,7 +24,7 @@ type CreateUserRequest = {
   companyId?: string | null;
   status?: 'Active' | 'Inactive' | 'Suspended';
   permissions?: string[];
-  provisioningMode?: 'corporate_precreated' | 'external_local_account';
+  provisioningMode?: 'external_local_account';
 };
 
 const assertCanManageRole = (actorRole: UserRole, targetRole: UserRole): boolean => {
@@ -39,6 +40,12 @@ const SUPADMIN_CONTROLLED_PERMISSIONS = new Set<string>([
   'view:business',
   'manage:reports',
 ]);
+const COMPANY_ADMIN_BASE_PERMISSIONS = new Set(['view:dashboard', 'view:reports', 'create:support-ticket']);
+
+const getCompanyAdminAllowedPermissions = (actorPermissions: string[]): Set<string> => {
+  const actorReportPermissions = actorPermissions.filter((permission) => permission.startsWith('view:analysis-report:'));
+  return new Set([...COMPANY_ADMIN_BASE_PERMISSIONS, ...actorReportPermissions]);
+};
 
 export async function createAdminUser(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
@@ -60,8 +67,12 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
     const normalizedEmail = normalizeEmail(body.email);
     const role = body.role;
     const isAdminActor = actor.role === 'admin';
-    const isGuest = role === 'user' ? Boolean(body.isGuest) : false;
-    const showOnlyCoreAdminPermissions = role === 'admin' ? Boolean(body.showOnlyCoreAdminPermissions) : false;
+    if (isAdminActor && role !== 'user') {
+      return errorResponse(403, 'Admin can only manage standard user accounts.');
+    }
+    const normalizedRole: UserRole = isAdminActor ? 'user' : role;
+    const isGuest = isAdminActor ? false : (role === 'user' ? Boolean(body.isGuest) : false);
+    const showOnlyCoreAdminPermissions = isAdminActor ? false : (role === 'admin' ? Boolean(body.showOnlyCoreAdminPermissions) : false);
     const companyId = body.companyId || null;
     const status = body.status || 'Active';
 
@@ -69,7 +80,7 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
       if (!actor.companyId) {
         return errorResponse(403, 'Admin user is not linked to a company.');
       }
-      if (role === 'user' && isGuest) {
+      if (body.isGuest) {
         return errorResponse(403, 'Admin cannot create guest users.');
       }
       if (companyId && companyId !== actor.companyId) {
@@ -79,7 +90,7 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
 
     const scopedCompanyId = isAdminActor ? actor.companyId : companyId;
 
-    if ((role === 'user' && !isGuest && !scopedCompanyId) || (role === 'admin' && !scopedCompanyId)) {
+    if ((normalizedRole === 'user' && !isGuest && !scopedCompanyId) || (normalizedRole === 'admin' && !scopedCompanyId)) {
       return errorResponse(400, 'Company is required for admin and non-guest user roles.');
     }
 
@@ -94,24 +105,24 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
     }
 
     const userId = `u-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
-    const effectivePermissions = body.permissions !== undefined
+    const requestedPermissions = body.permissions !== undefined
       ? body.permissions
-      : getDefaultPermissionsForRole(role);
-    const provisioningSource: ProvisioningSource = body.provisioningMode
-      ? body.provisioningMode
-      : getProvisioningSourceForEmail(normalizedEmail);
-
-    if (provisioningSource === 'corporate_precreated' && isPersonalEmailDomain(normalizedEmail)) {
-      return errorResponse(400, 'Personal email addresses must use external_local_account provisioning.');
-    }
-
-    if (actor.role === 'admin') {
-      const actorPermissionSet = new Set(actor.permissions);
-      const disallowedByActor = effectivePermissions.filter((permission) => !actorPermissionSet.has(permission));
-      if (disallowedByActor.length > 0) {
-        return errorResponse(403, `Admin can only grant permissions they already have: ${disallowedByActor.join(', ')}`);
+      : getDefaultPermissionsForRole(normalizedRole);
+    if (isAdminActor) {
+      const allowedPermissions = getCompanyAdminAllowedPermissions(actor.permissions);
+      const disallowedByRole = requestedPermissions.filter((permission) => !allowedPermissions.has(permission));
+      if (disallowedByRole.length > 0) {
+        return errorResponse(403, 'Admin can only grant user-role permissions.');
       }
     }
+    const effectivePermissions = isAdminActor
+      ? requestedPermissions.filter((permission) => getCompanyAdminAllowedPermissions(actor.permissions).has(permission))
+      : requestedPermissions;
+    const provisioningSource: ProvisioningSource = isAdminActor
+      ? 'external_local_account'
+      : (body.provisioningMode
+      ? body.provisioningMode
+      : getProvisioningSourceForEmail(normalizedEmail));
 
     if (actor.role !== 'supadmin') {
       const disallowed = effectivePermissions.filter((permission) => SUPADMIN_CONTROLLED_PERMISSIONS.has(permission));
@@ -123,6 +134,7 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
     let entraObjectId: string | null = null;
     let identityTenantId: string | null = null;
     let bootstrapCredentials: { email: string; temporaryPassword: string } | null = null;
+    let welcomeEmailStatus: { sent: boolean; error?: string } | null = null;
     const identityProviderType = getIdentityProviderTypeForProvisioningSource(provisioningSource);
 
     if (provisioningSource === 'external_local_account') {
@@ -197,7 +209,7 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
           displayName: body.name.trim(),
           email: normalizedEmail,
           entraObjectId,
-          role,
+          role: normalizedRole,
           isGuest,
           showOnlyCoreAdminPermissions,
           companyId: scopedCompanyId,
@@ -227,12 +239,42 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
       throw error;
     }
 
+    if (bootstrapCredentials) {
+      try {
+        context.info('admin/users create welcome email sending', {
+          sender: env.mailSender,
+          recipient: normalizedEmail,
+          userId,
+        });
+        await sendWelcomeCredentialsEmail({
+          email: normalizedEmail,
+          displayName: body.name.trim(),
+          temporaryPassword: bootstrapCredentials.temporaryPassword,
+        });
+        welcomeEmailStatus = { sent: true };
+        context.info('admin/users create welcome email sent', {
+          sender: env.mailSender,
+          recipient: normalizedEmail,
+          userId,
+        });
+      } catch (emailError) {
+        const message = emailError instanceof Error ? emailError.message : 'Welcome email could not be delivered.';
+        welcomeEmailStatus = { sent: false, error: message };
+        context.warn('admin/users create welcome email failed', {
+          sender: env.mailSender,
+          recipient: normalizedEmail,
+          userId,
+          error: message,
+        });
+      }
+    }
+
     return created({
       user: {
         id: userId,
         name: body.name.trim(),
         email: normalizedEmail,
-        role,
+        role: normalizedRole,
         isGuest,
         showOnlyCoreAdminPermissions,
         companyId: scopedCompanyId,
@@ -245,6 +287,7 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
         identityTenantId: identityTenantId || undefined,
       },
       bootstrapCredentials,
+      notifications: welcomeEmailStatus ? { welcomeEmail: welcomeEmailStatus } : undefined,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';

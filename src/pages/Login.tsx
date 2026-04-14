@@ -1,58 +1,36 @@
 import React, { useState } from 'react';
-import { Anchor, Loader2, LockKeyhole, Mail } from 'lucide-react';
+import { Loader2, LockKeyhole, Mail } from 'lucide-react';
 import {
   externalLocalLoginRequest,
   isExternalLocalAuthConfigured,
-  isWorkforceAuthConfigured,
-  workforceLoginRequest,
 } from '../auth/authConfig';
-import { externalMsalInstance, workforceMsalInstance } from '../auth/msalInstance';
-import { clearPendingHostedSignInProvider, setPendingHostedSignInProvider } from '../auth/providerSession';
+import { externalMsalInstance } from '../auth/msalInstance';
 import { useAuthStore } from '../store/authStore';
+import avsLogo from '../assets/avslogo.png';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
-  const [isMicrosoftLoading, setIsMicrosoftLoading] = useState(false);
   const [isLocalLoading, setIsLocalLoading] = useState(false);
   const [error, setError] = useState('');
   const { authStatus, authError, clearAuthFeedback } = useAuthStore();
   const isResolvingRedirect = authStatus === 'resolving';
 
-  const continueWithHostedSignIn = async (mode: 'microsoft' | 'local') => {
+  const continueWithHostedSignIn = async () => {
     setError('');
     clearAuthFeedback();
-    if (mode === 'microsoft') {
-      setIsMicrosoftLoading(true);
-    } else {
-      setIsLocalLoading(true);
-    }
+    setIsLocalLoading(true);
 
     try {
-      if (mode === 'local') {
-        if (!isExternalLocalAuthConfigured) {
-          throw new Error('Local account sign-in is not configured yet. Complete the External ID authority settings first.');
-        }
-        setPendingHostedSignInProvider('external_local');
-        await externalMsalInstance.loginRedirect({
-          ...externalLocalLoginRequest,
-          ...(email.trim() ? { loginHint: email.trim() } : {}),
-        });
-      } else {
-        if (!isWorkforceAuthConfigured) {
-          throw new Error('Continue with Microsoft is not configured yet. Complete the workforce Entra app settings first.');
-        }
-        setPendingHostedSignInProvider('microsoft_federated');
-        await workforceMsalInstance.loginRedirect({
-          ...workforceLoginRequest,
-          ...(email.trim() ? { loginHint: email.trim() } : {}),
-          prompt: 'select_account',
-        });
+      if (!isExternalLocalAuthConfigured) {
+        throw new Error('External ID sign-in is not configured yet. Complete the External ID authority settings first.');
       }
+      await externalMsalInstance.loginRedirect({
+        ...externalLocalLoginRequest,
+        ...(email.trim() ? { loginHint: email.trim() } : {}),
+      });
     } catch (err) {
-      clearPendingHostedSignInProvider();
       const message = err instanceof Error ? err.message : 'Entra authentication failed.';
       setError(message);
-      setIsMicrosoftLoading(false);
       setIsLocalLoading(false);
     }
   };
@@ -66,8 +44,8 @@ export const Login: React.FC = () => {
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl items-center justify-center px-4 py-8 md:px-8">
         <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900/70 p-8 shadow-2xl shadow-black/40 backdrop-blur-2xl md:p-10">
           <div className="mb-10 flex items-center gap-2">
-            <div className="rounded-md bg-gradient-to-tr from-emerald-500 to-cyan-500 p-1.5">
-              <Anchor className="h-4 w-4 text-white" strokeWidth={1.8} />
+            <div className="rounded-lg border border-white/10 bg-white/5 p-1">
+              <img src={avsLogo} alt="AVS Logo" className="h-8 w-8 rounded object-cover" />
             </div>
             <p className="font-display text-sm font-semibold tracking-[0.38em] text-slate-100">AVS HORIZON</p>
           </div>
@@ -106,7 +84,7 @@ export const Login: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => void continueWithHostedSignIn('local')}
+              onClick={() => void continueWithHostedSignIn()}
               disabled={isLocalLoading || isResolvingRedirect || !isExternalLocalAuthConfigured}
               className="flex w-full items-center justify-center gap-3 rounded-full bg-[#1f8f7b] py-3 text-sm font-semibold tracking-wide text-white transition-all duration-200 hover:bg-[#197666] disabled:opacity-70"
             >
@@ -115,29 +93,9 @@ export const Login: React.FC = () => {
             </button>
             {!isExternalLocalAuthConfigured && (
               <p className="text-center text-[11px] text-slate-500">
-                Local account sign-in will be available after External ID authority settings are completed.
+                External ID sign-in will be available after authority settings are completed.
               </p>
             )}
-
-            <div className="relative py-1">
-              <div className="h-px bg-slate-700" />
-              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-900 px-2 text-[11px] text-slate-500">or</span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void continueWithHostedSignIn('microsoft')}
-              disabled={isMicrosoftLoading || isResolvingRedirect || !isWorkforceAuthConfigured}
-              className="flex w-full items-center justify-center gap-3 rounded-full border border-slate-600 bg-slate-800/70 py-2.5 text-sm font-medium text-slate-100 transition-colors hover:bg-slate-800 disabled:opacity-70"
-            >
-              <span className="grid grid-cols-2 gap-[2px]">
-                <span className="h-2 w-2 bg-[#f25022]" />
-                <span className="h-2 w-2 bg-[#7fba00]" />
-                <span className="h-2 w-2 bg-[#00a4ef]" />
-                <span className="h-2 w-2 bg-[#ffb900]" />
-              </span>
-              {isMicrosoftLoading ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} /> : 'Continue with Microsoft'}
-            </button>
           </div>
         </div>
       </div>

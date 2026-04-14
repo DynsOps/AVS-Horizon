@@ -40,20 +40,20 @@ export async function getSystemHealth(request: HttpRequest, context: InvocationC
     const logs: HealthLog[] = [];
     const services: HealthService[] = [];
 
-    const authStatus: HealthStatus = env.azureClientId && env.azureAudience ? 'ok' : 'warn';
+    const authStatus: HealthStatus = env.externalIdAudience && env.externalIdJwksUri ? 'ok' : 'warn';
     services.push({
       key: 'auth-service',
-      label: 'Auth Service',
+      label: 'External ID Auth',
       status: authStatus,
-      details: authStatus === 'ok' ? 'Microsoft auth settings configured.' : 'Microsoft auth env vars incomplete.',
+      details: authStatus === 'ok' ? 'External ID auth settings configured.' : 'External ID auth env vars incomplete.',
       latencyMs: null,
     });
     logs.push({
       id: `log-auth-${Date.now()}`,
       timestamp: nowIso(),
       level: levelFromStatus(authStatus),
-      message: authStatus === 'ok' ? 'Auth configuration loaded.' : 'Auth configuration has missing values.',
-      service: 'Auth Service',
+      message: authStatus === 'ok' ? 'External ID auth configuration loaded.' : 'External ID auth configuration has missing values.',
+      service: 'External ID Auth',
     });
 
     const dbStart = Date.now();

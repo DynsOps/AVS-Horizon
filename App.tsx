@@ -16,7 +16,6 @@ import { OperationalList } from './src/pages/customer/OperationalList';
 import { InvoiceList } from './src/pages/customer/InvoiceList';
 import { PortFeeList } from './src/pages/customer/PortFeeList';
 import { HistoricalOrders } from './src/pages/customer/HistoricalOrders';
-import { ContractedConsumptionReport } from './src/pages/customer/ContractedConsumptionReport';
 import { ContractedAnalysisReport } from './src/pages/customer/ContractedAnalysisReport';
 import { CustomerOrders } from './src/pages/customer/Orders';
 import { Fleet } from './src/pages/customer/Fleet';
@@ -106,7 +105,7 @@ const App: React.FC = () => {
             <Route path="invoices" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:invoices']}><InvoiceList /></ProtectedRoute>} />
             <Route path="port-fees" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:port-fees']}><PortFeeList /></ProtectedRoute>} />
             <Route path="historical-orders" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:orders']}><HistoricalOrders /></ProtectedRoute>} />
-            <Route path="reports/consumption" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:reports']}><ContractedConsumptionReport /></ProtectedRoute>} />
+            
             <Route path="reports/analysis" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:reports']}><ContractedAnalysisReport /></ProtectedRoute>} />
             <Route path="analytics" element={<Navigate to="/customer/reports/analysis" replace />} />
             <Route path="fleet" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:fleet']}><Fleet /></ProtectedRoute>} />

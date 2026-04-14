@@ -1,15 +1,15 @@
 
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { clearHostedSignInProviderState, getCurrentHostedSignInProvider } from '../auth/providerSession';
-import { externalMsalInstance, workforceMsalInstance } from '../auth/msalInstance';
+import { externalMsalInstance } from '../auth/msalInstance';
 import { useAuthStore } from '../store/authStore';
 import { Permission } from '../types';
 import { api } from '../services/api';
 import { isPendingAccessUser } from '../utils/rbac';
+import avsLogo from '../assets/avslogo.png';
 import { 
   LayoutDashboard, Ship, Package, ClipboardList, ReceiptText, Landmark,
-  Truck, ShieldAlert, Activity, Settings, LogOut, Anchor, Users, UserCircle, FilePlus2, BarChart3, Building2, ChevronDown
+  Truck, ShieldAlert, Activity, Settings, LogOut, Users, UserCircle, FilePlus2, BarChart3, Building2, ChevronDown
 } from 'lucide-react';
 
 const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: string }) => (
@@ -46,10 +46,9 @@ export const Sidebar: React.FC = () => {
   const isPendingUser = Boolean(user && isPendingAccessUser(user));
   const hasAnalysisReportAccess = Boolean(
     role === 'supadmin' ||
-    user?.permissions.some((permission) => permission.startsWith('view:analysis-report:'))
+    user?.permissions.some((permission) => permission.startsWith('view:reports'))
   );
-  const hasHostedSession =
-    externalMsalInstance.getAllAccounts().length > 0 || workforceMsalInstance.getAllAccounts().length > 0;
+  const hasHostedSession = externalMsalInstance.getAllAccounts().length > 0;
   const [supadminOperationsOpen, setSupadminOperationsOpen] = useState(true);
   const [supadminSupplierOpen, setSupadminSupplierOpen] = useState(true);
 
@@ -62,12 +61,9 @@ export const Sidebar: React.FC = () => {
     }
 
     logout();
-    const provider = getCurrentHostedSignInProvider();
-    clearHostedSignInProviderState();
 
     if (hasHostedSession) {
-      const instance = provider === 'microsoft_federated' ? workforceMsalInstance : externalMsalInstance;
-      await instance.logoutRedirect({
+      await externalMsalInstance.logoutRedirect({
         postLogoutRedirectUri: `${window.location.origin}/#/login`,
       });
       return;
@@ -89,12 +85,12 @@ export const Sidebar: React.FC = () => {
       </div>
 
       <div className="p-6 flex items-center space-x-3 border-b border-slate-800/50 relative z-10 backdrop-blur-sm">
-        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-xl shadow-lg shadow-blue-500/20">
-          <Anchor size={20} className="text-white" strokeWidth={1.5} />
+        <div className="bg-white/5 p-1.5 rounded-xl border border-slate-700/60 shadow-lg shadow-black/20">
+          <img src={avsLogo} alt="AVS Logo" className="h-9 w-9 rounded-lg object-cover" />
         </div>
         <div>
           <h1 className="text-lg font-bold tracking-tight text-white">AVS Horizon</h1>
-          <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Logistics Portal</p>
+          
         </div>
       </div>
 
@@ -113,7 +109,7 @@ export const Sidebar: React.FC = () => {
             {hasPermission('view:finance') && <NavItem to="/customer/finance" icon={Landmark} label="Finance" />}
             {hasPermission('view:sustainability') && <NavItem to="/customer/sustainability" icon={BarChart3} label="Sustainability" />}
             {hasPermission('view:business') && <NavItem to="/customer/business" icon={Settings} label="Business" />}
-            {hasPermission('view:reports') && <NavItem to="/customer/reports/consumption" icon={BarChart3} label="Consumption Report" />}
+            
             {hasAnalysisReportAccess && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
             {hasPermission('submit:rfq') && <NavItem to="/guest/rfq" icon={FilePlus2} label="Guest RFQ" />}
 
@@ -143,7 +139,7 @@ export const Sidebar: React.FC = () => {
             {hasPermission('view:finance') && <NavItem to="/customer/finance" icon={Landmark} label="Finance" />}
             {hasPermission('view:sustainability') && <NavItem to="/customer/sustainability" icon={BarChart3} label="Sustainability" />}
             {hasPermission('view:business') && <NavItem to="/customer/business" icon={Settings} label="Business" />}
-            {hasPermission('view:reports') && <NavItem to="/customer/reports/consumption" icon={BarChart3} label="Consumption Report" />}
+           
             {hasAnalysisReportAccess && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
             {hasPermission('view:supplier') && (
               <>
@@ -160,7 +156,6 @@ export const Sidebar: React.FC = () => {
             {hasPermission('manage:users') && <NavItem to="/admin/users" icon={Users} label="User Management" />}
             {hasPermission('system:settings') && <NavItem to="/admin/security" icon={ShieldAlert} label="Security Logs" />}
             {hasPermission('manage:companies') && <NavItem to="/admin/entities" icon={Building2} label="Entity Management" />}
-            <NavItem to="/admin/reports" icon={BarChart3} label="Report Management" />
             {hasPermission('system:settings') && <NavItem to="/admin/feature-flags" icon={Settings} label="Feature Flags" />}
           </>
         )}
@@ -195,7 +190,7 @@ export const Sidebar: React.FC = () => {
                 {hasPermission('view:finance') && <NavItem to="/customer/finance" icon={Landmark} label="Finance" />}
                 {hasPermission('view:sustainability') && <NavItem to="/customer/sustainability" icon={BarChart3} label="Sustainability" />}
                 {hasPermission('view:business') && <NavItem to="/customer/business" icon={Settings} label="Business" />}
-                {hasPermission('view:reports') && <NavItem to="/customer/reports/consumption" icon={BarChart3} label="Consumption Report" />}
+               
                 {hasAnalysisReportAccess && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
                 {hasPermission('submit:rfq') && <NavItem to="/guest/rfq" icon={FilePlus2} label="Guest RFQ" />}
               </>
