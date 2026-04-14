@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
 import { api } from '../../services/api';
 import { BootstrapCredentials, Company } from '../../types';
@@ -15,6 +16,7 @@ type CreateEntityPayload = Omit<Company, 'id'> & {
 export const EntityManagement: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [newAdminCredentials, setNewAdminCredentials] = useState<BootstrapCredentials | null>(null);
   const [showNewAdminCredentialPassword, setShowNewAdminCredentialPassword] = useState(false);
   const { addToast, openDrawer, closeDrawer, openConfirmDialog } = useUIStore();
@@ -103,13 +105,17 @@ export const EntityManagement: React.FC = () => {
   };
 
   const deleteEntity = async (company: Company) => {
+    setPendingDeleteId(company.id);
     const confirmed = await openConfirmDialog({
       title: 'Delete Entity',
       message: `${company.name} entity will be deleted. Continue?`,
       confirmLabel: 'Delete',
       tone: 'danger',
     });
-    if (!confirmed) return;
+    if (!confirmed) {
+      setPendingDeleteId(null);
+      return;
+    }
     try {
       await api.admin.deleteCompany(company.id);
       addToast({ title: 'Entity Deleted', message: `${company.name} removed.`, type: 'info' });
@@ -117,6 +123,8 @@ export const EntityManagement: React.FC = () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Entity delete failed.';
       addToast({ title: 'Error', message, type: 'error' });
+    } finally {
+      setPendingDeleteId(null);
     }
   };
 
@@ -125,12 +133,12 @@ export const EntityManagement: React.FC = () => {
       <EntityForm
         company={company}
         onCancel={closeDrawer}
-        onSave={(payload) => {
+        onSave={async (payload) => {
           if (company) {
-            void editEntity(company, payload);
-          } else {
-            void createEntity(payload as CreateEntityPayload);
+            await editEntity(company, payload);
+            return;
           }
+          await createEntity(payload as CreateEntityPayload);
         }}
       />
     );
@@ -244,9 +252,15 @@ export const EntityManagement: React.FC = () => {
                   <button onClick={() => openEntityDrawer(company)} className="text-blue-500 hover:text-blue-600">
                     <Edit2 size={15} />
                   </button>
-                  <button onClick={() => { void deleteEntity(company); }} className="text-red-500 hover:text-red-600">
+                  <AsyncActionButton
+                    onClick={() => { void deleteEntity(company); }}
+                    isPending={pendingDeleteId === company.id}
+                    loadingMode="spinner-only"
+                    className="text-red-500 hover:text-red-600"
+                    title="Delete entity"
+                  >
                     <Trash2 size={15} />
-                  </button>
+                  </AsyncActionButton>
                 </td>
               </tr>
             ))}
@@ -266,7 +280,7 @@ export const EntityManagement: React.FC = () => {
 
 type EntityFormProps = {
   company?: Company;
-  onSave: (data: Partial<Company> | CreateEntityPayload) => void;
+  onSave: (data: Partial<Company> | CreateEntityPayload) => Promise<void>;
   onCancel: () => void;
 };
 
@@ -280,9 +294,10 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
   const [createCompanyAdmin, setCreateCompanyAdmin] = useState(!company);
   const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { addToast } = useUIStore();
 
-  const submit = () => {
+  const submit = async () => {
     const normalizedEmail = contactEmail.trim().toLowerCase();
     if (!name.trim()) {
       addToast({ title: 'Validation Error', message: 'Entity name is required.', type: 'error' });
@@ -328,7 +343,12 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
       }
     }
 
-    onSave(payload);
+    setIsSubmitting(true);
+    try {
+      await onSave(payload);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -475,12 +495,13 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
         >
           Cancel
         </button>
-        <button
+        <AsyncActionButton
           onClick={submit}
+          isPending={isSubmitting}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
         >
           {company ? 'Save Changes' : 'Create Entity'}
-        </button>
+        </AsyncActionButton>
       </div>
     </div>
   );

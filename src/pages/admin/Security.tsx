@@ -1,20 +1,32 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/api';
 import { LogEntry } from '../../types';
+import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
+import { useUIStore } from '../../store/uiStore';
 import { ShieldAlert, RefreshCw, Search } from 'lucide-react';
 
 export const Security: React.FC = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { addToast } = useUIStore();
 
   useEffect(() => {
     void loadLogs();
   }, []);
 
   const loadLogs = async () => {
-    const entries = await api.admin.getSystemLogs();
-    setLogs(entries);
+    setIsRefreshing(true);
+    try {
+      const entries = await api.admin.getSystemLogs();
+      setLogs(entries);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load security logs.';
+      addToast({ title: 'Error', message, type: 'error' });
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const filteredLogs = useMemo(() => {
@@ -49,13 +61,14 @@ export const Security: React.FC = () => {
           </div>
         </div>
 
-        <button
+        <AsyncActionButton
           onClick={() => void loadLogs()}
+          isPending={isRefreshing}
           className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
         >
           <RefreshCw size={14} />
           Refresh
-        </button>
+        </AsyncActionButton>
       </div>
 
       <Card className="overflow-hidden" noPadding>

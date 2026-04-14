@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
 import { AnalysisReport } from '../../types';
 import { api } from '../../services/api';
@@ -19,6 +20,7 @@ export const ReportManagement: React.FC = () => {
   const [datasetId, setDatasetId] = useState('');
   const [defaultRolesInput, setDefaultRolesInput] = useState('Customer');
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const { addToast, openConfirmDialog } = useUIStore();
 
   const parsePowerBiEmbedUrl = (rawUrl: string): { workspaceId?: string; reportId?: string } => {
@@ -163,13 +165,17 @@ export const ReportManagement: React.FC = () => {
   };
 
   const deleteReport = async (report: AnalysisReport) => {
+    setPendingDeleteId(report.id);
     const confirmed = await openConfirmDialog({
       title: 'Delete Report',
       message: `Delete "${report.name}" report? This will remove its permission from users.`,
       confirmLabel: 'Delete',
       tone: 'danger',
     });
-    if (!confirmed) return;
+    if (!confirmed) {
+      setPendingDeleteId(null);
+      return;
+    }
 
     try {
       await api.admin.deleteAnalysisReport(report.id);
@@ -178,6 +184,8 @@ export const ReportManagement: React.FC = () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to delete report.';
       addToast({ title: 'Error', message, type: 'error' });
+    } finally {
+      setPendingDeleteId(null);
     }
   };
 
@@ -216,13 +224,15 @@ export const ReportManagement: React.FC = () => {
                 >
                   <Edit2 size={15} />
                 </button>
-                <button
+                <AsyncActionButton
                   onClick={() => void deleteReport(report)}
+                  isPending={pendingDeleteId === report.id}
+                  loadingMode="spinner-only"
                   className="rounded p-1 text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20"
                   title="Delete report"
                 >
                   <Trash2 size={15} />
-                </button>
+                </AsyncActionButton>
               </div>
             </div>
           ))}
@@ -382,14 +392,14 @@ export const ReportManagement: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <AsyncActionButton
                 onClick={() => void (modalMode === 'edit' ? updateReport() : createReport())}
-                disabled={isSubmitting}
+                isPending={isSubmitting}
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
               >
                 <Plus size={14} />
-                {modalMode === 'edit' ? (isSubmitting ? 'Saving...' : 'Save Changes') : (isSubmitting ? 'Adding...' : 'Add Report')}
-              </button>
+                {modalMode === 'edit' ? 'Save Changes' : 'Add Report'}
+              </AsyncActionButton>
             </div>
           </div>
         </div>,

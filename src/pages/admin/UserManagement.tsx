@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { User, Permission, UserRole, Company, AnalysisReport, ProvisioningSource, BootstrapCredentials } from '../../types';
+import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
@@ -51,6 +52,7 @@ export const UserManagement: React.FC = () => {
     const [newUserCredentials, setNewUserCredentials] = useState<BootstrapCredentials | null>(null);
     const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
     const [showNewCredentialPassword, setShowNewCredentialPassword] = useState(false);
+    const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
     const { user: actor } = useAuthStore();
     const isSupAdminActor = actor?.role === 'supadmin';
     const isAdminActor = actor?.role === 'admin';
@@ -89,16 +91,27 @@ export const UserManagement: React.FC = () => {
             });
             return;
         }
+        setPendingDeleteId(id);
         const confirmed = await openConfirmDialog({
             title: 'Delete User',
             message: 'Are you sure you want to delete this user?',
             confirmLabel: 'Delete',
             tone: 'danger',
         });
-        if (!confirmed) return;
-        await api.admin.deleteUser(id);
-        await loadData();
-        addToast({ title: 'User Deleted', message: 'User removed successfully.', type: 'info' });
+        if (!confirmed) {
+            setPendingDeleteId(null);
+            return;
+        }
+        try {
+            await api.admin.deleteUser(id);
+            await loadData();
+            addToast({ title: 'User Deleted', message: 'User removed successfully.', type: 'info' });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to delete user.';
+            addToast({ title: 'Error', message, type: 'error' });
+        } finally {
+            setPendingDeleteId(null);
+        }
     };
 
     const handleSaveUser = async (userData: Partial<User>, isNew: boolean) => {
@@ -224,7 +237,7 @@ export const UserManagement: React.FC = () => {
                 actorPermissions={actor?.permissions || []}
                 availablePermissions={allPermissions}
                 analysisReports={analysisReports}
-                onSave={(data) => handleSaveUser(data, !user)}
+                onSave={async (data) => handleSaveUser(data, !user)}
                 onCancel={closeDrawer}
             />
         );
@@ -403,14 +416,16 @@ export const UserManagement: React.FC = () => {
                                     >
                                         <Edit2 size={16} />
                                     </button>
-                                    <button
+                                    <AsyncActionButton
                                         onClick={() => handleDelete(user.id)}
+                                        isPending={pendingDeleteId === user.id}
+                                        loadingMode="spinner-only"
                                         className="text-red-500 hover:text-red-600 dark:hover:text-red-400 disabled:text-slate-300 disabled:cursor-not-allowed"
                                         disabled={!canManageTargetUser(user)}
                                         title={!canManageTargetUser(user) ? 'Only supadmin can delete supadmin users' : 'Delete user'}
                                     >
                                         <Trash2 size={16} />
-                                    </button>
+                                    </AsyncActionButton>
                                 </td>
                             </tr>
                         ))}
@@ -445,7 +460,7 @@ const UserForm = ({
     actorPermissions: Permission[],
     availablePermissions: Permission[],
     analysisReports: AnalysisReport[],
-    onSave: (data: Partial<User>) => void,
+    onSave: (data: Partial<User>) => Promise<void>,
     onCancel: () => void
 }) => {
     const isCompanyAdminManageablePermission = (permission: Permission): boolean => {
@@ -497,6 +512,7 @@ const UserForm = ({
         permissions: getInitialPermissions(user)
     });
     const [showOnlyAdminCorePermissions, setShowOnlyAdminCorePermissions] = useState<boolean>(inferShowOnlyAdminCore(user));
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         setFormData({
@@ -750,8 +766,8 @@ const UserForm = ({
 
             <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-800">
                 <button onClick={onCancel} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">Cancel</button>
-                <button
-                    onClick={() => {
+                <AsyncActionButton
+                    onClick={async () => {
                         const nextData: Partial<User> = { ...formData };
                         nextData.showOnlyCoreAdminPermissions = !isCompanyAdminActor && formData.role === 'admin' ? showOnlyAdminCorePermissions : false;
                         if (isCompanyAdminActor) {
@@ -770,12 +786,18 @@ const UserForm = ({
                         } else if (showOnlyAdminCorePermissions && formData.role === 'admin') {
                             nextData.permissions = (formData.permissions || []).filter((permission) => ADMIN_CORE_PERMISSIONS.includes(permission));
                         }
-                        onSave(nextData);
+                        setIsSubmitting(true);
+                        try {
+                            await onSave(nextData);
+                        } finally {
+                            setIsSubmitting(false);
+                        }
                     }}
+                    isPending={isSubmitting}
                     className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 shadow-md"
                 >
                     Save User
-                </button>
+                </AsyncActionButton>
             </div>
         </div>
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
@@ -88,14 +89,14 @@ export const SupportTickets: React.FC = () => {
             rows={4}
             className="w-full px-3 py-2 rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
           />
-          <button
+          <AsyncActionButton
             onClick={() => void submitTicket()}
-            disabled={isSubmitting}
+            isPending={isSubmitting}
             className="inline-flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-70"
           >
             <Send size={14} />
-            {isSubmitting ? 'Submitting...' : 'Submit Ticket'}
-          </button>
+            Submit Ticket
+          </AsyncActionButton>
         </div>
       </Card>
 

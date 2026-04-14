@@ -2,7 +2,9 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { externalMsalInstance } from '../auth/msalInstance';
+import { AsyncActionButton } from './ui/AsyncActionButton';
 import { useAuthStore } from '../store/authStore';
+import { useUIStore } from '../store/uiStore';
 import { Permission } from '../types';
 import { api } from '../services/api';
 import { isPendingAccessUser } from '../utils/rbac';
@@ -40,6 +42,7 @@ const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: stri
 
 export const Sidebar: React.FC = () => {
   const { user, logout } = useAuthStore();
+  const { addToast } = useUIStore();
   const navigate = useNavigate();
   const role = user?.role;
   const hasPermission = (permission: Permission) => Boolean(user?.permissions.includes(permission));
@@ -51,25 +54,34 @@ export const Sidebar: React.FC = () => {
   const hasHostedSession = externalMsalInstance.getAllAccounts().length > 0;
   const [supadminOperationsOpen, setSupadminOperationsOpen] = useState(true);
   const [supadminSupplierOpen, setSupadminSupplierOpen] = useState(true);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const handleSignOut = async () => {
-    const userEmail = user?.email;
-    if (userEmail) {
-      await api.auth.clearHostedToken(userEmail);
-    } else {
-      await api.auth.clearHostedToken();
+    setIsSigningOut(true);
+    try {
+      const userEmail = user?.email;
+      if (userEmail) {
+        await api.auth.clearHostedToken(userEmail);
+      } else {
+        await api.auth.clearHostedToken();
+      }
+
+      logout();
+
+      if (hasHostedSession) {
+        await externalMsalInstance.logoutRedirect({
+          postLogoutRedirectUri: `${window.location.origin}/#/login`,
+        });
+        return;
+      }
+
+      navigate('/login', { replace: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Sign out failed.';
+      addToast({ title: 'Error', message, type: 'error' });
+    } finally {
+      setIsSigningOut(false);
     }
-
-    logout();
-
-    if (hasHostedSession) {
-      await externalMsalInstance.logoutRedirect({
-        postLogoutRedirectUri: `${window.location.origin}/#/login`,
-      });
-      return;
-    }
-
-    navigate('/login', { replace: true });
   };
 
   return (
@@ -226,15 +238,16 @@ export const Sidebar: React.FC = () => {
       </nav>
 
       <div className="p-4 border-t border-slate-800/50 relative z-10 bg-slate-900/50 backdrop-blur-md">
-        <button 
+        <AsyncActionButton 
           onClick={() => { void handleSignOut(); }}
+          isPending={isSigningOut}
           className="group w-full flex items-center justify-center space-x-2 px-4 py-2.5 
                      bg-slate-800/50 hover:bg-red-500/10 border border-slate-700 hover:border-red-500/50
                      rounded-lg transition-all duration-200 text-sm text-slate-300 hover:text-red-400"
         >
           <LogOut size={16} strokeWidth={1.5} />
           <span>Sign Out</span>
-        </button>
+        </AsyncActionButton>
       </div>
     </div>
   );
