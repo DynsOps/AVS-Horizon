@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
@@ -110,14 +111,14 @@ export const GuestRFQPage: React.FC = () => {
             placeholder="Requested items / scope..."
             className="w-full px-3 py-2 rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
           />
-          <button
+          <AsyncActionButton
             onClick={() => void generateSuggestions()}
-            disabled={isGenerating}
+            isPending={isGenerating}
             className="inline-flex items-center gap-2 rounded border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-sm font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 disabled:opacity-70"
           >
             <Sparkles size={14} />
-            {isGenerating ? 'Generating...' : 'Generate Suggested Products'}
-          </button>
+            Generate Suggested Products
+          </AsyncActionButton>
 
           <div className="space-y-2 rounded border border-gray-200 dark:border-slate-700 p-3">
             <div className="flex items-center justify-between">
@@ -202,13 +203,13 @@ export const GuestRFQPage: React.FC = () => {
             ))}
           </div>
 
-          <button
+          <AsyncActionButton
             onClick={() => void submitRFQ()}
-            disabled={isSubmitting}
+            isPending={isSubmitting}
             className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-70"
           >
-            {isSubmitting ? 'Submitting...' : 'Submit RFQ'}
-          </button>
+            Submit RFQ
+          </AsyncActionButton>
         </div>
       </Card>
 

@@ -3,8 +3,9 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
+import { AsyncActionButton } from '../components/ui/AsyncActionButton';
 import { useUIStore } from '../store/uiStore';
-import { User as UserIcon, Mail, Shield, Building, Save, Loader2 } from 'lucide-react';
+import { User as UserIcon, Mail, Shield, Building, Save } from 'lucide-react';
 
 export const Profile: React.FC = () => {
     const { user, login } = useAuthStore();
@@ -125,14 +126,15 @@ export const Profile: React.FC = () => {
                                     >
                                         Cancel
                                     </button>
-                                    <button 
+                                    <AsyncActionButton 
                                         onClick={handleSave}
-                                        disabled={isLoading || !hasProfileChanges}
+                                        isPending={isLoading}
+                                        disabled={!hasProfileChanges}
                                         className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-blue-500/20 transition-all disabled:cursor-not-allowed"
                                     >
-                                        {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                        <Save size={16} />
                                         <span>Save Changes</span>
-                                    </button>
+                                    </AsyncActionButton>
                                 </div>
                             ) : (
                                 <button 

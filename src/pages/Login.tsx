@@ -5,6 +5,7 @@ import {
   isExternalLocalAuthConfigured,
 } from '../auth/authConfig';
 import { externalMsalInstance } from '../auth/msalInstance';
+import { AsyncActionButton } from '../components/ui/AsyncActionButton';
 import { useAuthStore } from '../store/authStore';
 import avsLogo from '../assets/avslogo.png';
 
@@ -82,15 +83,16 @@ export const Login: React.FC = () => {
             {error && <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-center text-xs font-medium text-red-300">{error}</div>}
             {authError && <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-xs font-medium text-amber-200">{authError}</div>}
 
-            <button
+            <AsyncActionButton
               type="button"
               onClick={() => void continueWithHostedSignIn()}
-              disabled={isLocalLoading || isResolvingRedirect || !isExternalLocalAuthConfigured}
+              isPending={isLocalLoading}
+              disabled={isResolvingRedirect || !isExternalLocalAuthConfigured}
               className="flex w-full items-center justify-center gap-3 rounded-full bg-[#1f8f7b] py-3 text-sm font-semibold tracking-wide text-white transition-all duration-200 hover:bg-[#197666] disabled:opacity-70"
             >
-              {isLocalLoading ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} /> : <LockKeyhole className="h-4 w-4" strokeWidth={1.8} />}
+              <LockKeyhole className="h-4 w-4" strokeWidth={1.8} />
               Sign in
-            </button>
+            </AsyncActionButton>
             {!isExternalLocalAuthConfigured && (
               <p className="text-center text-[11px] text-slate-500">
                 External ID sign-in will be available after authority settings are completed.
