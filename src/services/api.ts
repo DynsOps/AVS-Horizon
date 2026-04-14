@@ -1,5 +1,5 @@
 
-import { KPI, Order, Shipment, Invoice, Vessel, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport, BootstrapCredentials } from '../types';
+import { KPI, Order, Shipment, Invoice, Vessel, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport, BootstrapCredentials, UserCreateResponse } from '../types';
 import { getDefaultPermissionsForRole } from '../utils/rbac';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
@@ -41,7 +41,7 @@ const callFunctionApi = async <T = any>(path: string, init?: RequestInit): Promi
   const devUserEmail = useAuthStore.getState().user?.email || '';
   const canUseDevBypass = DEV_BYPASS_AUTH && Boolean(devUserEmail);
   if (!token && !canUseDevBypass) {
-    throw new Error('Microsoft access token is missing. Please sign in with Microsoft again.');
+    throw new Error('Hosted sign-in token is missing. Please sign in again.');
   }
 
   const normalizedPath = path.startsWith('/') ? path.slice(1) : path;
@@ -103,7 +103,7 @@ type LocalDbSnapshot = {
   companies: Company[];
   users: User[];
   passwords: Record<string, string>;
-  microsoftTokens: MicrosoftTokenRecord[];
+  hostedIdentityTokens: HostedIdentityTokenRecord[];
   supportTickets: SupportTicket[];
   guestRFQs: GuestRFQ[];
   analysisReports: AnalysisReport[];
@@ -114,13 +114,13 @@ type LocalDbSnapshot = {
   logs: LogEntry[];
 };
 
-type MicrosoftTokenRecord = {
+type HostedIdentityTokenRecord = {
   userEmail: string;
   bearerToken: string;
   scope: string;
   expiresAt?: string;
   updatedAt: string;
-  provider?: 'microsoft_federated' | 'external_local';
+  provider?: 'external_local';
 };
 
 type SystemHealthService = {
@@ -254,7 +254,7 @@ const mockPasswords: Record<string, string> = {
   u6: 'AVS-NORDIC-USER-INIT',
   u7: 'AVS-NORDIC-ADMIN-INIT',
 };
-let mockMicrosoftTokens: MicrosoftTokenRecord[] = [];
+let mockHostedIdentityTokens: HostedIdentityTokenRecord[] = [];
 
 let mockSupportTickets: SupportTicket[] = [
   {
@@ -367,7 +367,7 @@ const makeSnapshot = (): LocalDbSnapshot => ({
   companies: [...mockCompanies],
   users: [...mockUsers],
   passwords: { ...mockPasswords },
-  microsoftTokens: [...mockMicrosoftTokens],
+  hostedIdentityTokens: [...mockHostedIdentityTokens],
   supportTickets: [...mockSupportTickets],
   guestRFQs: [...mockGuestRFQs],
   analysisReports: [...mockAnalysisReports],
@@ -393,7 +393,10 @@ const hydrateFromLocalDb = () => {
       Object.keys(mockPasswords).forEach((k) => delete mockPasswords[k]);
       Object.assign(mockPasswords, parsed.passwords);
     }
-    if (parsed.microsoftTokens) mockMicrosoftTokens = parsed.microsoftTokens;
+    if (parsed.hostedIdentityTokens) mockHostedIdentityTokens = parsed.hostedIdentityTokens;
+    else if ((parsed as Partial<{ microsoftTokens: HostedIdentityTokenRecord[] }>).microsoftTokens) {
+      mockHostedIdentityTokens = (parsed as Partial<{ microsoftTokens: HostedIdentityTokenRecord[] }>).microsoftTokens || [];
+    }
     if (parsed.supportTickets) mockSupportTickets = parsed.supportTickets;
     if (parsed.guestRFQs) mockGuestRFQs = parsed.guestRFQs;
     if (parsed.analysisReports) mockAnalysisReports = parsed.analysisReports;
@@ -467,11 +470,16 @@ const assertCanManageUser = (targetUser: User, action: 'update' | 'delete'): voi
     if ((targetUser.companyId || '') !== actor.companyId) {
       throw new Error('Admin can only manage users in their own company.');
     }
+    if (targetUser.role !== 'user' || hasCompanyAdminHiddenPermissions(targetUser.permissions)) {
+      throw new Error('Admin can only manage standard user accounts.');
+    }
   }
 };
 
 const BOOTSTRAP_SUPADMIN_EMAILS = ['dynamicsops14@avsglobalsupply.com'];
 const LOWEST_AUTO_PERMISSIONS: Permission[] = ['view:dashboard'];
+const COMPANY_ADMIN_BASE_PERMISSIONS: Permission[] = ['view:dashboard', 'view:reports', 'create:support-ticket'];
+const COMPANY_ADMIN_HIDDEN_PERMISSIONS: Permission[] = ['manage:users', 'manage:companies'];
 const SUPADMIN_CONTROLLED_PERMISSIONS: Permission[] = [
   'system:settings',
   'view:finance',
@@ -479,6 +487,36 @@ const SUPADMIN_CONTROLLED_PERMISSIONS: Permission[] = [
   'view:business',
   'manage:reports',
 ];
+
+const hasCompanyAdminHiddenPermissions = (permissions: Permission[] = []): boolean => {
+  return COMPANY_ADMIN_HIDDEN_PERMISSIONS.some((permission) => permissions.includes(permission));
+};
+
+const isBiReportPermission = (permission: Permission): boolean => permission.startsWith('view:analysis-report:');
+
+const getCompanyAdminManageablePermissions = (actorPermissions: Permission[] = []): Permission[] => {
+  const actorReportPermissions = actorPermissions.filter((permission): permission is Permission => isBiReportPermission(permission));
+  return [...COMPANY_ADMIN_BASE_PERMISSIONS, ...actorReportPermissions];
+};
+
+const getCompanyAdminAllowedPermissions = (actorPermissions: Permission[], permissions?: Permission[]): Permission[] => {
+  const requested = permissions?.length ? permissions : COMPANY_ADMIN_BASE_PERMISSIONS;
+  const allowedSet = new Set(getCompanyAdminManageablePermissions(actorPermissions));
+  return requested.filter((permission): permission is Permission => allowedSet.has(permission));
+};
+
+const normalizeAdminManagedUserInput = <T extends Pick<User, 'role' | 'companyId' | 'isGuest' | 'permissions' | 'provisioningSource'>>(
+  user: T,
+  actorCompanyId: string,
+  actorPermissions: Permission[],
+): T => ({
+  ...user,
+  role: 'user',
+  companyId: actorCompanyId,
+  isGuest: false,
+  permissions: getCompanyAdminAllowedPermissions(actorPermissions, user.permissions),
+  provisioningSource: user.provisioningSource || 'external_local_account',
+});
 
 const getEmailDomain = (email: string): string => {
   const parts = email.split('@');
@@ -514,8 +552,7 @@ const deriveAccessState = (params: {
   return params.permissions.length > 0 ? 'active' : 'pending';
 };
 
-const getDefaultProvisioningSource = (email: string): NonNullable<User['provisioningSource']> =>
-  isPersonalEmailDomain(email) ? 'external_local_account' : 'corporate_precreated';
+const getDefaultProvisioningSource = (_email: string): NonNullable<User['provisioningSource']> => 'external_local_account';
 
 const buildAutoProvisionedUser = (params: { email: string; role: UserRole; companyId?: string; permissions: Permission[] }): User => {
   const domain = getEmailDomain(params.email);
@@ -562,21 +599,21 @@ const createAutoAccessRequestTicket = (user: User): void => {
 
 const assertPermissionGrantPolicy = (targetPermissions: Permission[], existingPermissions: Permission[] = []): void => {
   const actorRole = getActorRole();
-  const actorPermissions = useAuthStore.getState().user?.permissions || [];
   if (actorRole === 'supadmin') return;
 
+  const existingSet = new Set(existingPermissions);
   if (actorRole === 'admin') {
-    const actorPermissionSet = new Set(actorPermissions);
-    const existingSet = new Set(existingPermissions);
-    const disallowedByActor = targetPermissions.filter(
-      (permission) => !actorPermissionSet.has(permission) && !existingSet.has(permission)
+    const actorPermissions = useAuthStore.getState().user?.permissions || [];
+    const allowedSet = new Set(getCompanyAdminManageablePermissions(actorPermissions));
+    const disallowedByRole = targetPermissions.filter(
+      (permission) => !allowedSet.has(permission) && !existingSet.has(permission)
     );
-    if (disallowedByActor.length > 0) {
-      throw new Error(`Admin can only grant permissions they already have: ${disallowedByActor.join(', ')}`);
+    if (disallowedByRole.length > 0) {
+      throw new Error('Admin can only grant user-role permissions.');
     }
+    return;
   }
 
-  const existingSet = new Set(existingPermissions);
   const disallowed = targetPermissions.filter(
     (permission) => SUPADMIN_CONTROLLED_PERMISSIONS.includes(permission) && !existingSet.has(permission)
   );
@@ -590,9 +627,9 @@ const assertPermissionGrantPolicy = (targetPermissions: Permission[], existingPe
 export const api = {
   auth: {
     checkAccess: async (email: string, bearerToken?: string): Promise<User> => {
-      return api.auth.loginWithMicrosoft(email, bearerToken);
+      return api.auth.loginWithHostedIdentity(email, bearerToken);
     },
-    loginWithMicrosoft: async (email: string, bearerToken?: string): Promise<User> => {
+    loginWithHostedIdentity: async (email: string, bearerToken?: string): Promise<User> => {
       const normalizedEmail = email.trim().toLowerCase();
       if (FUNCTION_API_BASE_URL) {
         const token = bearerToken || getStoredAuthBearerToken();
@@ -624,7 +661,7 @@ export const api = {
         return { ...backendUser };
       }
 
-      ensureMockAllowed('Microsoft login');
+      ensureMockAllowed('Hosted sign-in');
       await delay(800);
       throw new Error('No Function API configured.');
     },
@@ -633,11 +670,11 @@ export const api = {
       bearerToken: string;
       scope: string;
       expiresAt?: string;
-      provider?: 'microsoft_federated' | 'external_local';
+      provider?: 'external_local';
     }): Promise<void> => {
       await delay(100);
       const normalizedEmail = payload.userEmail.trim().toLowerCase();
-      const nextToken: MicrosoftTokenRecord = {
+      const nextToken: HostedIdentityTokenRecord = {
         userEmail: normalizedEmail,
         bearerToken: payload.bearerToken,
         scope: payload.scope,
@@ -645,29 +682,29 @@ export const api = {
         updatedAt: new Date().toISOString(),
         provider: payload.provider,
       };
-      const idx = mockMicrosoftTokens.findIndex((token) => token.userEmail === normalizedEmail);
+      const idx = mockHostedIdentityTokens.findIndex((token) => token.userEmail === normalizedEmail);
       if (idx === -1) {
-        mockMicrosoftTokens.push(nextToken);
+        mockHostedIdentityTokens.push(nextToken);
       } else {
-        mockMicrosoftTokens[idx] = nextToken;
+        mockHostedIdentityTokens[idx] = nextToken;
       }
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(AUTH_BEARER_TOKEN_KEY, payload.bearerToken);
       }
       persistLocalDb();
     },
-    getHostedToken: async (userEmail: string): Promise<MicrosoftTokenRecord | null> => {
+    getHostedToken: async (userEmail: string): Promise<HostedIdentityTokenRecord | null> => {
       await delay(50);
       const normalizedEmail = userEmail.trim().toLowerCase();
-      return mockMicrosoftTokens.find((token) => token.userEmail === normalizedEmail) || null;
+      return mockHostedIdentityTokens.find((token) => token.userEmail === normalizedEmail) || null;
     },
     clearHostedToken: async (userEmail?: string): Promise<void> => {
       await delay(50);
       if (userEmail) {
         const normalizedEmail = userEmail.trim().toLowerCase();
-        mockMicrosoftTokens = mockMicrosoftTokens.filter((token) => token.userEmail !== normalizedEmail);
+        mockHostedIdentityTokens = mockHostedIdentityTokens.filter((token) => token.userEmail !== normalizedEmail);
       } else {
-        mockMicrosoftTokens = [];
+        mockHostedIdentityTokens = [];
       }
       if (typeof window !== 'undefined') {
         window.localStorage.removeItem(AUTH_BEARER_TOKEN_KEY);
@@ -679,7 +716,7 @@ export const api = {
     },
     // Backward compatible alias (used by earlier screens)
     login: async (email: string): Promise<User> => {
-      return api.auth.loginWithMicrosoft(email);
+      return api.auth.loginWithHostedIdentity(email);
     },
     updateProfile: async (userId: string, data: Partial<User>): Promise<User> => {
         if (FUNCTION_API_BASE_URL) {
@@ -702,7 +739,7 @@ export const api = {
         const index = mockUsers.findIndex(u => u.id === userId);
         if (index !== -1) {
             if (data.email && data.email.toLowerCase() !== mockUsers[index].email.toLowerCase()) {
-              throw new Error('Email is managed by Microsoft identity and cannot be changed here.');
+              throw new Error('Email is managed by hosted identity and cannot be changed here.');
             }
             const { email, ...safeUpdates } = data;
             mockUsers[index] = { ...mockUsers[index], ...safeUpdates };
@@ -730,10 +767,15 @@ export const api = {
       }
       return [...mockUsers];
     },
-    createUser: async (user: Omit<User, 'id'>): Promise<{ user: User; bootstrapCredentials?: BootstrapCredentials | null }> => {
+    createUser: async (user: Omit<User, 'id'>): Promise<UserCreateResponse> => {
+        const actor = getActorUser();
+        const actorPermissions = actor?.permissions || [];
+        const normalizedUser = actor?.role === 'admin'
+          ? normalizeAdminManagedUserInput(user, actor.companyId || '', actorPermissions)
+          : user;
         if (shouldUseFunctionApi()) {
-            const { provisioningSource, ...rest } = user;
-            const payload = await callFunctionApi<{ user: User; bootstrapCredentials?: BootstrapCredentials | null }>('api/identity/users', {
+            const { provisioningSource, ...rest } = normalizedUser;
+            const payload = await callFunctionApi<UserCreateResponse>('api/identity/users', {
                 method: 'POST',
                 body: JSON.stringify({
                   ...rest,
@@ -748,30 +790,30 @@ export const api = {
             return payload;
         }
         await delay(500);
-        assertCanAssignRole(user.role);
-        const actor = getActorUser();
-        const sanitizedIsGuest = user.role === 'user' ? Boolean(user.isGuest) : false;
+        assertCanAssignRole(normalizedUser.role);
+        const sanitizedIsGuest = normalizedUser.role === 'user' ? Boolean(normalizedUser.isGuest) : false;
         if (actor?.role === 'admin') {
             if (!actor.companyId) throw new Error('Admin user is not linked to a company.');
-            if (user.role === 'user' && sanitizedIsGuest) throw new Error('Admin cannot create guest users.');
-            if (user.companyId && user.companyId !== actor.companyId) throw new Error('Admin can only create users for their own company.');
+            if (normalizedUser.role !== 'user') throw new Error('Admin can only manage standard user accounts.');
+            if (sanitizedIsGuest) throw new Error('Admin cannot create guest users.');
+            if (normalizedUser.companyId && normalizedUser.companyId !== actor.companyId) throw new Error('Admin can only create users for their own company.');
         }
-        const requestedPermissions = user.permissions?.length ? user.permissions : getDefaultPermissionsForRole(user.role);
+        const requestedPermissions = normalizedUser.permissions?.length ? normalizedUser.permissions : getDefaultPermissionsForRole(normalizedUser.role);
         assertPermissionGrantPolicy(requestedPermissions);
-        const emailExists = mockUsers.some(u => u.email.toLowerCase() === user.email.toLowerCase());
+        const emailExists = mockUsers.some(u => u.email.toLowerCase() === normalizedUser.email.toLowerCase());
         if (emailExists) {
             throw new Error('A user with this email already exists.');
         }
-        const hasCompanyAdminPermissions = Boolean(user.permissions?.includes('manage:users') || user.permissions?.includes('manage:companies'));
-        const scopedCompanyId = actor?.role === 'admin' ? (actor.companyId || '') : (user.companyId || '');
-        const companyRequired = (user.role === 'user' && !sanitizedIsGuest) || user.role === 'admin';
+        const hasCompanyAdminPermissions = Boolean(normalizedUser.permissions?.includes('manage:users') || normalizedUser.permissions?.includes('manage:companies'));
+        const scopedCompanyId = actor?.role === 'admin' ? (actor.companyId || '') : (normalizedUser.companyId || '');
+        const companyRequired = (normalizedUser.role === 'user' && !sanitizedIsGuest) || normalizedUser.role === 'admin';
         if (companyRequired && !scopedCompanyId) {
             throw new Error('Company is required for role "admin" and non-guest "user".');
         }
-        if (user.role === 'user' && hasCompanyAdminPermissions && (!scopedCompanyId || sanitizedIsGuest)) {
+        if (normalizedUser.role === 'user' && hasCompanyAdminPermissions && (!scopedCompanyId || sanitizedIsGuest)) {
             throw new Error('Company Admin users must be non-guest and linked to a company.');
         }
-        const provisioningSource = user.provisioningSource || getDefaultProvisioningSource(user.email);
+        const provisioningSource = normalizedUser.provisioningSource || getDefaultProvisioningSource(normalizedUser.email);
         const accessState = deriveAccessState({
           provisioningSource,
           permissions: requestedPermissions,
@@ -779,30 +821,43 @@ export const api = {
         });
         const bootstrapCredentials = provisioningSource === 'external_local_account'
           ? {
-              email: user.email,
+              email: normalizedUser.email,
               temporaryPassword: `AVS-${Math.random().toString(36).slice(2, 8).toUpperCase()}-${Date.now().toString().slice(-4)}`,
             }
           : null;
         const newUser: User = { 
-            ...user, 
+            ...normalizedUser, 
             id: `u-${Date.now()}`, 
             permissions: requestedPermissions,
             isGuest: sanitizedIsGuest,
-            companyId: user.role === 'supadmin' ? '' : scopedCompanyId,
+            companyId: normalizedUser.role === 'supadmin' ? '' : scopedCompanyId,
             provisioningSource,
             accessState,
-            identityProviderType: provisioningSource === 'external_local_account' ? 'external_local' : 'workforce_federated',
+            identityProviderType: 'external_local',
         };
         mockUsers.push(newUser);
         persistLocalDb();
         return { user: newUser, bootstrapCredentials };
     },
     updateUser: async (id: string, updates: Partial<User>): Promise<User> => {
+        const actor = getActorUser();
+        const actorPermissions = actor?.permissions || [];
         if (shouldUseFunctionApi()) {
-            const { provisioningSource, ...rest } = updates;
+            const currentUser = mockUsers.find((u) => u.id === id);
+            const normalizedUpdates = actor?.role === 'admin'
+              ? normalizeAdminManagedUserInput({
+                  role: updates.role || currentUser?.role || 'user',
+                  companyId: updates.companyId ?? currentUser?.companyId ?? actor.companyId ?? '',
+                  isGuest: typeof updates.isGuest === 'boolean' ? updates.isGuest : (currentUser?.isGuest || false),
+                  permissions: (updates.permissions as Permission[] | undefined) || currentUser?.permissions || getDefaultPermissionsForRole('user'),
+                  provisioningSource: updates.provisioningSource || currentUser?.provisioningSource || 'external_local_account',
+                }, actor.companyId || '', actorPermissions)
+              : updates;
+            const { provisioningSource, ...rest } = normalizedUpdates;
             await callFunctionApi<{ success: boolean }>(`api/identity/users/${id}`, {
                 method: 'PATCH',
                 body: JSON.stringify({
+                  ...updates,
                   ...rest,
                   ...(provisioningSource ? { provisioningMode: provisioningSource } : {}),
                 }),
@@ -824,16 +879,28 @@ export const api = {
             if (emailExists) throw new Error('A user with this email already exists.');
         }
 
-        const targetRole = updates.role || currentUser.role;
+        const normalizedUpdates = actor?.role === 'admin'
+            ? normalizeAdminManagedUserInput({
+                role: updates.role || currentUser.role,
+                companyId: updates.companyId ?? currentUser.companyId ?? actor.companyId ?? '',
+                isGuest: typeof updates.isGuest === 'boolean' ? updates.isGuest : (currentUser.isGuest || false),
+                permissions: (updates.permissions as Permission[] | undefined) || currentUser.permissions,
+                provisioningSource: updates.provisioningSource || currentUser.provisioningSource || 'external_local_account',
+              }, actor.companyId || '', actorPermissions)
+            : updates;
+
+        const targetRole = normalizedUpdates.role || currentUser.role;
         assertCanAssignRole(targetRole);
-        const actor = getActorUser();
         const targetIsGuest = targetRole === 'user'
-            ? (typeof updates.isGuest === 'boolean' ? updates.isGuest : currentUser.isGuest)
+            ? (typeof normalizedUpdates.isGuest === 'boolean' ? normalizedUpdates.isGuest : currentUser.isGuest)
             : false;
-        const targetCompanyId = updates.companyId ?? currentUser.companyId;
+        const targetCompanyId = normalizedUpdates.companyId ?? currentUser.companyId;
         if (actor?.role === 'admin') {
             if (!actor.companyId) throw new Error('Admin user is not linked to a company.');
-            if (targetRole === 'user' && targetIsGuest) throw new Error('Admin cannot assign guest scope.');
+            if (targetRole !== 'user' || hasCompanyAdminHiddenPermissions(currentUser.permissions)) {
+                throw new Error('Admin can only manage standard user accounts.');
+            }
+            if (targetIsGuest) throw new Error('Admin cannot assign guest scope.');
             if (targetCompanyId && targetCompanyId !== actor.companyId) throw new Error('Admin can only assign users to their own company.');
         }
         const scopedTargetCompanyId = actor?.role === 'admin' ? (actor.companyId || '') : (targetCompanyId || '');
@@ -842,9 +909,9 @@ export const api = {
         }
 
         const roleSafeCompanyId = targetRole === 'supadmin' ? '' : (targetRole === 'user' && targetIsGuest ? '' : scopedTargetCompanyId);
-        const nextPermissions = updates.permissions?.length
-            ? updates.permissions
-            : (updates.role && updates.role !== currentUser.role ? getDefaultPermissionsForRole(updates.role) : currentUser.permissions);
+        const nextPermissions = normalizedUpdates.permissions?.length
+            ? normalizedUpdates.permissions
+            : (normalizedUpdates.role && normalizedUpdates.role !== currentUser.role ? getDefaultPermissionsForRole(normalizedUpdates.role) : currentUser.permissions);
         assertPermissionGrantPolicy(nextPermissions, currentUser.permissions);
         const hasCompanyAdminPermissions = Boolean(nextPermissions?.includes('manage:users') || nextPermissions?.includes('manage:companies'));
         if (targetRole === 'user' && hasCompanyAdminPermissions && (!targetCompanyId || targetIsGuest)) {
@@ -852,7 +919,7 @@ export const api = {
         }
         mockUsers[index] = {
             ...currentUser,
-            ...updates,
+            ...normalizedUpdates,
             email: normalizedEmail || currentUser.email,
             companyId: roleSafeCompanyId,
             permissions: nextPermissions,
@@ -874,7 +941,7 @@ export const api = {
       if (!targetUser) throw new Error('User not found');
       assertCanManageUser(targetUser, 'delete');
       mockUsers = mockUsers.filter(u => u.id !== id);
-      mockMicrosoftTokens = mockMicrosoftTokens.filter((token) => token.userEmail !== targetUser.email.toLowerCase());
+      mockHostedIdentityTokens = mockHostedIdentityTokens.filter((token) => token.userEmail !== targetUser.email.toLowerCase());
       persistLocalDb();
     },
     resetUserPassword: async (): Promise<never> => {

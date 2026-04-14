@@ -16,7 +16,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 };
 
 export const getDefaultRouteForRole = (role: UserRole): string => {
-  if (role === 'user') return '/customer/dashboard';
+  if (role === 'user' || role === 'admin') return '/customer/dashboard';
   return '/admin/system-health';
 };
 

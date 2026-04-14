@@ -10,13 +10,7 @@ type CreateEntityPayload = Omit<Company, 'id'> & {
   createCompanyAdmin?: boolean;
   adminName?: string;
   adminEmail?: string;
-  adminProvisioningMode?: 'corporate_precreated' | 'external_local_account';
 };
-
-const PERSONAL_EMAIL_PATTERN = /@(gmail|googlemail|hotmail|outlook|live|msn|icloud|me|yahoo|yandex|protonmail|proton)\./i;
-
-const getDefaultProvisioningSource = (email?: string): 'corporate_precreated' | 'external_local_account' =>
-  email && PERSONAL_EMAIL_PATTERN.test(email) ? 'external_local_account' : 'corporate_precreated';
 
 export const EntityManagement: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -50,10 +44,7 @@ export const EntityManagement: React.FC = () => {
 
       if (createCompanyAdmin) {
         try {
-          const adminProvisioningMode =
-            payload.adminProvisioningMode ||
-            getDefaultProvisioningSource(adminEmail);
-          const { bootstrapCredentials } = await api.admin.createUser({
+          const { bootstrapCredentials, notifications } = await api.admin.createUser({
             name: (adminName || '').trim(),
             email: (adminEmail || '').trim().toLowerCase(),
             role: 'admin',
@@ -62,16 +53,17 @@ export const EntityManagement: React.FC = () => {
             status: 'Active',
             permissions: getDefaultPermissionsForRole('admin'),
             showOnlyCoreAdminPermissions: false,
-            provisioningSource: adminProvisioningMode,
+            provisioningSource: 'external_local_account',
           });
           setNewAdminCredentials(bootstrapCredentials || null);
           setShowNewAdminCredentialPassword(false);
+          const welcomeEmail = notifications?.welcomeEmail;
           addToast({
-            title: 'Company Admin Created',
-            message: adminProvisioningMode === 'external_local_account'
-              ? 'Company admin local account created. Share the one-time temporary password securely.'
-              : 'Company admin created. First sign-in will be completed through Entra.',
-            type: 'success',
+            title: welcomeEmail?.sent === false ? 'Company Admin Created, Email Failed' : 'Company Admin Created',
+            message: welcomeEmail?.sent === false
+              ? `Company admin was created, but the welcome email could not be sent: ${welcomeEmail.error || 'Unknown mail error.'}`
+              : 'Company admin local account created. Share the one-time temporary password securely.',
+            type: welcomeEmail?.sent === false ? 'info' : 'success',
           });
         } catch (adminError) {
           const adminMessage = adminError instanceof Error ? adminError.message : 'Company admin create failed.';
@@ -428,7 +420,7 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
             placeholder="arkas.com.tr, sub.arkas.com.tr"
           />
           <p className="text-[11px] text-slate-500">
-            Corporate users from these domains can be auto-created with pending access on first Microsoft sign-in.
+            Keep company domains here for portal classification and reporting; login now uses External ID only.
           </p>
         </label>
 

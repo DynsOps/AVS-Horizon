@@ -14,11 +14,9 @@ const BASE_PERMISSIONS: Permission[] = [
     'manage:users', 'manage:companies', 'manage:reports', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings'
 ];
 const ADMIN_CORE_PERMISSIONS: Permission[] = ['view:dashboard', 'view:reports', 'manage:users', 'view:analytics'];
+const COMPANY_ADMIN_BASE_PERMISSIONS: Permission[] = ['view:dashboard', 'view:reports', 'create:support-ticket'];
+const COMPANY_ADMIN_HIDDEN_PERMISSIONS: Permission[] = ['manage:users', 'manage:companies'];
 const SUPADMIN_CONTROLLED_PERMISSIONS: Permission[] = ['system:settings', 'view:finance', 'view:sustainability', 'view:business', 'manage:reports'];
-const PERSONAL_EMAIL_PATTERN = /@(gmail|googlemail|hotmail|outlook|live|msn|icloud|me|yahoo|yandex|protonmail|proton)\./i;
-
-const getDefaultProvisioningSource = (email?: string): ProvisioningSource =>
-    email && PERSONAL_EMAIL_PATTERN.test(email) ? 'external_local_account' : 'corporate_precreated';
 
 const getProvisioningLabel = (provisioningSource?: ProvisioningSource): string => {
     switch (provisioningSource) {
@@ -31,10 +29,18 @@ const getProvisioningLabel = (provisioningSource?: ProvisioningSource): string =
         case 'invited_personal':
             return 'Legacy Invited Personal';
         case 'corporate_precreated':
+            return 'Legacy Corporate Pre-Created';
         default:
-            return 'Corporate Pre-Created';
+            return 'External Local Account';
     }
 };
+
+const isCompanyAdminLikeUser = (target: Pick<User, 'role' | 'permissions'>): boolean => {
+    if (target.role !== 'user') return false;
+    return COMPANY_ADMIN_HIDDEN_PERMISSIONS.some((permission) => target.permissions.includes(permission));
+};
+
+const isBiReportPermission = (permission: Permission): boolean => permission.startsWith('view:analysis-report:');
 
 export const UserManagement: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
@@ -47,9 +53,13 @@ export const UserManagement: React.FC = () => {
     const [showNewCredentialPassword, setShowNewCredentialPassword] = useState(false);
     const { user: actor } = useAuthStore();
     const isSupAdminActor = actor?.role === 'supadmin';
+    const isAdminActor = actor?.role === 'admin';
+    const isRestrictedCompanyAdminActor = actor?.role === 'admin' && !Boolean(actor?.showOnlyCoreAdminPermissions);
     const isCoreAdminActor = actor?.role === 'admin' && Boolean(actor?.showOnlyCoreAdminPermissions);
-    const assignableRoles: UserRole[] = isSupAdminActor ? ['user', 'admin', 'supadmin'] : (isCoreAdminActor ? ['user'] : ['user', 'admin']);
-    const canManageTargetUser = (target: User) => isSupAdminActor || target.role !== 'supadmin';
+    const isCompanyAdminActor = isRestrictedCompanyAdminActor || isCoreAdminActor;
+    const assignableRoles: UserRole[] = isSupAdminActor ? ['user', 'admin', 'supadmin'] : ['user'];
+    const canManageTargetUser = (target: User) =>
+        isSupAdminActor || (isCompanyAdminActor ? (target.role === 'user' && !isCompanyAdminLikeUser(target)) : target.role !== 'supadmin');
     const analysisReportPermissions = analysisReports.map((report) => report.permissionKey);
     const allPermissions = [...BASE_PERMISSIONS, ...analysisReportPermissions];
 
@@ -72,7 +82,11 @@ export const UserManagement: React.FC = () => {
     const handleDelete = async (id: string) => {
         const targetUser = users.find((u) => u.id === id);
         if (targetUser && !canManageTargetUser(targetUser)) {
-            addToast({ title: 'Permission Denied', message: 'Only supadmin can delete a supadmin user.', type: 'error' });
+            addToast({
+                title: 'Permission Denied',
+                message: isAdminActor ? 'Admin can only manage standard user accounts.' : 'Only supadmin can delete a supadmin user.',
+                type: 'error'
+            });
             return;
         }
         const confirmed = await openConfirmDialog({
@@ -88,8 +102,24 @@ export const UserManagement: React.FC = () => {
     };
 
     const handleSaveUser = async (userData: Partial<User>, isNew: boolean) => {
-        const normalizedEmail = userData.email?.trim().toLowerCase();
-        if (!userData.name?.trim()) {
+        const existingUser = !isNew && userData.id ? users.find((u) => u.id === userData.id) : undefined;
+        const normalizedUserData: Partial<User> = isAdminActor
+            ? {
+                ...userData,
+                role: 'user',
+                isGuest: false,
+                companyId: actor?.companyId || '',
+                provisioningSource: existingUser?.provisioningSource || 'external_local_account',
+                permissions: userData.permissions || (existingUser?.id ? [] : [...COMPANY_ADMIN_BASE_PERMISSIONS]),
+                showOnlyCoreAdminPermissions: false,
+            }
+            : userData;
+        const normalizedEmail = normalizedUserData.email?.trim().toLowerCase();
+        if (isAdminActor && !actor?.companyId) {
+            addToast({ title: 'Permission Denied', message: 'Admin user is not linked to a company.', type: 'error' });
+            return;
+        }
+        if (!normalizedUserData.name?.trim()) {
             addToast({ title: 'Validation Error', message: 'Full name is required.', type: 'error' });
             return;
         }
@@ -101,28 +131,29 @@ export const UserManagement: React.FC = () => {
             addToast({ title: 'Validation Error', message: 'Please enter a valid email address.', type: 'error' });
             return;
         }
-        if (!userData.role) {
+        if (!normalizedUserData.role) {
             addToast({ title: 'Validation Error', message: 'Role is required.', type: 'error' });
             return;
         }
-        if (!isSupAdminActor && userData.role === 'supadmin') {
+        if (!isSupAdminActor && normalizedUserData.role === 'supadmin') {
             addToast({ title: 'Permission Denied', message: 'Only supadmin can assign supadmin role.', type: 'error' });
             return;
         }
-        if (!isNew && userData.id) {
-            const existingUser = users.find((u) => u.id === userData.id);
-            if (existingUser && !canManageTargetUser(existingUser)) {
-                addToast({ title: 'Permission Denied', message: 'Only supadmin can edit a supadmin user.', type: 'error' });
+        if (existingUser && !canManageTargetUser(existingUser)) {
+            addToast({
+                title: 'Permission Denied',
+                message: isAdminActor ? 'Admin can only manage standard user accounts.' : 'Only supadmin can edit a supadmin user.',
+                type: 'error'
+            });
                 return;
-            }
         }
-        const companyRequired = (userData.role === 'user' && !userData.isGuest) || userData.role === 'admin';
-        if (companyRequired && !userData.companyId) {
+        const companyRequired = (normalizedUserData.role === 'user' && !normalizedUserData.isGuest) || normalizedUserData.role === 'admin';
+        if (companyRequired && !normalizedUserData.companyId) {
             addToast({ title: 'Validation Error', message: 'Company is required for role "user" (non-guest) and "admin".', type: 'error' });
             return;
         }
-        const hasCompanyAdminPermissions = Boolean(userData.permissions?.includes('manage:users') || userData.permissions?.includes('manage:companies'));
-        if (userData.role === 'user' && hasCompanyAdminPermissions && (!userData.companyId || userData.isGuest)) {
+        const hasCompanyAdminPermissions = Boolean(normalizedUserData.permissions?.includes('manage:users') || normalizedUserData.permissions?.includes('manage:companies'));
+        if (normalizedUserData.role === 'user' && hasCompanyAdminPermissions && (!normalizedUserData.companyId || normalizedUserData.isGuest)) {
             addToast({ title: 'Validation Error', message: 'Company Admin users must be non-guest and linked to a company.', type: 'error' });
             return;
         }
@@ -135,23 +166,23 @@ export const UserManagement: React.FC = () => {
                     return;
                 }
                 // @ts-ignore - id generated by api
-                const { user: newUser, bootstrapCredentials } = await api.admin.createUser({
-                    ...userData,
+                const { user: newUser, bootstrapCredentials, notifications } = await api.admin.createUser({
+                    ...normalizedUserData,
                     email: normalizedEmail,
                 } as Omit<User, 'id'>);
                 setNewUserCredentials(bootstrapCredentials || null);
                 setShowNewCredentialPassword(false);
                 await loadData();
+                const welcomeEmail = notifications?.welcomeEmail;
                 addToast({
-                    title: 'User Created',
-                    message: newUser.provisioningSource === 'external_local_account'
-                        ? 'Local External ID account created. Share the one-time temporary password securely.'
-                        : 'User created. Sign-in, password, and MFA are managed by Entra.',
-                    type: 'success'
+                    title: welcomeEmail?.sent === false ? 'User Created, Email Failed' : 'User Created',
+                    message: welcomeEmail?.sent === false
+                        ? `User was created successfully, but the welcome email could not be sent: ${welcomeEmail.error || 'Unknown mail error.'}`
+                        : 'External ID local account created. Share the one-time temporary password securely.',
+                    type: welcomeEmail?.sent === false ? 'info' : 'success'
                 });
             } else {
-                if (!userData.id) return;
-                const existingUser = users.find((u) => u.id === userData.id);
+                if (!normalizedUserData.id) return;
                 const confirmMessage = existingUser
                     ? `Are you sure you want to update ${existingUser.email}?`
                     : 'Are you sure you want to update this user?';
@@ -161,7 +192,7 @@ export const UserManagement: React.FC = () => {
                     confirmLabel: 'Update',
                 });
                 if (!confirmed) return;
-                await api.admin.updateUser(userData.id, { ...userData, email: normalizedEmail });
+                await api.admin.updateUser(normalizedUserData.id, { ...normalizedUserData, email: normalizedEmail });
                 await loadData();
                 addToast({ title: 'User Updated', message: 'User details saved.', type: 'success' });
             }
@@ -174,7 +205,11 @@ export const UserManagement: React.FC = () => {
 
     const openUserDrawer = (user?: User) => {
         if (user && !canManageTargetUser(user)) {
-            addToast({ title: 'Permission Denied', message: 'Only supadmin can manage supadmin users.', type: 'error' });
+            addToast({
+                title: 'Permission Denied',
+                message: isAdminActor ? 'Admin can only manage standard user accounts.' : 'Only supadmin can manage supadmin users.',
+                type: 'error'
+            });
             return;
         }
         openDrawer(
@@ -184,6 +219,8 @@ export const UserManagement: React.FC = () => {
                 assignableRoles={assignableRoles}
                 isSupAdminActor={isSupAdminActor}
                 isCoreAdminActor={isCoreAdminActor}
+                isCompanyAdminActor={isCompanyAdminActor}
+                actorCompanyId={actor?.companyId || ''}
                 actorPermissions={actor?.permissions || []}
                 availablePermissions={allPermissions}
                 analysisReports={analysisReports}
@@ -335,7 +372,7 @@ export const UserManagement: React.FC = () => {
                                             {getProvisioningLabel(user.provisioningSource)}
                                         </span>
                                         <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                                            {user.identityProviderType || 'workforce_federated'}
+                                            {user.identityProviderType || 'external_local'}
                                             {user.identityTenantId ? ` • ${user.identityTenantId}` : ''}
                                         </span>
                                         <span className={`inline-flex w-fit rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
@@ -390,6 +427,8 @@ const UserForm = ({
     assignableRoles,
     isSupAdminActor,
     isCoreAdminActor,
+    isCompanyAdminActor,
+    actorCompanyId,
     actorPermissions,
     availablePermissions,
     analysisReports,
@@ -401,13 +440,21 @@ const UserForm = ({
     assignableRoles: UserRole[],
     isSupAdminActor: boolean,
     isCoreAdminActor: boolean,
+    isCompanyAdminActor: boolean,
+    actorCompanyId: string,
     actorPermissions: Permission[],
     availablePermissions: Permission[],
     analysisReports: AnalysisReport[],
     onSave: (data: Partial<User>) => void,
     onCancel: () => void
 }) => {
+    const isCompanyAdminManageablePermission = (permission: Permission): boolean => {
+        if (COMPANY_ADMIN_BASE_PERMISSIONS.includes(permission)) return true;
+        return isBiReportPermission(permission) && actorPermissions.includes(permission);
+    };
+
     const getBasicPermissionsForContext = (role: UserRole, isGuest: boolean): Permission[] => {
+        if (isCompanyAdminActor) return [...COMPANY_ADMIN_BASE_PERMISSIONS];
         if (role === 'supadmin') return getDefaultPermissionsForRole('supadmin');
         if (role === 'admin') return ADMIN_CORE_PERMISSIONS;
         if (role === 'user' && isGuest) return ['submit:rfq', 'create:support-ticket'];
@@ -416,6 +463,7 @@ const UserForm = ({
 
     const getAllowedBasicPermissionsForContext = (role: UserRole, isGuest: boolean): Permission[] => {
         const basic = getBasicPermissionsForContext(role, isGuest);
+        if (isCompanyAdminActor) return basic;
         if (isSupAdminActor) return basic;
         return basic.filter((permission) => actorPermissions.includes(permission));
     };
@@ -429,16 +477,24 @@ const UserForm = ({
         return isCoreAdminActor;
     };
 
+    const getInitialPermissions = (formUser?: User): Permission[] => {
+        if (isCompanyAdminActor) {
+            const visibleSelectedPermissions = (formUser?.permissions || []).filter((permission): permission is Permission => isCompanyAdminManageablePermission(permission));
+            return typeof formUser?.id === 'string' ? visibleSelectedPermissions : [...COMPANY_ADMIN_BASE_PERMISSIONS];
+        }
+        return formUser?.permissions || getAllowedBasicPermissionsForContext(formUser?.role || 'user', formUser?.isGuest || false);
+    };
+
     const [formData, setFormData] = useState<Partial<User>>({
         id: user?.id,
         name: user?.name || '',
         email: user?.email || '',
-        role: user?.role || 'user',
-        companyId: user?.companyId || '',
-        isGuest: user?.isGuest || false,
+        role: isCompanyAdminActor ? 'user' : (user?.role || 'user'),
+        companyId: isCompanyAdminActor ? actorCompanyId : (user?.companyId || ''),
+        isGuest: isCompanyAdminActor ? false : (user?.isGuest || false),
         status: user?.status || 'Active',
-        provisioningSource: user?.provisioningSource || getDefaultProvisioningSource(user?.email),
-        permissions: user?.permissions || getAllowedBasicPermissionsForContext(user?.role || 'user', user?.isGuest || false)
+        provisioningSource: user?.provisioningSource || 'external_local_account',
+        permissions: getInitialPermissions(user)
     });
     const [showOnlyAdminCorePermissions, setShowOnlyAdminCorePermissions] = useState<boolean>(inferShowOnlyAdminCore(user));
 
@@ -447,19 +503,20 @@ const UserForm = ({
             id: user?.id,
             name: user?.name || '',
             email: user?.email || '',
-            role: user?.role || 'user',
-            companyId: user?.companyId || '',
-            isGuest: user?.isGuest || false,
+            role: isCompanyAdminActor ? 'user' : (user?.role || 'user'),
+            companyId: isCompanyAdminActor ? actorCompanyId : (user?.companyId || ''),
+            isGuest: isCompanyAdminActor ? false : (user?.isGuest || false),
             status: user?.status || 'Active',
-            provisioningSource: user?.provisioningSource || getDefaultProvisioningSource(user?.email),
-            permissions: user?.permissions || getAllowedBasicPermissionsForContext(user?.role || 'user', user?.isGuest || false)
+            provisioningSource: user?.provisioningSource || 'external_local_account',
+            permissions: getInitialPermissions(user)
         });
         setShowOnlyAdminCorePermissions(inferShowOnlyAdminCore(user));
-    }, [user]);
+    }, [actorCompanyId, isCompanyAdminActor, user]);
 
     const togglePermission = (perm: Permission) => {
+        if (isCompanyAdminActor && !isCompanyAdminManageablePermission(perm)) return;
         if (!isSupAdminActor && SUPADMIN_CONTROLLED_PERMISSIONS.includes(perm)) return;
-        if (!isSupAdminActor && !actorPermissions.includes(perm)) return;
+        if (!isSupAdminActor && !isCompanyAdminActor && !actorPermissions.includes(perm)) return;
         setFormData(prev => {
             const perms = prev.permissions || [];
             if (perms.includes(perm)) return { ...prev, permissions: perms.filter(p => p !== perm) };
@@ -468,6 +525,7 @@ const UserForm = ({
     };
 
     const isPermissionLocked = (perm: Permission): boolean => {
+        if (isCompanyAdminActor) return !isCompanyAdminManageablePermission(perm);
         const isSupadminControlled = SUPADMIN_CONTROLLED_PERMISSIONS.includes(perm);
         const actorMissing = !isSupAdminActor && !actorPermissions.includes(perm);
         return !isSupAdminActor && (isSupadminControlled || actorMissing);
@@ -475,6 +533,7 @@ const UserForm = ({
 
     const generalPermissions = availablePermissions.filter((permission) => !permission.startsWith('view:analysis-report:'));
     const visibleGeneralPermissions = generalPermissions.filter((permission) => {
+        if (isCompanyAdminActor) return COMPANY_ADMIN_BASE_PERMISSIONS.includes(permission);
         if (isSupAdminActor) return true;
         return actorPermissions.includes(permission) || Boolean((formData.permissions || []).includes(permission));
     });
@@ -483,6 +542,7 @@ const UserForm = ({
         name: report.name,
         permission: report.permissionKey,
     })).filter((entry) => {
+        if (isCompanyAdminActor) return actorPermissions.includes(entry.permission);
         if (isSupAdminActor) return true;
         return actorPermissions.includes(entry.permission) || Boolean((formData.permissions || []).includes(entry.permission));
     });
@@ -503,25 +563,11 @@ const UserForm = ({
                     <input className="w-full p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-sm text-slate-900 dark:text-white"
                            value={formData.email} onChange={e => setFormData({
                                ...formData,
-                               email: e.target.value,
-                               provisioningSource: getDefaultProvisioningSource(e.target.value)
+                               email: e.target.value
                            })} />
                 </div>
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Provisioning</label>
-                    <select
-                        className="w-full p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-sm text-slate-900 dark:text-white"
-                        value={formData.provisioningSource || 'corporate_precreated'}
-                        onChange={e => setFormData({ ...formData, provisioningSource: e.target.value as ProvisioningSource })}
-                    >
-                        <option value="corporate_precreated">Corporate pre-created</option>
-                        <option value="external_local_account">External local account</option>
-                    </select>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                        Corporate accounts use workforce sign-in. Personal emails create a real External ID local account with a one-time temporary password.
-                    </p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className={`grid gap-4 ${isCompanyAdminActor ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                    {!isCompanyAdminActor && (
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Role</label>
                         <select className="w-full p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-sm text-slate-900 dark:text-white"
@@ -549,6 +595,7 @@ const UserForm = ({
                             })()}
                         </select>
                     </div>
+                    )}
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status</label>
                         <select className="w-full p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-sm text-slate-900 dark:text-white"
@@ -559,6 +606,7 @@ const UserForm = ({
                         </select>
                     </div>
                 </div>
+                {!isCompanyAdminActor && (
                 <div>
                     <label className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 mb-2">
                         <input
@@ -589,7 +637,9 @@ const UserForm = ({
                         Company selection is required for `admin` and non-guest `user` roles.
                     </p>
                 </div>
+                )}
 
+                {!isCompanyAdminActor && (
                 <div className="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
                     <p className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Company Rules</p>
                     <ul className="mt-2 space-y-1">
@@ -599,6 +649,7 @@ const UserForm = ({
                         <li>`user` + non-guest: Company required.</li>
                     </ul>
                 </div>
+                )}
 
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">General Permissions</label>
@@ -630,10 +681,11 @@ const UserForm = ({
                         {visibleGeneralPermissions.map(p => (
                             (() => {
                                 const isSupadminControlled = SUPADMIN_CONTROLLED_PERMISSIONS.includes(p);
-                                const actorMissing = !isSupAdminActor && !actorPermissions.includes(p);
+                                const actorMissing = !isSupAdminActor && !isCompanyAdminActor && !actorPermissions.includes(p);
                                 const isLocked = isPermissionLocked(p);
                                 const hiddenByCoreAdminActor =
                                     !isSupAdminActor &&
+                                    !isCompanyAdminActor &&
                                     isCoreAdminActor &&
                                     !ADMIN_CORE_PERMISSIONS.includes(p);
                                 const hideUnselectedLockedForAdmin =
@@ -701,8 +753,21 @@ const UserForm = ({
                 <button
                     onClick={() => {
                         const nextData: Partial<User> = { ...formData };
-                        nextData.showOnlyCoreAdminPermissions = formData.role === 'admin' ? showOnlyAdminCorePermissions : false;
-                        if (showOnlyAdminCorePermissions && formData.role === 'admin') {
+                        nextData.showOnlyCoreAdminPermissions = !isCompanyAdminActor && formData.role === 'admin' ? showOnlyAdminCorePermissions : false;
+                        if (isCompanyAdminActor) {
+                            const preservedHiddenPermissions = typeof user?.id === 'string'
+                                ? (user.permissions || []).filter((permission): permission is Permission => !isCompanyAdminManageablePermission(permission))
+                                : [];
+                            nextData.role = 'user';
+                            nextData.isGuest = false;
+                            nextData.companyId = actorCompanyId;
+                            nextData.provisioningSource = user?.provisioningSource || 'external_local_account';
+                            nextData.permissions = [
+                                ...(formData.permissions || COMPANY_ADMIN_BASE_PERMISSIONS)
+                                    .filter((permission): permission is Permission => isCompanyAdminManageablePermission(permission)),
+                                ...preservedHiddenPermissions,
+                            ];
+                        } else if (showOnlyAdminCorePermissions && formData.role === 'admin') {
                             nextData.permissions = (formData.permissions || []).filter((permission) => ADMIN_CORE_PERMISSIONS.includes(permission));
                         }
                         onSave(nextData);

@@ -67,8 +67,7 @@ export const isPersonalEmailDomain = (emailOrDomain: string): boolean => {
   return PERSONAL_EMAIL_DOMAINS.has(domain);
 };
 
-export const getProvisioningSourceForEmail = (email: string): ProvisioningSource =>
-  isPersonalEmailDomain(email) ? 'external_local_account' : 'corporate_precreated';
+export const getProvisioningSourceForEmail = (_email: string): ProvisioningSource => 'external_local_account';
 
 export const getIdentityProviderTypeForProvisioningSource = (
   provisioningSource: ProvisioningSource
@@ -76,6 +75,7 @@ export const getIdentityProviderTypeForProvisioningSource = (
   if (provisioningSource === 'external_local_account' || provisioningSource === 'invited_personal') {
     return 'external_local';
   }
+  // Legacy rows may still carry corporate_precreated/bootstrap metadata.
   return 'workforce_federated';
 };
 

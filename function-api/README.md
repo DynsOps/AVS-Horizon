@@ -21,16 +21,14 @@
 ## Identity model
 - Authentication, MFA, password reset, and lockout are managed by Entra ID.
 - Portal users store `entra_object_id`, `company_id`, `role`, `provisioning_source`, and `access_state`.
-- Hybrid identity is supported:
-  - workforce/corporate users authenticate with the workforce tenant
-  - personal users can be created as External ID local accounts and receive a one-time temporary password
+- Portal sign-in is External ID only.
+- New users are provisioned as External ID local accounts and receive a one-time temporary password.
+- Legacy rows may still contain older provisioning metadata, but new logins flow through External ID.
 - Provider metadata is stored in `identity_provider_type` and `identity_tenant_id`.
 - Corporate domains are managed through `dbo.company_domains`.
 - Zero-permission users are valid authenticated users and land in `pending` access state until a company admin grants permissions.
 
 ## Required app settings
-- `AZURE_AD_TENANT_ID`
-- `AZURE_AD_AUDIENCE` (set to backend app registration client id / token `aud`)
 - `EXTERNAL_ID_TENANT_ID`
 - `EXTERNAL_ID_CLIENT_ID`
 - `EXTERNAL_ID_CLIENT_SECRET`
@@ -39,7 +37,6 @@
 - `EXTERNAL_ID_JWKS_URI`
 - `EXTERNAL_ID_ISSUER_DOMAIN`
 - `EXTERNAL_ID_ISSUERS`
-- `EXTERNAL_ID_USER_FLOW`
 - `EXTERNAL_ID_GRAPH_SCOPE` (optional, defaults to `https://graph.microsoft.com/.default`)
 - `SQL_SERVER`
 - `SQL_PORT` (optional, default `1433`)

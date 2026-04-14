@@ -1,10 +1,18 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../lib/auth';
 import { runScopedQuery } from '../lib/db';
+import { deleteExternalIdentityUser } from '../lib/externalIdentity';
 import { errorResponse, ok } from '../lib/http';
 import { UserRole } from '../lib/rbac';
+import { IdentityProviderType } from '../lib/identity';
 
-type TargetUser = { id: string; role: UserRole; companyId: string | null };
+type TargetUser = {
+  id: string;
+  role: UserRole;
+  companyId: string | null;
+  entraObjectId: string | null;
+  identityProviderType: IdentityProviderType | null;
+};
 
 const canManageRole = (actorRole: UserRole, targetRole: UserRole): boolean => {
   if (actorRole === 'supadmin') return true;
@@ -24,7 +32,16 @@ export async function deleteAdminUser(request: HttpRequest, context: InvocationC
 
     const targetResult = await runScopedQuery<TargetUser>(
       { role: actor.role, companyId: actor.companyId, userId: actor.id },
-      'SELECT TOP 1 id, role, company_id AS companyId FROM dbo.users WHERE id = @userId',
+      `
+      SELECT TOP 1
+        id,
+        role,
+        company_id AS companyId,
+        entra_object_id AS entraObjectId,
+        identity_provider_type AS identityProviderType
+      FROM dbo.users
+      WHERE id = @userId
+      `,
       { userId }
     );
     const target = targetResult.recordset[0];
@@ -39,6 +56,10 @@ export async function deleteAdminUser(request: HttpRequest, context: InvocationC
 
     if (!canManageRole(actor.role, target.role)) {
       return errorResponse(403, 'Only supadmin can delete supadmin users.');
+    }
+
+    if (target.entraObjectId && target.identityProviderType === 'external_local') {
+      await deleteExternalIdentityUser(target.entraObjectId);
     }
 
     await runScopedQuery(
