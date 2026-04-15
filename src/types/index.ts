@@ -37,9 +37,8 @@ export interface Company {
   name: string;
   type: 'Customer' | 'Supplier';
   country: string;
-  contactEmail: string;
+  contactEmail?: string;
   status: 'Active' | 'Inactive';
-  domains?: string[];
 }
 
 export interface BootstrapCredentials {
