@@ -12,6 +12,7 @@ export const env = {
   mailAuthority: (process.env.MAIL_AUTHORITY || '').replace(/\/+$/, ''),
   mailSender: process.env.MAIL_SENDER || process.env.EXTERNAL_ID_MAIL_SENDER || '',
   mailLoginUrl: process.env.MAIL_LOGIN_URL || '',
+  mailLogoUrl: process.env.MAIL_LOGO_URL || '',
   mailGraphScope: process.env.MAIL_GRAPH_SCOPE || 'https://graph.microsoft.com/.default',
   externalIdIssuers: (process.env.EXTERNAL_ID_ISSUERS || '')
     .split(',')

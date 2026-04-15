@@ -10,6 +10,9 @@ import {
   normalizeEmail,
 } from '../src/lib/identity';
 
+const resolveRepoPath = (...segments: string[]) => path.resolve(__dirname, '..', '..', '..', ...segments);
+const resolveFunctionApiPath = (...segments: string[]) => path.resolve(__dirname, '..', '..', ...segments);
+
 const run = (name: string, fn: () => void) => {
   try {
     fn();
@@ -93,7 +96,7 @@ run('buildSessionContextPrefix stamps role and company into SQL session context'
 });
 
 run('RLS migration drops the policy before altering scoped functions', () => {
-  const migrationPath = path.resolve(process.cwd(), '..', 'sql', '007_enforce_company_rls.sql');
+  const migrationPath = resolveRepoPath('sql', '007_enforce_company_rls.sql');
   const migrationSql = fs.readFileSync(migrationPath, 'utf8');
 
   const dropPolicyIndex = migrationSql.indexOf('DROP SECURITY POLICY security.CompanyIsolationPolicy;');
@@ -108,7 +111,7 @@ run('RLS migration drops the policy before altering scoped functions', () => {
 });
 
 run('admin companies query orders aggregated rows by an aggregated created timestamp', () => {
-  const functionPath = path.resolve(process.cwd(), 'src', 'functions', 'adminCompaniesList.ts');
+  const functionPath = resolveFunctionApiPath('src', 'functions', 'adminCompaniesList.ts');
   const functionSource = fs.readFileSync(functionPath, 'utf8');
 
   assert.match(functionSource, /MAX\(c\.created_at\)\s+AS\s+latestCreatedAt/);
@@ -116,7 +119,7 @@ run('admin companies query orders aggregated rows by an aggregated created times
 });
 
 run('hybrid identity migration allows external_local_account provisioning values', () => {
-  const migrationPath = path.resolve(process.cwd(), '..', 'sql', '008_add_identity_provider_metadata.sql');
+  const migrationPath = resolveRepoPath('sql', '008_add_identity_provider_metadata.sql');
   const migrationSql = fs.readFileSync(migrationPath, 'utf8');
 
   assert.match(migrationSql, /external_local_account/);
@@ -135,7 +138,7 @@ run('buildAcceptedAudiences accepts both GUID and api:// audiences for External 
 });
 
 run('frontend keeps only external id MSAL config', () => {
-  const authConfigPath = path.resolve(process.cwd(), '..', 'src', 'auth', 'authConfig.ts');
+  const authConfigPath = resolveRepoPath('src', 'auth', 'authConfig.ts');
   const authConfigSource = fs.readFileSync(authConfigPath, 'utf8');
 
   assert.match(authConfigSource, /export const externalMsalConfig: Configuration = \{/);
@@ -144,7 +147,7 @@ run('frontend keeps only external id MSAL config', () => {
 });
 
 run('login page routes hosted sign-in through the external msal instance only', () => {
-  const loginPath = path.resolve(process.cwd(), '..', 'src', 'pages', 'Login.tsx');
+  const loginPath = resolveRepoPath('src', 'pages', 'Login.tsx');
   const loginSource = fs.readFileSync(loginPath, 'utf8');
 
   assert.match(loginSource, /externalMsalInstance\.loginRedirect/);
@@ -153,7 +156,7 @@ run('login page routes hosted sign-in through the external msal instance only', 
 });
 
 run('external auth bridge exchanges only external id tokens', () => {
-  const bridgePath = path.resolve(process.cwd(), '..', 'src', 'auth', 'MsalAuthBridge.tsx');
+  const bridgePath = resolveRepoPath('src', 'auth', 'MsalAuthBridge.tsx');
   const bridgeSource = fs.readFileSync(bridgePath, 'utf8');
 
   assert.match(bridgeSource, /externalMsalInstance\.acquireTokenSilent/);
@@ -162,7 +165,7 @@ run('external auth bridge exchanges only external id tokens', () => {
 });
 
 run('frontend bootstrap initializes only external msal and clears legacy provider keys', () => {
-  const indexPath = path.resolve(process.cwd(), '..', 'index.tsx');
+  const indexPath = resolveRepoPath('index.tsx');
   const indexSource = fs.readFileSync(indexPath, 'utf8');
 
   assert.match(indexSource, /cleanupLegacyAuthStorage/);
@@ -172,7 +175,7 @@ run('frontend bootstrap initializes only external msal and clears legacy provide
 });
 
 run('backend token validation accepts only external id providers', () => {
-  const authPath = path.resolve(process.cwd(), 'src', 'lib', 'auth.ts');
+  const authPath = resolveFunctionApiPath('src', 'lib', 'auth.ts');
   const authSource = fs.readFileSync(authPath, 'utf8');
 
   assert.match(authSource, /External ID token validation is not configured\./);
@@ -182,7 +185,7 @@ run('backend token validation accepts only external id providers', () => {
 });
 
 run('admin user delete removes linked External ID users before deleting the portal record', () => {
-  const deletePath = path.resolve(process.cwd(), 'src', 'functions', 'adminUsersDelete.ts');
+  const deletePath = resolveFunctionApiPath('src', 'functions', 'adminUsersDelete.ts');
   const deleteSource = fs.readFileSync(deletePath, 'utf8');
 
   assert.match(deleteSource, /deleteExternalIdentityUser/);
@@ -252,7 +255,7 @@ run('identity binding rejects mismatched tenant ids inside the same provider', (
 });
 
 run('user management defines a restricted company admin actor flow', () => {
-  const userManagementPath = path.resolve(process.cwd(), '..', 'src', 'pages', 'admin', 'UserManagement.tsx');
+  const userManagementPath = resolveRepoPath('src', 'pages', 'admin', 'UserManagement.tsx');
   const userManagementSource = fs.readFileSync(userManagementPath, 'utf8');
 
   assert.match(userManagementSource, /const isRestrictedCompanyAdminActor = actor\?\.role === 'admin' && !Boolean\(actor\?\.showOnlyCoreAdminPermissions\);/);
@@ -261,7 +264,7 @@ run('user management defines a restricted company admin actor flow', () => {
 });
 
 run('mock api normalizes company admin user management into same-company non-guest users', () => {
-  const apiPath = path.resolve(process.cwd(), '..', 'src', 'services', 'api.ts');
+  const apiPath = resolveRepoPath('src', 'services', 'api.ts');
   const apiSource = fs.readFileSync(apiPath, 'utf8');
 
   assert.match(apiSource, /const COMPANY_ADMIN_HIDDEN_PERMISSIONS: Permission\[] = \['manage:users', 'manage:companies'\];/);
@@ -271,7 +274,7 @@ run('mock api normalizes company admin user management into same-company non-gue
 });
 
 run('admin user create function restricts admin actors to canonical user permissions', () => {
-  const createPath = path.resolve(process.cwd(), 'src', 'functions', 'adminUsersCreate.ts');
+  const createPath = resolveFunctionApiPath('src', 'functions', 'adminUsersCreate.ts');
   const createSource = fs.readFileSync(createPath, 'utf8');
 
   assert.match(createSource, /const COMPANY_ADMIN_BASE_PERMISSIONS = new Set\(\['view:dashboard', 'view:reports', 'create:support-ticket'\]\);/);
@@ -281,7 +284,7 @@ run('admin user create function restricts admin actors to canonical user permiss
 });
 
 run('admin user update function blocks company admins from managing admin targets', () => {
-  const updatePath = path.resolve(process.cwd(), 'src', 'functions', 'adminUsersUpdate.ts');
+  const updatePath = resolveFunctionApiPath('src', 'functions', 'adminUsersUpdate.ts');
   const updateSource = fs.readFileSync(updatePath, 'utf8');
 
   assert.match(updateSource, /const COMPANY_ADMIN_BASE_PERMISSIONS = new Set\(\['view:dashboard', 'view:reports', 'create:support-ticket'\]\);/);
@@ -291,7 +294,7 @@ run('admin user update function blocks company admins from managing admin target
 });
 
 run('company admin user form shows only the minimal general permissions and actor-owned BI report permissions', () => {
-  const userManagementPath = path.resolve(process.cwd(), '..', 'src', 'pages', 'admin', 'UserManagement.tsx');
+  const userManagementPath = resolveRepoPath('src', 'pages', 'admin', 'UserManagement.tsx');
   const userManagementSource = fs.readFileSync(userManagementPath, 'utf8');
 
   assert.match(userManagementSource, /const COMPANY_ADMIN_BASE_PERMISSIONS: Permission\[] = \['view:dashboard', 'view:reports', 'create:support-ticket'\];/);
@@ -300,7 +303,7 @@ run('company admin user form shows only the minimal general permissions and acto
 });
 
 run('company admin edit form keeps only the target users currently selected visible permissions', () => {
-  const userManagementPath = path.resolve(process.cwd(), '..', 'src', 'pages', 'admin', 'UserManagement.tsx');
+  const userManagementPath = resolveRepoPath('src', 'pages', 'admin', 'UserManagement.tsx');
   const userManagementSource = fs.readFileSync(userManagementPath, 'utf8');
 
   assert.match(userManagementSource, /const visibleSelectedPermissions = \(formUser\?\.permissions \|\| \[\]\)\.filter\(\(permission\): permission is Permission => isCompanyAdminManageablePermission\(permission\)\);/);
@@ -308,10 +311,13 @@ run('company admin edit form keeps only the target users currently selected visi
 });
 
 run('mail library defines an english welcome email helper with a login link', () => {
-  const mailPath = path.resolve(process.cwd(), 'src', 'lib', 'mail.ts');
+  const mailPath = resolveFunctionApiPath('src', 'lib', 'mail.ts');
   const mailSource = fs.readFileSync(mailPath, 'utf8');
 
   assert.match(mailSource, /export const sendWelcomeCredentialsEmail = async/);
+  assert.match(mailSource, /const buildWelcomeHeaderHtml = \(\): string => \{/);
+  assert.match(mailSource, /env\.mailLogoUrl/);
+  assert.match(mailSource, /<img src="\$\{env\.mailLogoUrl\}"/);
   assert.match(mailSource, /Welcome to AVS Horizon/);
   assert.match(mailSource, /Sign in to AVS Horizon/);
   assert.match(mailSource, /env\.mailLoginUrl/);
@@ -320,7 +326,7 @@ run('mail library defines an english welcome email helper with a login link', ()
 });
 
 run('admin user create keeps the db flow even if welcome mail fails', () => {
-  const createPath = path.resolve(process.cwd(), 'src', 'functions', 'adminUsersCreate.ts');
+  const createPath = resolveFunctionApiPath('src', 'functions', 'adminUsersCreate.ts');
   const createSource = fs.readFileSync(createPath, 'utf8');
 
   assert.match(createSource, /sendWelcomeCredentialsEmail/);
@@ -334,9 +340,9 @@ run('admin user create keeps the db flow even if welcome mail fails', () => {
 });
 
 run('function api env declares dedicated mail sender settings', () => {
-  const envPath = path.resolve(process.cwd(), 'src', 'lib', 'env.ts');
+  const envPath = resolveFunctionApiPath('src', 'lib', 'env.ts');
   const envSource = fs.readFileSync(envPath, 'utf8');
-  const settingsPath = path.resolve(process.cwd(), 'local.settings.example.json');
+  const settingsPath = resolveFunctionApiPath('local.settings.example.json');
   const settingsSource = fs.readFileSync(settingsPath, 'utf8');
 
   assert.match(envSource, /mailTenantId: process\.env\.MAIL_TENANT_ID \|\| process\.env\.EXTERNAL_ID_TENANT_ID \|\| ''/);
@@ -344,10 +350,58 @@ run('function api env declares dedicated mail sender settings', () => {
   assert.match(envSource, /mailClientSecret: process\.env\.MAIL_CLIENT_SECRET \|\| process\.env\.EXTERNAL_ID_CLIENT_SECRET \|\| ''/);
   assert.match(envSource, /mailSender: process\.env\.MAIL_SENDER \|\| process\.env\.EXTERNAL_ID_MAIL_SENDER \|\| ''/);
   assert.match(envSource, /mailLoginUrl: process\.env\.MAIL_LOGIN_URL \|\| ''/);
+  assert.match(envSource, /mailLogoUrl: process\.env\.MAIL_LOGO_URL \|\| ''/);
   assert.match(envSource, /export const assertMailEnv = \(\): void => \{/);
   assert.match(settingsSource, /MAIL_TENANT_ID/);
   assert.match(settingsSource, /MAIL_CLIENT_ID/);
   assert.match(settingsSource, /MAIL_CLIENT_SECRET/);
   assert.match(settingsSource, /MAIL_SENDER/);
   assert.match(settingsSource, /MAIL_LOGIN_URL/);
+  assert.match(settingsSource, /MAIL_LOGO_URL/);
+  assert.match(settingsSource, /https:\/\/horizon\.avsglobalsupply\.com\/assets\/avslogo-CA24d8DQ\.png/);
+});
+
+run('admin company create no longer requires contact email or persists company domains', () => {
+  const createPath = resolveFunctionApiPath('src', 'functions', 'adminCompaniesCreate.ts');
+  const createSource = fs.readFileSync(createPath, 'utf8');
+
+  assert.doesNotMatch(createSource, /name, type, country and contactEmail are required\./);
+  assert.match(createSource, /if \(!name \|\| !type \|\| !country\)/);
+  assert.doesNotMatch(createSource, /normalizeDomain/);
+  assert.doesNotMatch(createSource, /dbo\.company_domains/);
+  assert.match(createSource, /contactEmail:\s*contactEmail \|\| null/);
+});
+
+run('admin company update allows clearing contact email and does not rewrite company domains', () => {
+  const updatePath = resolveFunctionApiPath('src', 'functions', 'adminCompaniesUpdate.ts');
+  const updateSource = fs.readFileSync(updatePath, 'utf8');
+
+  assert.doesNotMatch(updateSource, /normalizeDomain/);
+  assert.doesNotMatch(updateSource, /body\.domains/);
+  assert.doesNotMatch(updateSource, /dbo\.company_domains/);
+  assert.match(updateSource, /contactEmail:\s*body\.contactEmail !== undefined\s*\?\s*\(body\.contactEmail \|\| ''\)\.trim\(\)\.toLowerCase\(\) \|\| null\s*:/);
+});
+
+run('admin company list returns entity rows without domain aggregation', () => {
+  const listPath = resolveFunctionApiPath('src', 'functions', 'adminCompaniesList.ts');
+  const listSource = fs.readFileSync(listPath, 'utf8');
+
+  assert.doesNotMatch(listSource, /STRING_AGG/);
+  assert.doesNotMatch(listSource, /company_domains/);
+  assert.doesNotMatch(listSource, /domainsCsv/);
+  assert.doesNotMatch(listSource, /domains:/);
+  assert.match(listSource, /contact_email AS contactEmail/);
+});
+
+run('company schema scripts make contact email nullable and include a dedicated migration', () => {
+  const baselineIdentitySql = fs.readFileSync(resolveRepoPath('sql', '001_create_identity_and_support.sql'), 'utf8');
+  const companiesSql = fs.readFileSync(resolveRepoPath('sql', '005_create_companies.sql'), 'utf8');
+  const alignSql = fs.readFileSync(resolveRepoPath('sql', '006_align_identity_schema.sql'), 'utf8');
+  const nullableMigrationSql = fs.readFileSync(resolveRepoPath('sql', '009_make_company_contact_email_nullable.sql'), 'utf8');
+
+  assert.match(baselineIdentitySql, /contact_email NVARCHAR\(320\) NULL/);
+  assert.match(companiesSql, /contact_email NVARCHAR\(320\) NULL/);
+  assert.match(alignSql, /IF EXISTS \(\s*SELECT 1\s+FROM sys\.columns/);
+  assert.match(alignSql, /ALTER TABLE dbo\.companies ALTER COLUMN contact_email NVARCHAR\(320\) NULL;/);
+  assert.match(nullableMigrationSql, /ALTER TABLE dbo\.companies ALTER COLUMN contact_email NVARCHAR\(320\) NULL;/);
 });

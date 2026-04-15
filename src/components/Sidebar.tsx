@@ -6,9 +6,9 @@ import { AsyncActionButton } from './ui/AsyncActionButton';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
 import { Permission } from '../types';
-import { api } from '../services/api';
 import { isPendingAccessUser } from '../utils/rbac';
 import avsLogo from '../assets/avslogo.png';
+import { performSignOut } from './signOut';
 import { 
   LayoutDashboard, Ship, Package, ClipboardList, ReceiptText, Landmark,
   Truck, ShieldAlert, Activity, Settings, LogOut, Users, UserCircle, FilePlus2, BarChart3, Building2, ChevronDown
@@ -59,26 +59,13 @@ export const Sidebar: React.FC = () => {
   const handleSignOut = async () => {
     setIsSigningOut(true);
     try {
-      const userEmail = user?.email;
-      if (userEmail) {
-        await api.auth.clearHostedToken(userEmail);
-      } else {
-        await api.auth.clearHostedToken();
-      }
-
-      logout();
-
-      if (hasHostedSession) {
-        await externalMsalInstance.logoutRedirect({
-          postLogoutRedirectUri: `${window.location.origin}/#/login`,
-        });
-        return;
-      }
-
-      navigate('/login', { replace: true });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Sign out failed.';
-      addToast({ title: 'Error', message, type: 'error' });
+      await performSignOut({
+        userEmail: user?.email,
+        hasHostedSession,
+        logout,
+        navigate,
+        addToast,
+      });
     } finally {
       setIsSigningOut(false);
     }

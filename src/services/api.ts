@@ -137,6 +137,11 @@ type SystemHealthPayload = {
   logs: LogEntry[];
 };
 
+const normalizeCompany = (company: Company): Company => ({
+  ...company,
+  contactEmail: company.contactEmail || undefined,
+});
+
 // --- Initial Mock Data (Stateful) ---
 
 let mockCompanies: Company[] = [
@@ -950,9 +955,9 @@ export const api = {
     getCompanies: async (): Promise<Company[]> => {
         if (shouldUseFunctionApi()) {
             const payload = await callFunctionApi<{ companies: Company[] }>('api/identity/companies');
-            mockCompanies = payload.companies.map((c) => ({ ...c }));
+            mockCompanies = payload.companies.map(normalizeCompany);
             persistLocalDb();
-            return payload.companies;
+            return payload.companies.map(normalizeCompany);
         }
         await delay(400);
         const actor = getActorUser();
@@ -971,12 +976,16 @@ export const api = {
                 method: 'POST',
                 body: JSON.stringify(company),
             });
-            mockCompanies.push({ ...payload.company });
+            const normalizedCompany = normalizeCompany(payload.company);
+            mockCompanies.push(normalizedCompany);
             persistLocalDb();
-            return payload.company;
+            return normalizedCompany;
         }
         await delay(500);
-        const newCompany = { ...company, id: `${company.type === 'Customer' ? 'C' : 'S'}-${Date.now().toString().slice(-3)}` };
+        const newCompany = normalizeCompany({
+          ...company,
+          id: `${company.type === 'Customer' ? 'C' : 'S'}-${Date.now().toString().slice(-3)}`,
+        });
         mockCompanies.push(newCompany);
         persistLocalDb();
         return newCompany;
@@ -999,7 +1008,7 @@ export const api = {
         await delay(400);
         const index = mockCompanies.findIndex(c => c.id === id);
         if (index === -1) throw new Error("Company not found");
-        mockCompanies[index] = { ...mockCompanies[index], ...updates };
+        mockCompanies[index] = normalizeCompany({ ...mockCompanies[index], ...updates });
         persistLocalDb();
         return mockCompanies[index];
     },
