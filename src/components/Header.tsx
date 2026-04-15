@@ -11,7 +11,15 @@ import { Company } from '../types';
 export const Header: React.FC = () => {
   const { user } = useAuthStore();
   const { isDarkMode, toggleTheme } = useThemeStore();
-  const { addToast, dashboardCompanyId, setDashboardCompanyId } = useUIStore();
+  const {
+    addToast,
+    dashboardCompanyId,
+    setDashboardCompanyId,
+    notifications,
+    openDrawer,
+    closeDrawer,
+    markNotificationRead,
+  } = useUIStore();
   const navigate = useNavigate();
   const isCustomer = user?.role === 'user';
   const [companyOptions, setCompanyOptions] = useState<Company[]>([]);
@@ -67,6 +75,52 @@ export const Header: React.FC = () => {
     }
   }, [resolvedCompanyId, dashboardCompanyId, setDashboardCompanyId]);
 
+  const unreadNotificationCount = useMemo(
+    () => notifications.filter((notification) => !notification.isRead).length,
+    [notifications]
+  );
+
+  const openNotificationsDrawer = () => {
+    openDrawer(
+      <div className="space-y-3">
+        {notifications.length ? (
+          notifications.map((notification) => (
+            <button
+              key={notification.id}
+              type="button"
+              aria-label={notification.title}
+              onClick={() => {
+                markNotificationRead(notification.id);
+                closeDrawer();
+                navigate(notification.targetRoute);
+              }}
+              className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+                notification.isRead
+                  ? 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                  : 'border-blue-200 bg-blue-50 text-slate-800 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-slate-100'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">{notification.title}</p>
+                  <p className="mt-1 text-xs leading-relaxed">{notification.message}</p>
+                </div>
+                {!notification.isRead && (
+                  <span className="mt-1 inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" aria-hidden="true" />
+                )}
+              </div>
+            </button>
+          ))
+        ) : (
+          <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            No notifications yet.
+          </p>
+        )}
+      </div>,
+      'Notifications'
+    );
+  };
+
   return (
     <header className={`
         h-16 px-4 md:px-6 sticky top-0 z-30
@@ -120,11 +174,15 @@ export const Header: React.FC = () => {
         )}
 
         <button
-          onClick={() => addToast({ title: 'Notifications', message: 'Notification center is synced with current alerts.', type: 'info' })}
+          type="button"
+          aria-label="Notifications"
+          onClick={openNotificationsDrawer}
           className="relative p-2 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition-colors rounded-full hover:bg-white/80 dark:hover:bg-slate-800/70 border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
         >
           <Bell size={20} strokeWidth={1.5} />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-950"></span>
+          {unreadNotificationCount > 0 && (
+            <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-950"></span>
+          )}
         </button>
         
          <div className="flex items-center space-x-2 ml-2 pl-2 border-l border-gray-200 dark:border-slate-800">

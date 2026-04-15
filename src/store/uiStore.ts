@@ -8,6 +8,31 @@ interface ToastMessage {
   type: 'success' | 'error' | 'info';
 }
 
+interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  targetRoute: string;
+  isRead: boolean;
+}
+
+export const defaultNotifications: AppNotification[] = [
+  {
+    id: 'notif-dashboard-summary',
+    title: 'Daily operations summary',
+    message: 'Review the latest dashboard activity and pending updates.',
+    targetRoute: '/dashboard',
+    isRead: false,
+  },
+  {
+    id: 'notif-orders-followup',
+    title: 'Order follow-up',
+    message: 'A recent order needs your review in the orders workspace.',
+    targetRoute: '/orders',
+    isRead: false,
+  },
+];
+
 type ConfirmTone = 'default' | 'danger';
 
 type ConfirmDialogState = {
@@ -31,9 +56,12 @@ interface UIState {
   isSidebarOpen: boolean;
   toggleSidebar: () => void;
   isDrawerOpen: boolean;
+  drawerTitle: string;
   drawerContent: React.ReactNode | null;
-  openDrawer: (content: React.ReactNode) => void;
+  openDrawer: (content: React.ReactNode, title?: string) => void;
   closeDrawer: () => void;
+  notifications: AppNotification[];
+  markNotificationRead: (id: string) => void;
   toasts: ToastMessage[];
   addToast: (toast: Omit<ToastMessage, 'id'>) => void;
   removeToast: (id: string) => void;
@@ -77,9 +105,17 @@ export const useUIStore = create<UIState>((set, get) => ({
   isSidebarOpen: true,
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   isDrawerOpen: false,
+  drawerTitle: 'Details',
   drawerContent: null,
-  openDrawer: (content) => set({ isDrawerOpen: true, drawerContent: content }),
-  closeDrawer: () => set({ isDrawerOpen: false, drawerContent: null }),
+  openDrawer: (content, title = 'Details') => set({ isDrawerOpen: true, drawerTitle: title, drawerContent: content }),
+  closeDrawer: () => set({ isDrawerOpen: false, drawerTitle: 'Details', drawerContent: null }),
+  notifications: defaultNotifications,
+  markNotificationRead: (id) =>
+    set((state) => ({
+      notifications: state.notifications.map((notification) =>
+        notification.id === id ? { ...notification, isRead: true } : notification
+      ),
+    })),
   toasts: [],
   addToast: (toast) => {
     const id = Math.random().toString(36).substring(7);
