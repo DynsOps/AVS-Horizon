@@ -18,13 +18,28 @@ const buildLoginSectionHtml = (): string => {
   `;
 };
 
+const buildWelcomeHeaderHtml = (): string => {
+  if (env.mailLogoUrl) {
+    return `
+      <div style="padding:28px 32px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#ffffff;">
+        <img src="${env.mailLogoUrl}" alt="AVS Horizon" style="display:block;max-width:220px;width:100%;height:auto;margin:0 0 14px;" />
+        <h1 style="margin:0;font-size:28px;line-height:1.2;">Welcome to AVS Horizon</h1>
+      </div>
+    `;
+  }
+
+  return `
+    <div style="padding:28px 32px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#ffffff;">
+      <p style="margin:0 0 8px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.9;">AVS Horizon</p>
+      <h1 style="margin:0;font-size:28px;line-height:1.2;">Welcome to AVS Horizon</h1>
+    </div>
+  `;
+};
+
 const buildWelcomeEmailHtml = (params: { displayName: string; email: string; temporaryPassword: string }): string => `
   <div style="background:#f3f6fb;padding:32px 16px;font-family:Segoe UI,Arial,sans-serif;color:#0f172a;">
     <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #dbe4f0;border-radius:20px;overflow:hidden;">
-      <div style="padding:28px 32px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#ffffff;">
-        <p style="margin:0 0 8px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.9;">AVS Horizon</p>
-        <h1 style="margin:0;font-size:28px;line-height:1.2;">Welcome to AVS Horizon</h1>
-      </div>
+      ${buildWelcomeHeaderHtml()}
       <div style="padding:32px;">
         <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">Hello ${params.displayName || params.email},</p>
         <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">

@@ -315,6 +315,9 @@ run('mail library defines an english welcome email helper with a login link', ()
   const mailSource = fs.readFileSync(mailPath, 'utf8');
 
   assert.match(mailSource, /export const sendWelcomeCredentialsEmail = async/);
+  assert.match(mailSource, /const buildWelcomeHeaderHtml = \(\): string => \{/);
+  assert.match(mailSource, /env\.mailLogoUrl/);
+  assert.match(mailSource, /<img src="\$\{env\.mailLogoUrl\}"/);
   assert.match(mailSource, /Welcome to AVS Horizon/);
   assert.match(mailSource, /Sign in to AVS Horizon/);
   assert.match(mailSource, /env\.mailLoginUrl/);
@@ -347,12 +350,15 @@ run('function api env declares dedicated mail sender settings', () => {
   assert.match(envSource, /mailClientSecret: process\.env\.MAIL_CLIENT_SECRET \|\| process\.env\.EXTERNAL_ID_CLIENT_SECRET \|\| ''/);
   assert.match(envSource, /mailSender: process\.env\.MAIL_SENDER \|\| process\.env\.EXTERNAL_ID_MAIL_SENDER \|\| ''/);
   assert.match(envSource, /mailLoginUrl: process\.env\.MAIL_LOGIN_URL \|\| ''/);
+  assert.match(envSource, /mailLogoUrl: process\.env\.MAIL_LOGO_URL \|\| ''/);
   assert.match(envSource, /export const assertMailEnv = \(\): void => \{/);
   assert.match(settingsSource, /MAIL_TENANT_ID/);
   assert.match(settingsSource, /MAIL_CLIENT_ID/);
   assert.match(settingsSource, /MAIL_CLIENT_SECRET/);
   assert.match(settingsSource, /MAIL_SENDER/);
   assert.match(settingsSource, /MAIL_LOGIN_URL/);
+  assert.match(settingsSource, /MAIL_LOGO_URL/);
+  assert.match(settingsSource, /https:\/\/horizon\.avsglobalsupply\.com\/assets\/avslogo-CA24d8DQ\.png/);
 });
 
 run('admin company create no longer requires contact email or persists company domains', () => {
