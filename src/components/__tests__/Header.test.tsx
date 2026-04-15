@@ -12,7 +12,6 @@ vi.mock('lucide-react', async () => {
   return {
     ...actual,
     Bell: () => <svg data-testid="notifications-icon" />,
-    ShoppingCart: () => <svg data-testid="shopping-cart-icon" />,
   };
 });
 
@@ -25,24 +24,6 @@ const mocks = vi.hoisted(() => ({
   clearHostedToken: vi.fn(),
   logoutRedirect: vi.fn(),
   logout: vi.fn(),
-  performSignOut: vi.fn(async ({ userEmail, hasHostedSession, logout, navigate, addToast }) => {
-    if (userEmail) {
-      await mocks.clearHostedToken(userEmail);
-    } else {
-      await mocks.clearHostedToken();
-    }
-
-    logout();
-
-    if (hasHostedSession) {
-      await mocks.logoutRedirect({
-        postLogoutRedirectUri: `${window.location.origin}/#/login`,
-      });
-      return;
-    }
-
-    navigate('/login', { replace: true });
-  }),
 }));
 
 vi.mock('../../store/authStore', () => ({
@@ -76,7 +57,6 @@ vi.mock('../../auth/msalInstance', () => ({
 
 vi.mock('../../components/Sidebar', () => ({
   Sidebar: () => <aside data-testid="sidebar" />,
-  performSignOut: mocks.performSignOut,
 }));
 
 const renderHeader = () =>
@@ -110,27 +90,8 @@ describe('Header', () => {
     mocks.clearHostedToken.mockReset();
     mocks.logoutRedirect.mockReset();
     mocks.logout.mockReset();
-    mocks.performSignOut.mockClear();
     mocks.getCompanies.mockResolvedValue([]);
     mocks.clearHostedToken.mockResolvedValue(undefined);
-    mocks.performSignOut.mockImplementation(async ({ userEmail, hasHostedSession, logout, navigate }) => {
-      if (userEmail) {
-        await mocks.clearHostedToken(userEmail);
-      } else {
-        await mocks.clearHostedToken();
-      }
-
-      logout();
-
-      if (hasHostedSession) {
-        await mocks.logoutRedirect({
-          postLogoutRedirectUri: `${window.location.origin}/#/login`,
-        });
-        return;
-      }
-
-      navigate('/login', { replace: true });
-    });
     (useUIStore as any).setState({
       isSidebarOpen: true,
       isDrawerOpen: false,
@@ -349,7 +310,7 @@ describe('Header', () => {
     renderHeader();
 
     await waitFor(() => expect(screen.getByRole('button', { name: /jane/i })).toBeTruthy());
-    expect(screen.queryByTestId('shopping-cart-icon')).toBeNull();
+    expect(screen.queryByRole('button', { name: /cart/i })).toBeNull();
   });
 
   it('allows supadmin users to change the company picker', async () => {
@@ -402,7 +363,7 @@ describe('Header', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /jane/i }));
 
-    fireEvent.click(await screen.findByRole('menuitem', { name: /my profile/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /my profile/i }));
 
     expect(await screen.findByText(/profile page/i)).toBeTruthy();
   });
@@ -421,7 +382,7 @@ describe('Header', () => {
     renderShell();
 
     fireEvent.click(await screen.findByRole('button', { name: /jane/i }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: /sign out/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /sign out/i }));
 
     expect(mocks.clearHostedToken).toHaveBeenCalledWith('jane@example.com');
     expect(await screen.findByText(/login page/i)).toBeTruthy();

@@ -7,7 +7,7 @@ import { useUIStore } from '../store/uiStore';
 import { api } from '../services/api';
 import { externalMsalInstance } from '../auth/msalInstance';
 import { Company } from '../types';
-import { performSignOut } from './Sidebar';
+import { performSignOut } from './signOut';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuthStore();
@@ -221,7 +221,6 @@ export const Header: React.FC = () => {
           <button
             type="button"
             aria-label={user?.name || 'Profile menu'}
-            aria-haspopup="menu"
             aria-expanded={isProfileMenuOpen}
             onClick={() => setIsProfileMenuOpen((current) => !current)}
             className="flex items-center space-x-2 rounded-full px-1 py-1 hover:opacity-80 transition-opacity"
@@ -241,13 +240,10 @@ export const Header: React.FC = () => {
 
           {isProfileMenuOpen && (
             <div
-              role="menu"
-              aria-label="Profile menu"
               className="absolute right-0 z-40 mt-3 w-48 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10 dark:border-slate-700 dark:bg-slate-900"
             >
               <button
                 type="button"
-                role="menuitem"
                 onClick={() => {
                   setIsProfileMenuOpen(false);
                   navigate('/profile');
@@ -258,7 +254,6 @@ export const Header: React.FC = () => {
               </button>
               <button
                 type="button"
-                role="menuitem"
                 onClick={async () => {
                   setIsProfileMenuOpen(false);
                   await performSignOut({

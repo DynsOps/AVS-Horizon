@@ -1,56 +1,18 @@
 
 import React, { useState } from 'react';
-import { NavLink, useNavigate, type NavigateFunction } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { externalMsalInstance } from '../auth/msalInstance';
 import { AsyncActionButton } from './ui/AsyncActionButton';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
 import { Permission } from '../types';
-import { api } from '../services/api';
 import { isPendingAccessUser } from '../utils/rbac';
 import avsLogo from '../assets/avslogo.png';
+import { performSignOut } from './signOut';
 import { 
   LayoutDashboard, Ship, Package, ClipboardList, ReceiptText, Landmark,
   Truck, ShieldAlert, Activity, Settings, LogOut, Users, UserCircle, FilePlus2, BarChart3, Building2, ChevronDown
 } from 'lucide-react';
-
-type PerformSignOutArgs = {
-  userEmail?: string;
-  hasHostedSession: boolean;
-  logout: () => void;
-  navigate: NavigateFunction;
-  addToast: (toast: { title: string; message: string; type: 'error' }) => void;
-};
-
-export const performSignOut = async ({
-  userEmail,
-  hasHostedSession,
-  logout,
-  navigate,
-  addToast,
-}: PerformSignOutArgs) => {
-  try {
-    if (userEmail) {
-      await api.auth.clearHostedToken(userEmail);
-    } else {
-      await api.auth.clearHostedToken();
-    }
-
-    logout();
-
-    if (hasHostedSession) {
-      await externalMsalInstance.logoutRedirect({
-        postLogoutRedirectUri: `${window.location.origin}/#/login`,
-      });
-      return;
-    }
-
-    navigate('/login', { replace: true });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Sign out failed.';
-    addToast({ title: 'Error', message, type: 'error' });
-  }
-};
 
 const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: string }) => (
   <NavLink 
