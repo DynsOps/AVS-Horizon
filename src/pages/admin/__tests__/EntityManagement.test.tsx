@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { EntityManagement } from '../EntityManagement';
 import { useUIStore } from '../../../store/uiStore';
@@ -67,7 +67,9 @@ describe('EntityManagement', () => {
 
     await waitFor(() => expect(mocks.getCompanies).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('button', { name: /add entity/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /add entity/i }));
+    });
     expect(screen.getByRole('heading', { name: /add entity/i })).toBeTruthy();
 
     expect(screen.queryByPlaceholderText(/arkas\.com\.tr/i)).toBeNull();
@@ -78,18 +80,22 @@ describe('EntityManagement', () => {
 
     await waitFor(() => expect(mocks.getCompanies).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('button', { name: /add entity/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /add entity/i }));
+    });
     expect(screen.getByRole('heading', { name: /add entity/i })).toBeTruthy();
 
-    fireEvent.click(screen.getByLabelText(/create company admin user/i));
-    fireEvent.change(screen.getByPlaceholderText(/nordic hamburg/i), {
-      target: { value: 'Northwind Logistics' },
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText(/create company admin user/i));
+      fireEvent.change(screen.getByPlaceholderText(/nordic hamburg/i), {
+        target: { value: 'Northwind Logistics' },
+      });
+      fireEvent.change(screen.getByPlaceholderText(/germany/i), {
+        target: { value: 'Germany' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /create entity/i }));
     });
-    fireEvent.change(screen.getByPlaceholderText(/germany/i), {
-      target: { value: 'Germany' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /create entity/i }));
 
-    expect(mocks.createCompany).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mocks.createCompany).toHaveBeenCalledTimes(1));
   });
 });
