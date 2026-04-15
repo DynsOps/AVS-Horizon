@@ -12,6 +12,7 @@ vi.mock('lucide-react', async () => {
   return {
     ...actual,
     Bell: () => <svg data-testid="notifications-icon" />,
+    ShoppingCart: () => <svg data-testid="shopping-cart-icon" />,
   };
 });
 
@@ -21,10 +22,31 @@ const mocks = vi.hoisted(() => ({
   isDarkMode: false,
   toggleTheme: vi.fn(),
   getCompanies: vi.fn(),
+  clearHostedToken: vi.fn(),
+  logoutRedirect: vi.fn(),
+  logout: vi.fn(),
+  performSignOut: vi.fn(async ({ userEmail, hasHostedSession, logout, navigate, addToast }) => {
+    if (userEmail) {
+      await mocks.clearHostedToken(userEmail);
+    } else {
+      await mocks.clearHostedToken();
+    }
+
+    logout();
+
+    if (hasHostedSession) {
+      await mocks.logoutRedirect({
+        postLogoutRedirectUri: `${window.location.origin}/#/login`,
+      });
+      return;
+    }
+
+    navigate('/login', { replace: true });
+  }),
 }));
 
 vi.mock('../../store/authStore', () => ({
-  useAuthStore: () => ({ user: mocks.user }),
+  useAuthStore: () => ({ user: mocks.user, logout: mocks.logout }),
 }));
 
 vi.mock('../../store/themeStore', () => ({
@@ -36,14 +58,25 @@ vi.mock('../../store/themeStore', () => ({
 
 vi.mock('../../services/api', () => ({
   api: {
+    auth: {
+      clearHostedToken: mocks.clearHostedToken,
+    },
     admin: {
       getCompanies: mocks.getCompanies,
     },
   },
 }));
 
+vi.mock('../../auth/msalInstance', () => ({
+  externalMsalInstance: {
+    getAllAccounts: () => [],
+    logoutRedirect: mocks.logoutRedirect,
+  },
+}));
+
 vi.mock('../../components/Sidebar', () => ({
   Sidebar: () => <aside data-testid="sidebar" />,
+  performSignOut: mocks.performSignOut,
 }));
 
 const renderHeader = () =>
@@ -61,6 +94,7 @@ const renderShell = (initialEntry = '/dashboard') =>
           <Route path="/dashboard" element={<div>Dashboard page</div>} />
           <Route path="/orders" element={<div>Orders page</div>} />
           <Route path="/profile" element={<div>Profile page</div>} />
+          <Route path="/login" element={<div>Login page</div>} />
         </Route>
       </Routes>
     </MemoryRouter>
@@ -73,7 +107,30 @@ describe('Header', () => {
     mocks.isDarkMode = false;
     mocks.toggleTheme.mockReset();
     mocks.getCompanies.mockReset();
+    mocks.clearHostedToken.mockReset();
+    mocks.logoutRedirect.mockReset();
+    mocks.logout.mockReset();
+    mocks.performSignOut.mockClear();
     mocks.getCompanies.mockResolvedValue([]);
+    mocks.clearHostedToken.mockResolvedValue(undefined);
+    mocks.performSignOut.mockImplementation(async ({ userEmail, hasHostedSession, logout, navigate }) => {
+      if (userEmail) {
+        await mocks.clearHostedToken(userEmail);
+      } else {
+        await mocks.clearHostedToken();
+      }
+
+      logout();
+
+      if (hasHostedSession) {
+        await mocks.logoutRedirect({
+          postLogoutRedirectUri: `${window.location.origin}/#/login`,
+        });
+        return;
+      }
+
+      navigate('/login', { replace: true });
+    });
     (useUIStore as any).setState({
       isSidebarOpen: true,
       isDrawerOpen: false,
@@ -251,7 +308,7 @@ describe('Header', () => {
     ]);
   });
 
-  it('renders the company picker as readonly for admin users', async () => {
+  it('renders the company picker as readonly for non-supadmin users', async () => {
     mocks.user = {
       id: 'u-2',
       name: 'Portal Admin',
@@ -278,9 +335,9 @@ describe('Header', () => {
     expect((picker as HTMLSelectElement).disabled).toBe(true);
   });
 
-  it('exposes My Profile and Sign Out from the profile menu', async () => {
+  it('does not render the shopping cart button', async () => {
     mocks.user = {
-      id: 'u-3',
+      id: 'u-9',
       name: 'Jane Smith',
       email: 'jane@example.com',
       role: 'user',
@@ -291,9 +348,82 @@ describe('Header', () => {
 
     renderHeader();
 
+    await waitFor(() => expect(screen.getByRole('button', { name: /jane/i })).toBeTruthy());
+    expect(screen.queryByTestId('shopping-cart-icon')).toBeNull();
+  });
+
+  it('allows supadmin users to change the company picker', async () => {
+    mocks.user = {
+      id: 'u-7',
+      name: 'Super Admin',
+      email: 'supadmin@example.com',
+      role: 'supadmin',
+      permissions: [],
+      status: 'Active',
+    };
+    mocks.companies = [
+      {
+        id: 'c-1',
+        name: 'Northwind',
+        type: 'Customer',
+        country: 'Germany',
+        contactEmail: 'ops@northwind.example',
+        status: 'Active',
+      },
+      {
+        id: 'c-2',
+        name: 'Contoso',
+        type: 'Supplier',
+        country: 'Turkey',
+        contactEmail: 'ops@contoso.example',
+        status: 'Active',
+      },
+    ];
+    mocks.getCompanies.mockResolvedValue(mocks.companies);
+
+    renderHeader();
+
+    const picker = await screen.findByRole('combobox');
+    expect((picker as HTMLSelectElement).disabled).toBe(false);
+  });
+
+  it('opens the profile menu and navigates to the profile page', async () => {
+    mocks.user = {
+      id: 'u-3',
+      name: 'Jane Smith',
+      email: 'jane@example.com',
+      role: 'user',
+      companyId: 'c-1',
+      permissions: [],
+      status: 'Active',
+    };
+
+    renderShell();
+
     fireEvent.click(screen.getByRole('button', { name: /jane/i }));
 
-    expect(await screen.findByText(/my profile/i)).toBeTruthy();
-    expect(await screen.findByText(/sign out/i)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('menuitem', { name: /my profile/i }));
+
+    expect(await screen.findByText(/profile page/i)).toBeTruthy();
+  });
+
+  it('reuses the sign out flow from the profile menu', async () => {
+    mocks.user = {
+      id: 'u-8',
+      name: 'Jane Smith',
+      email: 'jane@example.com',
+      role: 'user',
+      companyId: 'c-1',
+      permissions: [],
+      status: 'Active',
+    };
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: /jane/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /sign out/i }));
+
+    expect(mocks.clearHostedToken).toHaveBeenCalledWith('jane@example.com');
+    expect(await screen.findByText(/login page/i)).toBeTruthy();
   });
 });

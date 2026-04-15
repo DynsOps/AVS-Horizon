@@ -1,15 +1,16 @@
-
-import React, { useEffect, useMemo, useState } from 'react';
-import { Bell, ShoppingCart, User as UserIcon, Sun, Moon, Sparkles, Building2 } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Bell, User as UserIcon, Sun, Moon, Sparkles, Building2, ChevronDown } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../store/uiStore';
 import { api } from '../services/api';
+import { externalMsalInstance } from '../auth/msalInstance';
 import { Company } from '../types';
+import { performSignOut } from './Sidebar';
 
 export const Header: React.FC = () => {
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const { isDarkMode, toggleTheme } = useThemeStore();
   const {
     addToast,
@@ -21,8 +22,11 @@ export const Header: React.FC = () => {
     markNotificationRead,
   } = useUIStore();
   const navigate = useNavigate();
-  const isCustomer = user?.role === 'user';
   const [companyOptions, setCompanyOptions] = useState<Company[]>([]);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const isSupadmin = user?.role === 'supadmin';
+  const hasHostedSession = externalMsalInstance.getAllAccounts().length > 0;
 
   useEffect(() => {
     let mounted = true;
@@ -74,6 +78,30 @@ export const Header: React.FC = () => {
       setDashboardCompanyId(resolvedCompanyId);
     }
   }, [resolvedCompanyId, dashboardCompanyId, setDashboardCompanyId]);
+
+  useEffect(() => {
+    if (!isProfileMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsProfileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isProfileMenuOpen]);
 
   const unreadNotificationCount = useMemo(
     () => notifications.filter((notification) => !notification.isRead).length,
@@ -139,8 +167,10 @@ export const Header: React.FC = () => {
             <Building2 size={15} className="text-slate-500 dark:text-slate-300" />
             <select
               value={resolvedCompanyId}
-              onChange={(e) => setDashboardCompanyId(e.target.value)}
-              className="bg-transparent pr-2 text-sm text-slate-700 outline-none dark:text-slate-200"
+              onChange={isSupadmin ? (e) => setDashboardCompanyId(e.target.value) : undefined}
+              disabled={!isSupadmin}
+              aria-readonly={!isSupadmin}
+              className="bg-transparent pr-2 text-sm text-slate-700 outline-none disabled:cursor-not-allowed disabled:opacity-80 dark:text-slate-200"
             >
               {companyOptions.map((company) => (
                 <option key={company.id} value={company.id}>
@@ -163,6 +193,7 @@ export const Header: React.FC = () => {
 
         <div className="w-px h-6 bg-gray-200 dark:bg-slate-800 mx-2"></div>
 
+        {/*
         {isCustomer && (
           <button
             onClick={() => addToast({ title: 'Cart', message: 'Cart module will open in the next iteration.', type: 'info' })}
@@ -172,6 +203,7 @@ export const Header: React.FC = () => {
             <span className="absolute top-1 right-1 h-2 w-2 bg-blue-600 rounded-full ring-2 ring-white dark:ring-slate-950"></span>
           </button>
         )}
+        */}
 
         <button
           type="button"
@@ -185,23 +217,65 @@ export const Header: React.FC = () => {
           )}
         </button>
         
-         <div className="flex items-center space-x-2 ml-2 pl-2 border-l border-gray-200 dark:border-slate-800">
-            <button 
-                onClick={() => navigate('/profile')}
-                className="flex items-center space-x-2 hover:opacity-80 transition-opacity"
-            >
-                <div className="bg-gradient-to-tr from-blue-500 to-indigo-600 p-[2px] rounded-full">
-                    <div className="bg-white dark:bg-slate-950 p-0.5 rounded-full">
-                         <div className="bg-gray-100 dark:bg-slate-800 rounded-full p-1">
-                             <UserIcon size={16} className="text-gray-600 dark:text-gray-300" strokeWidth={1.5}/>
-                         </div>
-                    </div>
+        <div ref={profileMenuRef} className="relative ml-2 border-l border-gray-200 pl-2 dark:border-slate-800">
+          <button
+            type="button"
+            aria-label={user?.name || 'Profile menu'}
+            aria-haspopup="menu"
+            aria-expanded={isProfileMenuOpen}
+            onClick={() => setIsProfileMenuOpen((current) => !current)}
+            className="flex items-center space-x-2 rounded-full px-1 py-1 hover:opacity-80 transition-opacity"
+          >
+            <div className="bg-gradient-to-tr from-blue-500 to-indigo-600 p-[2px] rounded-full">
+              <div className="bg-white dark:bg-slate-950 p-0.5 rounded-full">
+                <div className="bg-gray-100 dark:bg-slate-800 rounded-full p-1">
+                  <UserIcon size={16} className="text-gray-600 dark:text-gray-300" strokeWidth={1.5} />
                 </div>
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-200 hidden md:block">
-                    {user?.name.split(' ')[0]}
-                </span>
-            </button>
-         </div>
+              </div>
+            </div>
+            <span className="hidden text-sm font-medium text-slate-700 dark:text-slate-200 md:block">
+              {user?.name.split(' ')[0]}
+            </span>
+            <ChevronDown size={14} className="hidden text-slate-400 md:block" />
+          </button>
+
+          {isProfileMenuOpen && (
+            <div
+              role="menu"
+              aria-label="Profile menu"
+              className="absolute right-0 z-40 mt-3 w-48 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10 dark:border-slate-700 dark:bg-slate-900"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setIsProfileMenuOpen(false);
+                  navigate('/profile');
+                }}
+                className="block w-full px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                My Profile
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={async () => {
+                  setIsProfileMenuOpen(false);
+                  await performSignOut({
+                    userEmail: user?.email,
+                    hasHostedSession,
+                    logout,
+                    navigate,
+                    addToast,
+                  });
+                }}
+                className="block w-full px-4 py-3 text-left text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+              >
+                Sign Out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
