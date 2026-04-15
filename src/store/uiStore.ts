@@ -19,16 +19,16 @@ interface AppNotification {
 export const defaultNotifications: AppNotification[] = [
   {
     id: 'notif-dashboard-summary',
-    title: 'Daily operations summary',
-    message: 'Review the latest dashboard activity and pending updates.',
-    targetRoute: '/dashboard',
+    title: 'Profile reminder',
+    message: 'Review your latest profile details and account updates.',
+    targetRoute: '/profile',
     isRead: false,
   },
   {
     id: 'notif-orders-followup',
-    title: 'Order follow-up',
-    message: 'A recent order needs your review in the orders workspace.',
-    targetRoute: '/orders',
+    title: 'Security check-in',
+    message: 'Confirm your account information and recent access activity.',
+    targetRoute: '/profile',
     isRead: false,
   },
 ];

@@ -66,13 +66,13 @@ const renderHeader = () =>
     </MemoryRouter>
   );
 
-const renderShell = (initialEntry = '/dashboard') =>
+const renderShell = (initialEntry = '/customer/dashboard') =>
   render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route element={<AppShell />}>
-          <Route path="/dashboard" element={<div>Dashboard page</div>} />
-          <Route path="/orders" element={<div>Orders page</div>} />
+          <Route path="/customer/dashboard" element={<div>Dashboard page</div>} />
+          <Route path="/customer/orders" element={<div>Orders page</div>} />
           <Route path="/profile" element={<div>Profile page</div>} />
           <Route path="/login" element={<div>Login page</div>} />
         </Route>
@@ -153,7 +153,7 @@ describe('Header', () => {
           id: 'notif-1',
           title: 'Order approved',
           message: 'Order ORD-100 is approved.',
-          targetRoute: '/orders',
+          targetRoute: '/customer/orders',
           isRead: false,
         },
       ],
@@ -184,7 +184,7 @@ describe('Header', () => {
           id: 'notif-1',
           title: 'Order approved',
           message: 'Order ORD-100 is approved.',
-          targetRoute: '/orders',
+          targetRoute: '/customer/orders',
           isRead: false,
         },
       ],
@@ -214,7 +214,7 @@ describe('Header', () => {
           id: 'notif-1',
           title: 'Order approved',
           message: 'Order ORD-100 is approved.',
-          targetRoute: '/orders',
+          targetRoute: '/customer/orders',
           isRead: false,
         },
       ],
@@ -249,7 +249,7 @@ describe('Header', () => {
           id: 'notif-1',
           title: 'Order approved',
           message: 'Order ORD-100 is approved.',
-          targetRoute: '/orders',
+          targetRoute: '/customer/orders',
           isRead: false,
         },
       ],
