@@ -8,9 +8,8 @@ type CompanyRow = {
   name: string;
   type: 'Customer' | 'Supplier';
   country: string;
-  contactEmail: string;
+  contactEmail: string | null;
   status: 'Active' | 'Inactive';
-  domainsCsv: string | null;
   latestCreatedAt: string;
 };
 
@@ -34,10 +33,8 @@ export async function listAdminCompanies(request: HttpRequest, context: Invocati
         c.country,
         c.contact_email AS contactEmail,
         c.status,
-        STRING_AGG(cd.domain, ',') AS domainsCsv,
         MAX(c.created_at) AS latestCreatedAt
       FROM dbo.companies c
-      LEFT JOIN dbo.company_domains cd ON cd.company_id = c.id
       ${isAdminActor ? 'WHERE c.id = @companyId' : ''}
       GROUP BY c.id, c.name, c.type, c.country, c.contact_email, c.status
       ORDER BY latestCreatedAt DESC
@@ -46,10 +43,7 @@ export async function listAdminCompanies(request: HttpRequest, context: Invocati
     );
 
     return ok({
-      companies: result.recordset.map((company) => ({
-        ...company,
-        domains: (company.domainsCsv || '').split(',').map((item) => item.trim()).filter(Boolean),
-      })),
+      companies: result.recordset,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';

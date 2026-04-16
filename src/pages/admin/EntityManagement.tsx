@@ -221,7 +221,6 @@ export const EntityManagement: React.FC = () => {
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Type</th>
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Country</th>
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Contact</th>
-              <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Domains</th>
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th>
               <th className="px-6 py-3" />
             </tr>
@@ -235,10 +234,7 @@ export const EntityManagement: React.FC = () => {
                 </td>
                 <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{company.type}</td>
                 <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{company.country}</td>
-                <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{company.contactEmail}</td>
-                <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">
-                  {company.domains && company.domains.length > 0 ? company.domains.join(', ') : 'No allowlist'}
-                </td>
+                <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{company.contactEmail || 'No contact email'}</td>
                 <td className="px-6 py-4">
                   <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
                     company.status === 'Active'
@@ -266,7 +262,7 @@ export const EntityManagement: React.FC = () => {
             ))}
             {!isLoading && companies.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                <td colSpan={6} className="px-6 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                   No entities found.
                 </td>
               </tr>
@@ -290,7 +286,6 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
   const [country, setCountry] = useState(company?.country || 'Germany');
   const [contactEmail, setContactEmail] = useState(company?.contactEmail || '');
   const [status, setStatus] = useState<Company['status']>(company?.status || 'Active');
-  const [domainsText, setDomainsText] = useState((company?.domains || []).join(', '));
   const [createCompanyAdmin, setCreateCompanyAdmin] = useState(!company);
   const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
@@ -307,11 +302,7 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
       addToast({ title: 'Validation Error', message: 'Country is required.', type: 'error' });
       return;
     }
-    if (!normalizedEmail) {
-      addToast({ title: 'Validation Error', message: 'Contact email is required.', type: 'error' });
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       addToast({ title: 'Validation Error', message: 'Please enter a valid email.', type: 'error' });
       return;
     }
@@ -320,9 +311,8 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
       name: name.trim(),
       type,
       country: country.trim(),
-      contactEmail: normalizedEmail,
+      contactEmail: normalizedEmail || (company ? '' : undefined),
       status,
-      domains: domainsText.split(',').map((item) => item.trim().toLowerCase().replace(/^@+/, '')).filter(Boolean),
       createCompanyAdmin: !company ? createCompanyAdmin : undefined,
       adminName: !company ? adminName.trim() : undefined,
       adminEmail: !company ? adminEmail.trim().toLowerCase() : undefined,
@@ -419,7 +409,7 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
         </label>
 
         <label className="space-y-1.5">
-          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Contact Email</span>
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Contact Email (Optional)</span>
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
             <Mail size={14} className="text-slate-400" />
             <input
@@ -429,19 +419,6 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
               placeholder="ops@company.com"
             />
           </div>
-        </label>
-
-        <label className="space-y-1.5">
-          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Allowlisted Domains</span>
-          <textarea
-            value={domainsText}
-            onChange={(e) => setDomainsText(e.target.value)}
-            className="min-h-[88px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-            placeholder="arkas.com.tr, sub.arkas.com.tr"
-          />
-          <p className="text-[11px] text-slate-500">
-            Keep company domains here for portal classification and reporting; login now uses External ID only.
-          </p>
         </label>
 
         {!company && (

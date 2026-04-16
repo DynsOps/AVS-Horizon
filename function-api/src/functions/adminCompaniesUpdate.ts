@@ -1,9 +1,7 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
-import { randomUUID } from 'crypto';
 import { authenticateRequest } from '../lib/auth';
-import { runQuery, runScopedQuery } from '../lib/db';
+import { runScopedQuery } from '../lib/db';
 import { errorResponse, ok } from '../lib/http';
-import { normalizeDomain } from '../lib/identity';
 
 type UpdateCompanyBody = {
   name?: string;
@@ -11,7 +9,6 @@ type UpdateCompanyBody = {
   country?: string;
   contactEmail?: string;
   status?: 'Active' | 'Inactive';
-  domains?: string[];
 };
 
 type CompanyRow = {
@@ -19,7 +16,7 @@ type CompanyRow = {
   name: string;
   type: 'Customer' | 'Supplier';
   country: string;
-  contactEmail: string;
+  contactEmail: string | null;
   status: 'Active' | 'Inactive';
 };
 
@@ -56,12 +53,12 @@ export async function updateAdminCompany(request: HttpRequest, context: Invocati
       name: (body.name || current.name).trim(),
       type: body.type || current.type,
       country: (body.country || current.country).trim(),
-      contactEmail: (body.contactEmail || current.contactEmail).trim().toLowerCase(),
+      contactEmail:
+        body.contactEmail !== undefined
+          ? (body.contactEmail || '').trim().toLowerCase() || null
+          : current.contactEmail,
       status: body.status || current.status,
     };
-    const nextDomains = body.domains
-      ? Array.from(new Set(body.domains.map(normalizeDomain).filter(Boolean)))
-      : null;
 
     await runScopedQuery(
       { role: actor.role, companyId: actor.companyId, userId: actor.id },
@@ -78,23 +75,6 @@ export async function updateAdminCompany(request: HttpRequest, context: Invocati
       `,
       { id: companyId, ...next }
     );
-
-    if (nextDomains) {
-      await runQuery('DELETE FROM dbo.company_domains WHERE company_id = @companyId', { companyId });
-      for (const domain of nextDomains) {
-        await runQuery(
-          `
-          INSERT INTO dbo.company_domains (id, company_id, domain, created_at, updated_at)
-          VALUES (@id, @companyId, @domain, SYSUTCDATETIME(), SYSUTCDATETIME())
-          `,
-          {
-            id: `CD-${randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`,
-            companyId,
-            domain,
-          }
-        );
-      }
-    }
 
     return ok({ success: true });
   } catch (error) {

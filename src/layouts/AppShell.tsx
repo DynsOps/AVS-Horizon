@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { Header } from '../components/Header';
@@ -8,6 +8,7 @@ import { X, CircleCheck, CircleAlert, Info, AlertTriangle } from 'lucide-react';
 export const AppShell: React.FC = () => {
   const {
     isDrawerOpen,
+    drawerTitle,
     drawerContent,
     closeDrawer,
     toasts,
@@ -15,6 +16,25 @@ export const AppShell: React.FC = () => {
     confirmDialog,
     resolveConfirmDialog,
   } = useUIStore();
+  const drawerHeadingId = useId();
+  const drawerCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!isDrawerOpen) return;
+
+    drawerCloseButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeDrawer();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isDrawerOpen, closeDrawer]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
@@ -37,10 +57,21 @@ export const AppShell: React.FC = () => {
       {isDrawerOpen && (
         <div className="absolute inset-0 z-40 flex justify-end">
           <div className="fixed inset-0 bg-slate-900/30 dark:bg-black/55 backdrop-blur-sm transition-opacity" onClick={closeDrawer}></div>
-          <div className="relative w-[460px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl shadow-2xl h-full z-50 transform transition-transform duration-300 ease-out border-l border-white/40 dark:border-slate-700/60 flex flex-col">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={drawerHeadingId}
+            className="relative w-[460px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl shadow-2xl h-full z-50 transform transition-transform duration-300 ease-out border-l border-white/40 dark:border-slate-700/60 flex flex-col"
+          >
             <div className="flex items-center justify-between p-5 border-b border-gray-100/70 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70">
-              <h2 className="text-lg font-semibold tracking-tight text-slate-800 dark:text-slate-100">Details</h2>
-              <button onClick={closeDrawer} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
+              <h2 id={drawerHeadingId} className="text-lg font-semibold tracking-tight text-slate-800 dark:text-slate-100">{drawerTitle}</h2>
+              <button
+                ref={drawerCloseButtonRef}
+                type="button"
+                aria-label={`Close ${drawerTitle}`}
+                onClick={closeDrawer}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+              >
                 <X size={20} strokeWidth={1.5} />
               </button>
             </div>
