@@ -11,7 +11,7 @@ import avsLogo from '../assets/avslogo.png';
 import { performSignOut } from './signOut';
 import { 
   LayoutDashboard, Ship, Package, ClipboardList, ReceiptText, Landmark,
-  Truck, ShieldAlert, Activity, Settings, LogOut, Users, UserCircle, FilePlus2, BarChart3, Building2, ChevronDown
+  Truck, ShieldAlert, Activity, Settings, LogOut, Users, UserCircle, FilePlus2, BarChart3, Building2, ChevronDown, MapPin, Anchor, LifeBuoy
 } from 'lucide-react';
 
 const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: string }) => (
@@ -111,6 +111,7 @@ export const Sidebar: React.FC = () => {
             
             {hasAnalysisReportAccess && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
             {hasPermission('submit:rfq') && <NavItem to="/guest/rfq" icon={FilePlus2} label="Guest RFQ" />}
+            {hasPermission('create:support-ticket') && <NavItem to="/support/tickets" icon={LifeBuoy} label="Support Tickets" />}
 
             {hasPermission('view:supplier') && (
               <>
@@ -140,6 +141,7 @@ export const Sidebar: React.FC = () => {
             {hasPermission('view:business') && <NavItem to="/customer/business" icon={Settings} label="Business" />}
            
             {hasAnalysisReportAccess && <NavItem to="/customer/reports/analysis" icon={BarChart3} label="Analysis Report" />}
+            {hasPermission('create:support-ticket') && <NavItem to="/support/tickets" icon={LifeBuoy} label="Support Tickets" />}
             {hasPermission('view:supplier') && (
               <>
                 <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 mt-6">Supplier</div>
@@ -165,7 +167,10 @@ export const Sidebar: React.FC = () => {
             {hasPermission('system:settings') && <NavItem to="/admin/system-health" icon={Activity} label="System Health" />}
             {hasPermission('manage:users') && <NavItem to="/admin/users" icon={Users} label="User Management" />}
             {hasPermission('manage:companies') && <NavItem to="/admin/entities" icon={Building2} label="Entity Management" />}
+            {hasPermission('manage:vessels') && <NavItem to="/admin/vessels" icon={Anchor} label="Vessel Management" />}
+            {hasPermission('view:maritime-map') && <NavItem to="/admin/maritime-map" icon={MapPin} label="Maritime Map" />}
             <NavItem to="/admin/reports" icon={BarChart3} label="Report Management" />
+            <NavItem to="/admin/support-tickets" icon={LifeBuoy} label="Support Tickets" />
             {hasPermission('system:settings') && <NavItem to="/admin/security" icon={ShieldAlert} label="Security Logs" />}
             {hasPermission('system:settings') && <NavItem to="/admin/feature-flags" icon={Settings} label="Feature Flags" />}
 

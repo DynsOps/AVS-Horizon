@@ -10,7 +10,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'view:analysis-report:contracted', 'view:analysis-report:bi-overview',
   ],
   supadmin: [
-    'view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'view:supplier', 'create:support-ticket', 'submit:rfq', 'manage:users', 'manage:companies', 'manage:reports', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings',
+    'view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'view:supplier', 'submit:rfq', 'manage:users', 'manage:companies', 'manage:reports', 'manage:vessels', 'view:maritime-map', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings',
     'view:analysis-report:contracted', 'view:analysis-report:bi-overview',
   ],
 };

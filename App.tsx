@@ -24,6 +24,7 @@ import { Finance } from './src/pages/customer/Finance';
 import { Sustainability } from './src/pages/customer/Sustainability';
 import { Business } from './src/pages/customer/Business';
 import { GuestRFQPage } from './src/pages/guest/RFQ';
+import { SupportTickets } from './src/pages/shared/SupportTickets';
 
 // Supplier Pages
 import { SupplierDashboard } from './src/pages/supplier/Dashboard';
@@ -35,6 +36,10 @@ import { Security } from './src/pages/admin/Security';
 import { UserManagement } from './src/pages/admin/UserManagement';
 import { EntityManagement } from './src/pages/admin/EntityManagement';
 import { ReportManagement } from './src/pages/admin/ReportManagement';
+import { VesselManagement } from './src/pages/admin/VesselManagement';
+import { MaritimeMap } from './src/pages/admin/MaritimeMap';
+import { MaritimeOperationDetail } from './src/pages/admin/MaritimeOperationDetail';
+import { SupportTicketManagement } from './src/pages/admin/SupportTicketManagement';
 import { Permission, UserRole } from './src/types';
 import { getDefaultRouteForUser, hasPermissions, hasRoleAccess, isPendingAccessUser } from './src/utils/rbac';
 import { MsalAuthBridge } from './src/auth/MsalAuthBridge';
@@ -97,6 +102,7 @@ const App: React.FC = () => {
           <Route path="/access-pending" element={<ProtectedRoute><AccessPending /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/guest/rfq" element={<ProtectedRoute allowedRoles={['user']} requiredPermissions={['submit:rfq']}><GuestRFQPage /></ProtectedRoute>} />
+          <Route path="/support/tickets" element={<ProtectedRoute allowedRoles={['user', 'admin']} requiredPermissions={['create:support-ticket']}><SupportTickets /></ProtectedRoute>} />
 
           {/* Customer Routes */}
           <Route path="/customer">
@@ -130,7 +136,11 @@ const App: React.FC = () => {
             <Route path="system-health" element={<ProtectedRoute allowedRoles={['admin', 'supadmin']} requiredPermissions={['system:settings']}><SystemHealth /></ProtectedRoute>} />
             <Route path="users" element={<ProtectedRoute allowedRoles={['admin', 'supadmin']} requiredPermissions={['manage:users']}><UserManagement /></ProtectedRoute>} />
             <Route path="entities" element={<ProtectedRoute allowedRoles={['supadmin']} requiredPermissions={['manage:companies']}><EntityManagement /></ProtectedRoute>} />
+            <Route path="vessels" element={<ProtectedRoute allowedRoles={['supadmin']} requiredPermissions={['manage:vessels']}><VesselManagement /></ProtectedRoute>} />
+            <Route path="maritime-map" element={<ProtectedRoute allowedRoles={['supadmin']} requiredPermissions={['view:maritime-map']}><MaritimeMap /></ProtectedRoute>} />
+            <Route path="maritime-map/operations/:vesselId" element={<ProtectedRoute allowedRoles={['supadmin']} requiredPermissions={['view:maritime-map']}><MaritimeOperationDetail /></ProtectedRoute>} />
             <Route path="reports" element={<ProtectedRoute allowedRoles={['supadmin']}><ReportManagement /></ProtectedRoute>} />
+            <Route path="support-tickets" element={<ProtectedRoute allowedRoles={['supadmin']}><SupportTicketManagement /></ProtectedRoute>} />
             <Route path="feature-flags" element={<ProtectedRoute allowedRoles={['supadmin']} requiredPermissions={['system:settings']}><div className="p-6">Feature Flags Management</div></ProtectedRoute>} />
           </Route>
 

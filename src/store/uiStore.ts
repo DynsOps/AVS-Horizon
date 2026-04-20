@@ -1,5 +1,6 @@
 import React from 'react';
 import { create } from 'zustand';
+import { AppNotification } from '../types';
 
 interface ToastMessage {
   id: string;
@@ -8,30 +9,7 @@ interface ToastMessage {
   type: 'success' | 'error' | 'info';
 }
 
-interface AppNotification {
-  id: string;
-  title: string;
-  message: string;
-  targetRoute: string;
-  isRead: boolean;
-}
-
-export const defaultNotifications: AppNotification[] = [
-  {
-    id: 'notif-dashboard-summary',
-    title: 'Profile reminder',
-    message: 'Review your latest profile details and account updates.',
-    targetRoute: '/profile',
-    isRead: false,
-  },
-  {
-    id: 'notif-orders-followup',
-    title: 'Security check-in',
-    message: 'Confirm your account information and recent access activity.',
-    targetRoute: '/profile',
-    isRead: false,
-  },
-];
+export const defaultNotifications: AppNotification[] = [];
 
 type ConfirmTone = 'default' | 'danger';
 
@@ -61,6 +39,7 @@ interface UIState {
   openDrawer: (content: React.ReactNode, title?: string) => void;
   closeDrawer: () => void;
   notifications: AppNotification[];
+  setNotifications: (notifications: AppNotification[]) => void;
   markNotificationRead: (id: string) => void;
   toasts: ToastMessage[];
   addToast: (toast: Omit<ToastMessage, 'id'>) => void;
@@ -110,6 +89,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   openDrawer: (content, title = 'Details') => set({ isDrawerOpen: true, drawerTitle: title, drawerContent: content }),
   closeDrawer: () => set({ isDrawerOpen: false, drawerTitle: 'Details', drawerContent: null }),
   notifications: defaultNotifications,
+  setNotifications: (notifications) => set({ notifications }),
   markNotificationRead: (id) =>
     set((state) => ({
       notifications: state.notifications.map((notification) =>
