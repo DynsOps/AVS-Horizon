@@ -1,11 +1,11 @@
 
-import { KPI, Order, Shipment, Invoice, Vessel, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport, BootstrapCredentials, UserCreateResponse } from '../types';
+import { KPI, Order, Shipment, Invoice, Vessel, VesselPosition, VesselRoute, VesselOperation, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport, BootstrapCredentials, UserCreateResponse, AppNotification } from '../types';
 import { getDefaultPermissionsForRole } from '../utils/rbac';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const LOCAL_DB_KEY = 'avs_horizon_local_db_v2';
+const LOCAL_DB_KEY = 'avs_horizon_local_db_v3';
 const AUTH_BEARER_TOKEN_KEY = 'avs_auth_bearer_token';
 const FUNCTION_API_BASE_URL = (import.meta.env.VITE_FUNCTION_API_BASE_URL || '').replace(/\/+$/, '');
 const FORCE_FUNCTION_API = String(import.meta.env.VITE_FORCE_FUNCTION_API || '').toLowerCase() === 'true';
@@ -111,6 +111,9 @@ type LocalDbSnapshot = {
   shipments: Shipment[];
   invoices: Invoice[];
   vessels: Vessel[];
+  vesselPositions: VesselPosition[];
+  vesselRoutes: VesselRoute[];
+  vesselOperations: VesselOperation[];
   logs: LogEntry[];
 };
 
@@ -139,16 +142,15 @@ type SystemHealthPayload = {
 
 const normalizeCompany = (company: Company): Company => ({
   ...company,
-  contactEmail: company.contactEmail || undefined,
 });
 
 // --- Initial Mock Data (Stateful) ---
 
 let mockCompanies: Company[] = [
-  { id: 'C-001', name: 'Global Shipping Co.', type: 'Customer', country: 'Singapore', contactEmail: 'ops@globalshipping.com', status: 'Active' },
-  { id: 'S-001', name: 'Marine Supplies Ltd.', type: 'Supplier', country: 'Netherlands', contactEmail: 'sales@marinesupplies.com', status: 'Active' },
-  { id: 'C-002', name: 'Pacific Liners', type: 'Customer', country: 'USA', contactEmail: 'admin@pacificliners.com', status: 'Inactive' },
-  { id: 'C-003', name: 'NORDIC HAMBURG', type: 'Customer', country: 'Germany', contactEmail: 'ops@nordic-hamburg.com', status: 'Active' },
+  { id: 'C-001', name: 'Global Shipping Co.', dataAreaId: 'DAT', projId: 'PRJ-0001', type: 'Customer', status: 'Active' },
+  { id: 'S-001', name: 'Marine Supplies Ltd.', dataAreaId: 'DAT', projId: 'PRJ-0002', type: 'Supplier', status: 'Active' },
+  { id: 'C-002', name: 'Pacific Liners', dataAreaId: 'DAT', projId: 'PRJ-0003', type: 'Customer', status: 'Inactive' },
+  { id: 'C-003', name: 'NORDIC HAMBURG', dataAreaId: 'DAT', projId: 'PRJ-0004', type: 'Customer', status: 'Active' },
 ];
 
 let mockUsers: User[] = [
@@ -354,11 +356,42 @@ let mockInvoices: Invoice[] = [
 ];
 
 let mockVessels: Vessel[] = [
-  { id: 'V-001', companyId: 'C-001', name: 'Avs Titan', imo: '9876543', type: 'Container' },
-  { id: 'V-002', companyId: 'C-001', name: 'Avs Neptune', imo: '1234567', type: 'Bulker' },
-  { id: 'V-003', companyId: 'C-002', name: 'Avs Apollo', imo: '5544332', type: 'Tanker' },
-  { id: 'V-004', companyId: 'C-003', name: 'Nordic Aurora', imo: '4499112', type: 'Container' },
-  { id: 'V-005', companyId: 'C-003', name: 'Nordic Breeze', imo: '4499113', type: 'Bulker' },
+  { id: 'V-001', companyId: 'C-001', name: 'Avs Titan', imo: '9876543', type: 'Container', flagCountry: 'Singapore', builtYear: 2018, dwt: 65000, vesselStatus: 'Active' },
+  { id: 'V-002', companyId: 'C-001', name: 'Avs Neptune', imo: '1234567', type: 'Bulker', flagCountry: 'Panama', builtYear: 2015, dwt: 82000, vesselStatus: 'Active' },
+  { id: 'V-003', companyId: 'C-002', name: 'Avs Apollo', imo: '5544332', type: 'Tanker', flagCountry: 'Liberia', builtYear: 2020, dwt: 110000, vesselStatus: 'Active' },
+  { id: 'V-004', companyId: 'C-003', name: 'Nordic Aurora', imo: '4499112', type: 'Container', flagCountry: 'Germany', builtYear: 2019, dwt: 58000, vesselStatus: 'Active' },
+  { id: 'V-005', companyId: 'C-003', name: 'Nordic Breeze', imo: '4499113', type: 'Bulker', flagCountry: 'Norway', builtYear: 2017, dwt: 75000, vesselStatus: 'Under Repair' },
+];
+
+let mockVesselPositions: VesselPosition[] = [
+  { id: 'VP-001', vesselId: 'V-001', lat: 1.290270, lng: 103.851959, speed: 12.5, course: 245, heading: 243, navStatus: 'Under Way', destination: 'ROTTERDAM', eta: '2023-11-05T14:00:00Z', fetchedAt: '2023-10-24T10:00:00Z' },
+  { id: 'VP-002', vesselId: 'V-002', lat: 25.204849, lng: 55.270782, speed: 0, course: 0, heading: 180, navStatus: 'At Anchor', destination: 'JEBEL ALI', eta: '2023-10-25T08:00:00Z', fetchedAt: '2023-10-24T10:00:00Z' },
+  { id: 'VP-003', vesselId: 'V-003', lat: 29.760427, lng: -95.369804, speed: 0, course: 0, heading: 90, navStatus: 'Moored', destination: 'HOUSTON', eta: '', fetchedAt: '2023-10-24T10:00:00Z' },
+  { id: 'VP-004', vesselId: 'V-004', lat: 51.9225, lng: 4.47917, speed: 8.2, course: 15, heading: 12, navStatus: 'Under Way', destination: 'HAMBURG', eta: '2023-10-26T06:00:00Z', fetchedAt: '2023-10-24T10:00:00Z' },
+  { id: 'VP-005', vesselId: 'V-005', lat: 53.5511, lng: 9.9937, speed: 0, course: 0, heading: 270, navStatus: 'Moored', destination: 'HAMBURG', eta: '', fetchedAt: '2023-10-24T10:00:00Z' },
+];
+
+let mockVesselRoutes: VesselRoute[] = [
+  { id: 'VR-001', vesselId: 'V-001', departurePort: 'Singapore', arrivalPort: 'Rotterdam', departureDate: '2023-10-01T06:00:00Z', status: 'In Progress' },
+  { id: 'VR-002', vesselId: 'V-002', departurePort: 'Mumbai', arrivalPort: 'Jebel Ali', departureDate: '2023-10-18T12:00:00Z', arrivalDate: '2023-10-25T08:00:00Z', status: 'In Progress' },
+  { id: 'VR-003', vesselId: 'V-003', departurePort: 'Corpus Christi', arrivalPort: 'Houston', departureDate: '2023-10-20T10:00:00Z', arrivalDate: '2023-10-22T14:00:00Z', status: 'Completed' },
+  { id: 'VR-004', vesselId: 'V-004', departurePort: 'Rotterdam', arrivalPort: 'Hamburg', departureDate: '2023-10-23T08:00:00Z', status: 'In Progress' },
+  { id: 'VR-005', vesselId: 'V-005', departurePort: 'Oslo', arrivalPort: 'Hamburg', departureDate: '2023-10-15T14:00:00Z', arrivalDate: '2023-10-18T10:00:00Z', status: 'Completed' },
+  { id: 'VR-006', vesselId: 'V-001', departurePort: 'Busan', arrivalPort: 'Singapore', departureDate: '2023-09-20T06:00:00Z', arrivalDate: '2023-09-28T18:00:00Z', status: 'Completed' },
+  { id: 'VR-007', vesselId: 'V-004', departurePort: 'Antwerp', arrivalPort: 'Rotterdam', departureDate: '2023-10-10T06:00:00Z', arrivalDate: '2023-10-12T10:00:00Z', status: 'Completed' },
+];
+
+let mockVesselOperations: VesselOperation[] = [
+  { id: 'VO-001', vesselId: 'V-001', routeId: 'VR-006', port: 'Busan', operationType: 'Bunkering', operationDate: '2023-09-20T08:00:00Z', items: [{ name: 'VLSFO', quantity: 500, unit: 'MT', unitPrice: 620 }, { name: 'MGO', quantity: 50, unit: 'MT', unitPrice: 850 }], totalAmount: 352500, currency: 'USD', supplierId: 'S-001' },
+  { id: 'VO-002', vesselId: 'V-001', routeId: 'VR-006', port: 'Singapore', operationType: 'Provisioning', operationDate: '2023-09-29T10:00:00Z', items: [{ name: 'Fresh Provisions', quantity: 200, unit: 'kg', unitPrice: 8 }, { name: 'Dry Provisions', quantity: 500, unit: 'kg', unitPrice: 5 }, { name: 'Bonded Stores', quantity: 100, unit: 'pcs', unitPrice: 12 }], totalAmount: 5300, currency: 'USD', supplierId: 'S-001' },
+  { id: 'VO-003', vesselId: 'V-001', routeId: 'VR-001', port: 'Singapore', operationType: 'Maintenance', operationDate: '2023-10-01T04:00:00Z', items: [{ name: 'Engine Filter Set', quantity: 4, unit: 'set', unitPrice: 1200 }, { name: 'Hydraulic Pump Seal', quantity: 2, unit: 'pcs', unitPrice: 850 }], totalAmount: 6500, currency: 'USD', supplierId: 'S-001' },
+  { id: 'VO-004', vesselId: 'V-002', routeId: 'VR-002', port: 'Mumbai', operationType: 'Bunkering', operationDate: '2023-10-18T14:00:00Z', items: [{ name: 'VLSFO', quantity: 800, unit: 'MT', unitPrice: 610 }], totalAmount: 488000, currency: 'USD' },
+  { id: 'VO-005', vesselId: 'V-003', routeId: 'VR-003', port: 'Houston', operationType: 'Crew Change', operationDate: '2023-10-22T16:00:00Z', items: [{ name: 'Crew Transfer', quantity: 8, unit: 'persons', unitPrice: 500 }], totalAmount: 4000, currency: 'USD', notes: '4 on / 4 off rotation' },
+  { id: 'VO-006', vesselId: 'V-004', routeId: 'VR-007', port: 'Antwerp', operationType: 'Provisioning', operationDate: '2023-10-10T08:00:00Z', items: [{ name: 'Fresh Provisions', quantity: 300, unit: 'kg', unitPrice: 9 }, { name: 'Cleaning Supplies', quantity: 50, unit: 'pcs', unitPrice: 15 }], totalAmount: 3450, currency: 'EUR', supplierId: 'S-001' },
+  { id: 'VO-007', vesselId: 'V-004', routeId: 'VR-007', port: 'Rotterdam', operationType: 'Bunkering', operationDate: '2023-10-12T12:00:00Z', items: [{ name: 'VLSFO', quantity: 350, unit: 'MT', unitPrice: 630 }], totalAmount: 220500, currency: 'EUR' },
+  { id: 'VO-008', vesselId: 'V-005', routeId: 'VR-005', port: 'Hamburg', operationType: 'Maintenance', operationDate: '2023-10-19T09:00:00Z', items: [{ name: 'Main Engine Overhaul', quantity: 1, unit: 'job', unitPrice: 45000 }, { name: 'Propeller Shaft Inspection', quantity: 1, unit: 'job', unitPrice: 12000 }], totalAmount: 57000, currency: 'EUR', notes: 'Scheduled dry dock maintenance' },
+  { id: 'VO-009', vesselId: 'V-003', routeId: 'VR-003', port: 'Corpus Christi', operationType: 'Port Fees', operationDate: '2023-10-20T12:00:00Z', items: [{ name: 'Pilotage', quantity: 1, unit: 'service', unitPrice: 3500 }, { name: 'Towage', quantity: 2, unit: 'tugs', unitPrice: 2800 }, { name: 'Berth Fee', quantity: 3, unit: 'days', unitPrice: 1200 }], totalAmount: 12700, currency: 'USD' },
+  { id: 'VO-010', vesselId: 'V-001', routeId: 'VR-001', port: 'Colombo', operationType: 'Bunkering', operationDate: '2023-10-12T06:00:00Z', items: [{ name: 'VLSFO', quantity: 400, unit: 'MT', unitPrice: 615 }], totalAmount: 246000, currency: 'USD', notes: 'Enroute bunker stop' },
 ];
 
 const mockLogs: LogEntry[] = [
@@ -380,6 +413,9 @@ const makeSnapshot = (): LocalDbSnapshot => ({
   shipments: [...mockShipments],
   invoices: [...mockInvoices],
   vessels: [...mockVessels],
+  vesselPositions: [...mockVesselPositions],
+  vesselRoutes: [...mockVesselRoutes],
+  vesselOperations: [...mockVesselOperations],
   logs: [...mockLogs],
 });
 
@@ -409,6 +445,9 @@ const hydrateFromLocalDb = () => {
     if (parsed.shipments) mockShipments = parsed.shipments;
     if (parsed.invoices) mockInvoices = parsed.invoices;
     if (parsed.vessels) mockVessels = parsed.vessels;
+    if (parsed.vesselPositions) mockVesselPositions = parsed.vesselPositions;
+    if (parsed.vesselRoutes) mockVesselRoutes = parsed.vesselRoutes;
+    if (parsed.vesselOperations) mockVesselOperations = parsed.vesselOperations;
     if (parsed.logs) {
       mockLogs.length = 0;
       mockLogs.push(...parsed.logs);
@@ -952,6 +991,39 @@ export const api = {
     resetUserPassword: async (): Promise<never> => {
       throw new Error('Password reset is managed by Entra ID. Use the hosted Entra reset flow.');
     },
+    getGroupProjtables: async (params?: {
+      query?: string;
+      limit?: number;
+    }): Promise<Array<{ name: string; dataAreaId: string; projId: string }>> => {
+        const query = (params?.query || '').trim();
+        const limit = Number.isFinite(params?.limit) ? Math.max(1, Math.min(200, Number(params?.limit))) : 25;
+        if (shouldUseFunctionApi()) {
+            const searchParams = new URLSearchParams();
+            if (query) searchParams.set('q', query);
+            searchParams.set('limit', String(limit));
+            const payload = await callFunctionApi<{ items: Array<{ name: string; dataareaid: string | null; projid: string | null }> }>(
+              `api/identity/group-projtables?${searchParams.toString()}`
+            );
+            return payload.items
+              .map((item) => ({
+                name: (item.name || '').trim(),
+                dataAreaId: (item.dataareaid || '').trim(),
+                projId: (item.projid || '').trim(),
+              }))
+              .filter((item) => item.name && item.dataAreaId && item.projId)
+              .slice(0, limit);
+        }
+        await delay(150);
+        return mockCompanies
+          .filter((company) => company.name && company.dataAreaId && company.projId)
+          .filter((company) => !query || company.name.toLowerCase().includes(query.toLowerCase()))
+          .map((company) => ({
+            name: company.name,
+            dataAreaId: company.dataAreaId as string,
+            projId: company.projId as string,
+          }))
+          .slice(0, limit);
+    },
     getCompanies: async (): Promise<Company[]> => {
         if (shouldUseFunctionApi()) {
             const payload = await callFunctionApi<{ companies: Company[] }>('api/identity/companies');
@@ -1325,25 +1397,142 @@ export const api = {
     }
   },
   support: {
-    getTicketsByUser: async (userId: string): Promise<SupportTicket[]> => {
+    getMyTickets: async (): Promise<SupportTicket[]> => {
+      if (shouldUseFunctionApi()) {
+        const payload = await callFunctionApi<{ tickets: SupportTicket[] }>('api/support/tickets/me');
+        return payload.tickets;
+      }
       ensureMockAllowed('Support tickets');
       await delay(300);
+      const actor = getActorUser();
+      if (!actor) throw new Error('User not found.');
       return mockSupportTickets
-        .filter(ticket => ticket.createdByUserId === userId)
+        .filter((ticket) => ticket.createdByUserId === actor.id)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
-    createTicket: async (payload: Omit<SupportTicket, 'id' | 'createdAt' | 'status'>): Promise<SupportTicket> => {
+    createTicket: async (payload: Pick<SupportTicket, 'subject' | 'description' | 'category'>): Promise<SupportTicket> => {
+      if (shouldUseFunctionApi()) {
+        const createdPayload = await callFunctionApi<{ ticket: SupportTicket }>('api/support/tickets', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        return createdPayload.ticket;
+      }
       ensureMockAllowed('Create support ticket');
       await delay(400);
+      const actor = getActorUser();
+      if (!actor) throw new Error('User not found.');
+      if (actor.role === 'supadmin') throw new Error('Supadmin cannot create support tickets.');
+      if (!actor.permissions.includes('create:support-ticket')) {
+        throw new Error('Missing permission: create:support-ticket');
+      }
       const ticket: SupportTicket = {
-        ...payload,
         id: `TCK-${Date.now().toString().slice(-6)}`,
+        createdByUserId: actor.id,
+        createdByEmail: actor.email,
+        subject: payload.subject.trim(),
+        description: payload.description.trim(),
+        category: payload.category,
         status: 'Open',
         createdAt: new Date().toISOString(),
+        replies: [],
       };
       mockSupportTickets.unshift(ticket);
       persistLocalDb();
       return ticket;
+    },
+    replyToMyTicket: async (ticketId: string, message: string): Promise<void> => {
+      if (shouldUseFunctionApi()) {
+        await callFunctionApi<{ reply: unknown }>(`api/support/tickets/${ticketId}/replies`, {
+          method: 'POST',
+          body: JSON.stringify({ message }),
+        });
+        return;
+      }
+      ensureMockAllowed('Reply my support ticket');
+      await delay(220);
+      const actor = getActorUser();
+      if (!actor) throw new Error('User not found.');
+      if (actor.role === 'supadmin') throw new Error('Supadmin cannot post replies from user ticket flow.');
+      const ticket = mockSupportTickets.find((entry) => entry.id === ticketId && entry.createdByUserId === actor.id);
+      if (!ticket) throw new Error('Support ticket not found.');
+      throw new Error('This ticket is closed for follow-up. Please create a new support ticket.');
+    },
+    getAdminTickets: async (): Promise<SupportTicket[]> => {
+      if (shouldUseFunctionApi()) {
+        const payload = await callFunctionApi<{ tickets: SupportTicket[] }>('api/support/admin/tickets');
+        return payload.tickets;
+      }
+      ensureMockAllowed('Admin support tickets');
+      await delay(250);
+      const actor = getActorUser();
+      if (actor?.role !== 'supadmin') throw new Error('Only supadmin can list all support tickets.');
+      return [...mockSupportTickets].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+    replyToTicket: async (ticketId: string, message: string): Promise<void> => {
+      if (shouldUseFunctionApi()) {
+        await callFunctionApi<{ reply: unknown }>(`api/support/admin/tickets/${ticketId}/replies`, {
+          method: 'POST',
+          body: JSON.stringify({ message }),
+        });
+        return;
+      }
+      ensureMockAllowed('Reply support ticket');
+      await delay(250);
+      const actor = getActorUser();
+      if (actor?.role !== 'supadmin') throw new Error('Only supadmin can reply to support tickets.');
+      const ticket = mockSupportTickets.find((entry) => entry.id === ticketId);
+      if (!ticket) throw new Error('Support ticket not found.');
+      if (ticket.status === 'Resolved') throw new Error('Support ticket is already resolved.');
+      ticket.replies = ticket.replies || [];
+      ticket.replies.push({
+        id: `REP-${Date.now().toString().slice(-6)}`,
+        ticketId,
+        authorUserId: actor.id,
+        authorRole: actor.role,
+        message: message.trim(),
+        createdAt: new Date().toISOString(),
+      });
+      ticket.status = 'Resolved';
+      persistLocalDb();
+    },
+    updateTicketStatus: async (ticketId: string, status: SupportTicket['status']): Promise<void> => {
+      if (shouldUseFunctionApi()) {
+        await callFunctionApi<{ ticket: { id: string; status: SupportTicket['status'] } }>(`api/support/admin/tickets/${ticketId}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status }),
+        });
+        return;
+      }
+      ensureMockAllowed('Update support ticket status');
+      await delay(250);
+      const actor = getActorUser();
+      if (actor?.role !== 'supadmin') throw new Error('Only supadmin can update support ticket status.');
+      const ticket = mockSupportTickets.find((entry) => entry.id === ticketId);
+      if (!ticket) throw new Error('Support ticket not found.');
+      ticket.status = status;
+      persistLocalDb();
+    },
+  },
+  notifications: {
+    getNotifications: async (): Promise<AppNotification[]> => {
+      if (shouldUseFunctionApi()) {
+        const payload = await callFunctionApi<{ notifications: AppNotification[] }>('api/notifications');
+        return payload.notifications;
+      }
+      ensureMockAllowed('Notifications');
+      await delay(120);
+      return [];
+    },
+    markNotificationRead: async (id: string): Promise<void> => {
+      if (shouldUseFunctionApi()) {
+        await callFunctionApi<{ notification: { id: string; isRead: boolean } }>(`api/notifications/${id}/read`, {
+          method: 'PATCH',
+        });
+        return;
+      }
+      ensureMockAllowed('Mark notification read');
+      await delay(80);
     },
   },
   guest: {
@@ -1382,6 +1571,71 @@ export const api = {
       return mockGuestRFQs
         .filter(rfq => rfq.createdByUserId === userId)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+  },
+  maritime: {
+    getVessels: async (companyId?: string): Promise<Vessel[]> => {
+      ensureMockAllowed('Maritime vessels');
+      await delay(300);
+      if (companyId) return byCompanyScope(mockVessels, companyId);
+      return [...mockVessels];
+    },
+    getVessel: async (id: string): Promise<Vessel> => {
+      ensureMockAllowed('Maritime vessel');
+      await delay(200);
+      const vessel = mockVessels.find((v) => v.id === id);
+      if (!vessel) throw new Error('Vessel not found');
+      return { ...vessel };
+    },
+    createVessel: async (vessel: Omit<Vessel, 'id'>): Promise<Vessel> => {
+      ensureMockAllowed('Create vessel');
+      await delay(400);
+      const newVessel: Vessel = { ...vessel, id: `V-${Date.now().toString().slice(-4)}` };
+      mockVessels.push(newVessel);
+      persistLocalDb();
+      return newVessel;
+    },
+    updateVessel: async (id: string, updates: Partial<Vessel>): Promise<Vessel> => {
+      ensureMockAllowed('Update vessel');
+      await delay(300);
+      const index = mockVessels.findIndex((v) => v.id === id);
+      if (index === -1) throw new Error('Vessel not found');
+      mockVessels[index] = { ...mockVessels[index], ...updates };
+      persistLocalDb();
+      return mockVessels[index];
+    },
+    deleteVessel: async (id: string): Promise<void> => {
+      ensureMockAllowed('Delete vessel');
+      await delay(300);
+      mockVessels = mockVessels.filter((v) => v.id !== id);
+      mockVesselPositions = mockVesselPositions.filter((p) => p.vesselId !== id);
+      mockVesselRoutes = mockVesselRoutes.filter((r) => r.vesselId !== id);
+      mockVesselOperations = mockVesselOperations.filter((o) => o.vesselId !== id);
+      persistLocalDb();
+    },
+    getVesselPositions: async (companyId?: string): Promise<VesselPosition[]> => {
+      ensureMockAllowed('Vessel positions');
+      await delay(250);
+      if (companyId) {
+        const companyVesselIds = new Set(mockVessels.filter((v) => v.companyId === companyId).map((v) => v.id));
+        return mockVesselPositions.filter((p) => companyVesselIds.has(p.vesselId));
+      }
+      return [...mockVesselPositions];
+    },
+    getVesselPosition: async (vesselId: string): Promise<VesselPosition | null> => {
+      ensureMockAllowed('Vessel position');
+      await delay(150);
+      return mockVesselPositions.find((p) => p.vesselId === vesselId) || null;
+    },
+    getVesselRoutes: async (vesselId: string): Promise<VesselRoute[]> => {
+      ensureMockAllowed('Vessel routes');
+      await delay(250);
+      return mockVesselRoutes.filter((r) => r.vesselId === vesselId).sort((a, b) => b.departureDate.localeCompare(a.departureDate));
+    },
+    getVesselOperations: async (vesselId: string): Promise<VesselOperation[]> => {
+      ensureMockAllowed('Vessel operations');
+      await delay(300);
+      return mockVesselOperations.filter((o) => o.vesselId === vesselId).sort((a, b) => b.operationDate.localeCompare(a.operationDate));
     },
   },
   powerbi: {

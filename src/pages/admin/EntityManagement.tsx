@@ -1,11 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
 import { api } from '../../services/api';
 import { BootstrapCredentials, Company } from '../../types';
 import { useUIStore } from '../../store/uiStore';
-import { Plus, Edit2, Trash2, Building2, Mail, Globe, Tag, KeyRound, Copy, Eye, EyeOff, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Building2, Mail, Tag, KeyRound, Copy, Eye, EyeOff, X, Search } from 'lucide-react';
 import { getDefaultPermissionsForRole } from '../../utils/rbac';
+
+type GroupProjtableOption = {
+  name: string;
+  dataAreaId: string;
+  projId: string;
+};
 
 type CreateEntityPayload = Omit<Company, 'id'> & {
   createCompanyAdmin?: boolean;
@@ -17,21 +23,32 @@ export const EntityManagement: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const loadCompaniesRef = useRef<Promise<void> | null>(null);
   const [newAdminCredentials, setNewAdminCredentials] = useState<BootstrapCredentials | null>(null);
   const [showNewAdminCredentialPassword, setShowNewAdminCredentialPassword] = useState(false);
   const { addToast, openDrawer, closeDrawer, openConfirmDialog } = useUIStore();
 
   const loadCompanies = async () => {
-    setIsLoading(true);
-    try {
-      const rows = await api.admin.getCompanies();
-      setCompanies(rows);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load entities.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setIsLoading(false);
+    if (loadCompaniesRef.current) {
+      return loadCompaniesRef.current;
     }
+
+    setIsLoading(true);
+    const request = (async () => {
+      try {
+        const companyRows = await api.admin.getCompanies();
+        setCompanies(companyRows);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to load entities.';
+        addToast({ title: 'Error', message, type: 'error' });
+      } finally {
+        setIsLoading(false);
+        loadCompaniesRef.current = null;
+      }
+    })();
+
+    loadCompaniesRef.current = request;
+    return request;
   };
 
   useEffect(() => {
@@ -218,9 +235,8 @@ export const EntityManagement: React.FC = () => {
           <thead className="border-b border-gray-200 bg-gray-50 dark:border-slate-800 dark:bg-slate-800/50">
             <tr>
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Entity</th>
+              <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">DataArea</th>
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Type</th>
-              <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Country</th>
-              <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Contact</th>
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th>
               <th className="px-6 py-3" />
             </tr>
@@ -232,9 +248,8 @@ export const EntityManagement: React.FC = () => {
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">{company.name}</p>
                   <p className="text-xs text-slate-500">{company.id}</p>
                 </td>
+                <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{company.dataAreaId || '-'}</td>
                 <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{company.type}</td>
-                <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{company.country}</td>
-                <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{company.contactEmail || 'No contact email'}</td>
                 <td className="px-6 py-4">
                   <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
                     company.status === 'Active'
@@ -262,7 +277,7 @@ export const EntityManagement: React.FC = () => {
             ))}
             {!isLoading && companies.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                <td colSpan={5} className="px-6 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                   No entities found.
                 </td>
               </tr>
@@ -283,35 +298,104 @@ type EntityFormProps = {
 const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) => {
   const [name, setName] = useState(company?.name || '');
   const [type, setType] = useState<Company['type']>(company?.type || 'Customer');
-  const [country, setCountry] = useState(company?.country || 'Germany');
-  const [contactEmail, setContactEmail] = useState(company?.contactEmail || '');
   const [status, setStatus] = useState<Company['status']>(company?.status || 'Active');
+  const [dataAreaId, setDataAreaId] = useState(company?.dataAreaId || '');
+  const [projId, setProjId] = useState(company?.projId || '');
+  const [groupProjtableOptions, setGroupProjtableOptions] = useState<GroupProjtableOption[]>([]);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
   const [createCompanyAdmin, setCreateCompanyAdmin] = useState(!company);
   const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { addToast } = useUIStore();
 
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      setIsLoadingOptions(true);
+      void api.admin
+        .getGroupProjtables({ query: name, limit: 25 })
+        .then((rows) => {
+          if (!cancelled) {
+            setGroupProjtableOptions(rows);
+          }
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            const message = error instanceof Error ? error.message : 'Failed to search entity names.';
+            addToast({ title: 'Lookup Error', message, type: 'error' });
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setIsLoadingOptions(false);
+          }
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [addToast, name]);
+
+  const filteredOptions = useMemo(() => {
+    return groupProjtableOptions.slice(0, 25);
+  }, [groupProjtableOptions]);
+
+  useEffect(() => {
+    const normalized = name.trim().toLowerCase();
+    if (!normalized) {
+      if (!company) {
+        setDataAreaId('');
+        setProjId('');
+      }
+      return;
+    }
+
+    const matched = groupProjtableOptions.find((option) => option.name.toLowerCase() === normalized);
+    if (matched) {
+      setDataAreaId(matched.dataAreaId);
+      setProjId(matched.projId);
+      return;
+    }
+
+    const isEditingCurrentCompany = Boolean(
+      company && company.name.trim().toLowerCase() === normalized && company.dataAreaId && company.projId
+    );
+    if (!isEditingCurrentCompany) {
+      setDataAreaId('');
+      setProjId('');
+    }
+  }, [company, groupProjtableOptions, name]);
+
+  const selectOption = (option: GroupProjtableOption) => {
+    setName(option.name);
+    setDataAreaId(option.dataAreaId);
+    setProjId(option.projId);
+    setShowOptions(false);
+  };
+
+  const handleNameChange = (value: string) => {
+    setName(value);
+  };
+
   const submit = async () => {
-    const normalizedEmail = contactEmail.trim().toLowerCase();
     if (!name.trim()) {
       addToast({ title: 'Validation Error', message: 'Entity name is required.', type: 'error' });
       return;
     }
-    if (!country.trim()) {
-      addToast({ title: 'Validation Error', message: 'Country is required.', type: 'error' });
-      return;
-    }
-    if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-      addToast({ title: 'Validation Error', message: 'Please enter a valid email.', type: 'error' });
+    if (!dataAreaId || !projId) {
+      addToast({ title: 'Validation Error', message: 'Select entity name from GraphQL list.', type: 'error' });
       return;
     }
 
     const payload: CreateEntityPayload = {
       name: name.trim(),
+      dataAreaId,
+      projId,
       type,
-      country: country.trim(),
-      contactEmail: normalizedEmail || (company ? '' : undefined),
       status,
       createCompanyAdmin: !company ? createCompanyAdmin : undefined,
       adminName: !company ? adminName.trim() : undefined,
@@ -354,14 +438,54 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
 
       <div className="grid gap-4">
         <label className="space-y-1.5">
-          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Entity Name</span>
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-            <Building2 size={14} className="text-slate-400" />
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Entity Name (GraphQL)</span>
+          <div className="relative">
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+              <Search size={14} className="text-slate-400" />
+              <input
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                onFocus={() => setShowOptions(true)}
+                onBlur={() => setTimeout(() => setShowOptions(false), 120)}
+                className="w-full bg-transparent text-sm text-slate-900 outline-none dark:text-white"
+                placeholder="Type to search firm name..."
+              />
+            </div>
+            {isLoadingOptions && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Searching...</p>
+            )}
+            {showOptions && filteredOptions.length > 0 && (
+              <div className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                {filteredOptions.map((option) => (
+                  <button
+                    key={`${option.name}-${option.projId}`}
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      selectOption(option);
+                    }}
+                    className="w-full border-b border-slate-100 px-3 py-2 text-left text-sm text-slate-700 last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <div className="font-medium">{option.name}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      DataArea: {option.dataAreaId}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </label>
+
+        <label className="space-y-1.5">
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">DataAreaId</span>
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+            <Tag size={14} className="text-slate-400" />
             <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-transparent text-sm text-slate-900 outline-none dark:text-white"
-              placeholder="NORDIC HAMBURG"
+              value={dataAreaId}
+              readOnly
+              className="w-full bg-transparent text-sm text-slate-700 outline-none dark:text-slate-200"
+              placeholder="Select entity name first"
             />
           </div>
         </label>
@@ -394,32 +518,6 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
             </select>
           </label>
         </div>
-
-        <label className="space-y-1.5">
-          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Country</span>
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-            <Globe size={14} className="text-slate-400" />
-            <input
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              className="w-full bg-transparent text-sm text-slate-900 outline-none dark:text-white"
-              placeholder="Germany"
-            />
-          </div>
-        </label>
-
-        <label className="space-y-1.5">
-          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Contact Email (Optional)</span>
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-            <Mail size={14} className="text-slate-400" />
-            <input
-              value={contactEmail}
-              onChange={(e) => setContactEmail(e.target.value)}
-              className="w-full bg-transparent text-sm text-slate-900 outline-none dark:text-white"
-              placeholder="ops@company.com"
-            />
-          </div>
-        </label>
 
         {!company && (
           <div className="rounded-xl border border-blue-200/70 bg-blue-50/70 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">

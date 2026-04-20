@@ -30,14 +30,16 @@ export type Permission =
   | 'view:analytics'
   | 'system:settings'
   | 'manage:reports'
+  | 'manage:vessels'
+  | 'view:maritime-map'
   | `view:analysis-report:${string}`;
 
 export interface Company {
   id: string;
   name: string;
+  dataAreaId?: string;
+  projId?: string;
   type: 'Customer' | 'Supplier';
-  country: string;
-  contactEmail?: string;
   status: 'Active' | 'Inactive';
 }
 
@@ -127,6 +129,55 @@ export interface Vessel {
   name: string;
   imo: string;
   type: string;
+  flagCountry?: string;
+  builtYear?: number;
+  dwt?: number;
+  vesselStatus?: 'Active' | 'Laid Up' | 'Under Repair' | 'Scrapped';
+}
+
+export interface VesselPosition {
+  id: string;
+  vesselId: string;
+  lat: number;
+  lng: number;
+  speed: number;
+  course: number;
+  heading: number;
+  navStatus: string;
+  destination: string;
+  eta: string;
+  fetchedAt: string;
+}
+
+export interface VesselRoute {
+  id: string;
+  vesselId: string;
+  departurePort: string;
+  arrivalPort: string;
+  departureDate: string;
+  arrivalDate?: string;
+  status: 'Planned' | 'In Progress' | 'Completed' | 'Cancelled';
+}
+
+export interface OperationItem {
+  name: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+}
+
+export interface VesselOperation {
+  id: string;
+  vesselId: string;
+  routeId?: string;
+  port: string;
+  operationType: 'Bunkering' | 'Provisioning' | 'Maintenance' | 'Port Fees' | 'Crew Change';
+  operationDate: string;
+  items: OperationItem[];
+  totalAmount: number;
+  currency: string;
+  supplierId?: string;
+  notes?: string;
 }
 
 export interface LogEntry {
@@ -146,6 +197,25 @@ export interface SupportTicket {
   category: 'General' | 'Operational' | 'Invoice' | 'Technical';
   status: 'Open' | 'In Progress' | 'Resolved';
   createdAt: string;
+  replies?: SupportTicketReply[];
+}
+
+export interface SupportTicketReply {
+  id: string;
+  ticketId: string;
+  authorUserId: string;
+  authorRole: UserRole;
+  message: string;
+  createdAt: string;
+}
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  targetRoute: string;
+  isRead: boolean;
+  createdAt?: string;
 }
 
 export interface GuestRFQ {
