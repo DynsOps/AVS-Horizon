@@ -12,7 +12,7 @@ import { getDefaultPermissionsForRole } from '../../utils/rbac';
 const BASE_PERMISSIONS: Permission[] = [
     'view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'view:supplier',
     'create:support-ticket', 'submit:rfq',
-    'manage:users', 'manage:companies', 'manage:reports', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings'
+    'manage:users', 'manage:companies', 'manage:reports', 'view:finance', 'view:sustainability', 'view:business', 'edit:orders', 'view:analytics', 'system:settings','manage:vessels','view:maritime-map'
 ];
 const ADMIN_CORE_PERMISSIONS: Permission[] = ['view:dashboard', 'view:reports', 'manage:users', 'view:analytics'];
 const COMPANY_ADMIN_BASE_PERMISSIONS: Permission[] = ['view:dashboard', 'view:reports', 'create:support-ticket'];
