@@ -161,8 +161,8 @@ BEGIN
         id NVARCHAR(64) NOT NULL PRIMARY KEY,
         name NVARCHAR(200) NOT NULL,
         type NVARCHAR(20) NOT NULL,
-        country NVARCHAR(100) NOT NULL,
-        contact_email NVARCHAR(320) NOT NULL,
+        data_area_id NVARCHAR(64) NULL,
+        proj_id NVARCHAR(64) NULL,
         status NVARCHAR(20) NOT NULL,
         created_at DATETIME2 NOT NULL CONSTRAINT DF_companies_created_at_align DEFAULT (SYSUTCDATETIME()),
         updated_at DATETIME2 NOT NULL CONSTRAINT DF_companies_updated_at_align DEFAULT (SYSUTCDATETIME())
@@ -182,27 +182,15 @@ BEGIN
 END;
 GO
 
-IF COL_LENGTH('dbo.companies', 'country') IS NULL
+IF COL_LENGTH('dbo.companies', 'data_area_id') IS NULL
 BEGIN
-    ALTER TABLE dbo.companies ADD country NVARCHAR(100) NULL;
+    ALTER TABLE dbo.companies ADD data_area_id NVARCHAR(64) NULL;
 END;
 GO
 
-IF COL_LENGTH('dbo.companies', 'contact_email') IS NULL
+IF COL_LENGTH('dbo.companies', 'proj_id') IS NULL
 BEGIN
-    ALTER TABLE dbo.companies ADD contact_email NVARCHAR(320) NULL;
-END;
-GO
-
-IF EXISTS (
-    SELECT 1
-    FROM sys.columns
-    WHERE object_id = OBJECT_ID('dbo.companies')
-      AND name = 'contact_email'
-      AND is_nullable = 0
-)
-BEGIN
-    ALTER TABLE dbo.companies ALTER COLUMN contact_email NVARCHAR(320) NULL;
+    ALTER TABLE dbo.companies ADD proj_id NVARCHAR(64) NULL;
 END;
 GO
 

@@ -6,8 +6,8 @@ import { errorResponse, ok } from '../lib/http';
 type UpdateCompanyBody = {
   name?: string;
   type?: 'Customer' | 'Supplier';
-  country?: string;
-  contactEmail?: string;
+  dataAreaId?: string;
+  projId?: string;
   status?: 'Active' | 'Inactive';
 };
 
@@ -15,8 +15,8 @@ type CompanyRow = {
   id: string;
   name: string;
   type: 'Customer' | 'Supplier';
-  country: string;
-  contactEmail: string | null;
+  dataAreaId: string | null;
+  projId: string | null;
   status: 'Active' | 'Inactive';
 };
 
@@ -33,7 +33,7 @@ export async function updateAdminCompany(request: HttpRequest, context: Invocati
     const currentResult = await runScopedQuery<CompanyRow>(
       { role: actor.role, companyId: actor.companyId, userId: actor.id },
       `
-      SELECT TOP 1 id, name, type, country, contact_email AS contactEmail, status
+      SELECT TOP 1 id, name, type, data_area_id AS dataAreaId, proj_id AS projId, status
       FROM dbo.companies
       WHERE id = @id
       `,
@@ -52,11 +52,14 @@ export async function updateAdminCompany(request: HttpRequest, context: Invocati
     const next = {
       name: (body.name || current.name).trim(),
       type: body.type || current.type,
-      country: (body.country || current.country).trim(),
-      contactEmail:
-        body.contactEmail !== undefined
-          ? (body.contactEmail || '').trim().toLowerCase() || null
-          : current.contactEmail,
+      dataAreaId:
+        body.dataAreaId !== undefined
+          ? (body.dataAreaId || '').trim() || null
+          : current.dataAreaId,
+      projId:
+        body.projId !== undefined
+          ? (body.projId || '').trim() || null
+          : current.projId,
       status: body.status || current.status,
     };
 
@@ -67,8 +70,8 @@ export async function updateAdminCompany(request: HttpRequest, context: Invocati
       SET
         name = @name,
         type = @type,
-        country = @country,
-        contact_email = @contactEmail,
+        data_area_id = @dataAreaId,
+        proj_id = @projId,
         status = @status,
         updated_at = SYSUTCDATETIME()
       WHERE id = @id

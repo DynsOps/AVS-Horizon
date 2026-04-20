@@ -7,8 +7,8 @@ import { created, errorResponse } from '../lib/http';
 type CreateCompanyBody = {
   name?: string;
   type?: 'Customer' | 'Supplier';
-  country?: string;
-  contactEmail?: string;
+  dataAreaId?: string;
+  projId?: string;
   status?: 'Active' | 'Inactive';
 };
 
@@ -25,12 +25,12 @@ export async function createAdminCompany(request: HttpRequest, context: Invocati
     const body = (await request.json()) as CreateCompanyBody;
     const name = (body.name || '').trim();
     const type = body.type;
-    const country = (body.country || '').trim();
-    const contactEmail = (body.contactEmail || '').trim().toLowerCase();
+    const dataAreaId = (body.dataAreaId || '').trim();
+    const projId = (body.projId || '').trim();
     const status = body.status || 'Active';
 
-    if (!name || !type || !country) {
-      return errorResponse(400, 'name, type and country are required.');
+    if (!name || !type || !dataAreaId || !projId) {
+      return errorResponse(400, 'name, type, dataAreaId and projId are required.');
     }
 
     const prefix = type === 'Customer' ? 'C' : 'S';
@@ -39,12 +39,12 @@ export async function createAdminCompany(request: HttpRequest, context: Invocati
     await runQuery(
       `
       INSERT INTO dbo.companies (
-        id, name, type, country, contact_email, status, created_at, updated_at
+        id, name, type, data_area_id, proj_id, status, created_at, updated_at
       ) VALUES (
-        @id, @name, @type, @country, @contactEmail, @status, SYSUTCDATETIME(), SYSUTCDATETIME()
+        @id, @name, @type, @dataAreaId, @projId, @status, SYSUTCDATETIME(), SYSUTCDATETIME()
       )
       `,
-      { id, name, type, country, contactEmail: contactEmail || null, status }
+      { id, name, type, dataAreaId, projId, status }
     );
 
     return created({
@@ -52,8 +52,8 @@ export async function createAdminCompany(request: HttpRequest, context: Invocati
         id,
         name,
         type,
-        country,
-        contactEmail: contactEmail || undefined,
+        dataAreaId,
+        projId,
         status,
       },
     });
