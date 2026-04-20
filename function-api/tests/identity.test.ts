@@ -361,25 +361,30 @@ run('function api env declares dedicated mail sender settings', () => {
   assert.match(settingsSource, /https:\/\/horizon\.avsglobalsupply\.com\/assets\/avslogo-CA24d8DQ\.png/);
 });
 
-run('admin company create no longer requires contact email or persists company domains', () => {
+run('admin company create requires graphql mapping fields and does not persist contact columns', () => {
   const createPath = resolveFunctionApiPath('src', 'functions', 'adminCompaniesCreate.ts');
   const createSource = fs.readFileSync(createPath, 'utf8');
 
-  assert.doesNotMatch(createSource, /name, type, country and contactEmail are required\./);
-  assert.match(createSource, /if \(!name \|\| !type \|\| !country\)/);
+  assert.match(createSource, /if \(!name \|\| !type \|\| !dataAreaId \|\| !projId\)/);
+  assert.doesNotMatch(createSource, /country/);
+  assert.doesNotMatch(createSource, /contactEmail/);
   assert.doesNotMatch(createSource, /normalizeDomain/);
   assert.doesNotMatch(createSource, /dbo\.company_domains/);
-  assert.match(createSource, /contactEmail:\s*contactEmail \|\| null/);
+  assert.doesNotMatch(createSource, /contact_email/);
+  assert.match(createSource, /data_area_id/);
+  assert.match(createSource, /proj_id/);
 });
 
-run('admin company update allows clearing contact email and does not rewrite company domains', () => {
+run('admin company update avoids contact/country columns and does not rewrite company domains', () => {
   const updatePath = resolveFunctionApiPath('src', 'functions', 'adminCompaniesUpdate.ts');
   const updateSource = fs.readFileSync(updatePath, 'utf8');
 
   assert.doesNotMatch(updateSource, /normalizeDomain/);
   assert.doesNotMatch(updateSource, /body\.domains/);
   assert.doesNotMatch(updateSource, /dbo\.company_domains/);
-  assert.match(updateSource, /contactEmail:\s*body\.contactEmail !== undefined\s*\?\s*\(body\.contactEmail \|\| ''\)\.trim\(\)\.toLowerCase\(\) \|\| null\s*:/);
+  assert.doesNotMatch(updateSource, /country/);
+  assert.doesNotMatch(updateSource, /contactEmail/);
+  assert.doesNotMatch(updateSource, /contact_email/);
 });
 
 run('admin company list returns entity rows without domain aggregation', () => {
@@ -390,18 +395,150 @@ run('admin company list returns entity rows without domain aggregation', () => {
   assert.doesNotMatch(listSource, /company_domains/);
   assert.doesNotMatch(listSource, /domainsCsv/);
   assert.doesNotMatch(listSource, /domains:/);
-  assert.match(listSource, /contact_email AS contactEmail/);
+  assert.doesNotMatch(listSource, /contact_email/);
+  assert.doesNotMatch(listSource, /country/);
 });
 
-run('company schema scripts make contact email nullable and include a dedicated migration', () => {
+run('company schema scripts remove country/contact columns and include a drop migration', () => {
   const baselineIdentitySql = fs.readFileSync(resolveRepoPath('sql', '001_create_identity_and_support.sql'), 'utf8');
   const companiesSql = fs.readFileSync(resolveRepoPath('sql', '005_create_companies.sql'), 'utf8');
   const alignSql = fs.readFileSync(resolveRepoPath('sql', '006_align_identity_schema.sql'), 'utf8');
-  const nullableMigrationSql = fs.readFileSync(resolveRepoPath('sql', '009_make_company_contact_email_nullable.sql'), 'utf8');
+  const dropMigrationSql = fs.readFileSync(resolveRepoPath('sql', '013_drop_company_contact_fields.sql'), 'utf8');
 
-  assert.match(baselineIdentitySql, /contact_email NVARCHAR\(320\) NULL/);
-  assert.match(companiesSql, /contact_email NVARCHAR\(320\) NULL/);
-  assert.match(alignSql, /IF EXISTS \(\s*SELECT 1\s+FROM sys\.columns/);
-  assert.match(alignSql, /ALTER TABLE dbo\.companies ALTER COLUMN contact_email NVARCHAR\(320\) NULL;/);
-  assert.match(nullableMigrationSql, /ALTER TABLE dbo\.companies ALTER COLUMN contact_email NVARCHAR\(320\) NULL;/);
+  assert.doesNotMatch(baselineIdentitySql, /contact_email/);
+  assert.doesNotMatch(baselineIdentitySql, /country/);
+  assert.doesNotMatch(companiesSql, /contact_email/);
+  assert.doesNotMatch(companiesSql, /country/);
+  assert.doesNotMatch(alignSql, /contact_email/);
+  assert.doesNotMatch(alignSql, /country/);
+  assert.match(dropMigrationSql, /DROP COLUMN contact_email/);
+  assert.match(dropMigrationSql, /DROP COLUMN country/);
+});
+
+run('support ticket create blocks supadmin actors explicitly', () => {
+  const createPath = resolveFunctionApiPath('src', 'functions', 'supportTicketsCreate.ts');
+  const createSource = fs.readFileSync(createPath, 'utf8');
+
+  assert.match(createSource, /if \(user\.role === 'supadmin'\)/);
+  assert.match(createSource, /Supadmin cannot create support tickets\./);
+  assert.match(createSource, /user\.permissions\.includes\('create:support-ticket'\)/);
+});
+
+run('support ticket api includes read and admin reply/status endpoints', () => {
+  const mePath = resolveFunctionApiPath('src', 'functions', 'supportTicketsMyList.ts');
+  const myReplyPath = resolveFunctionApiPath('src', 'functions', 'supportTicketsReplyCreate.ts');
+  const adminListPath = resolveFunctionApiPath('src', 'functions', 'adminSupportTicketsList.ts');
+  const replyPath = resolveFunctionApiPath('src', 'functions', 'adminSupportTicketsReplyCreate.ts');
+  const statusPath = resolveFunctionApiPath('src', 'functions', 'adminSupportTicketsStatusUpdate.ts');
+
+  assert.ok(fs.existsSync(mePath));
+  assert.ok(fs.existsSync(myReplyPath));
+  assert.ok(fs.existsSync(adminListPath));
+  assert.ok(fs.existsSync(replyPath));
+  assert.ok(fs.existsSync(statusPath));
+
+  const meSource = fs.readFileSync(mePath, 'utf8');
+  const myReplySource = fs.readFileSync(myReplyPath, 'utf8');
+  const adminListSource = fs.readFileSync(adminListPath, 'utf8');
+  const replySource = fs.readFileSync(replyPath, 'utf8');
+  const statusSource = fs.readFileSync(statusPath, 'utf8');
+
+  assert.match(meSource, /route: 'support\/tickets\/me'/);
+  assert.match(myReplySource, /route: 'support\/tickets\/\{id\}\/replies'/);
+  assert.match(adminListSource, /route: 'support\/admin\/tickets'/);
+  assert.match(replySource, /route: 'support\/admin\/tickets\/\{id\}\/replies'/);
+  assert.match(statusSource, /route: 'support\/admin\/tickets\/\{id\}\/status'/);
+});
+
+run('notification api includes list and mark-read endpoints', () => {
+  const listPath = resolveFunctionApiPath('src', 'functions', 'notificationsList.ts');
+  const readPath = resolveFunctionApiPath('src', 'functions', 'notificationsMarkRead.ts');
+
+  assert.ok(fs.existsSync(listPath));
+  assert.ok(fs.existsSync(readPath));
+
+  const listSource = fs.readFileSync(listPath, 'utf8');
+  const readSource = fs.readFileSync(readPath, 'utf8');
+
+  assert.match(listSource, /route: 'notifications'/);
+  assert.match(readSource, /route: 'notifications\/\{id\}\/read'/);
+});
+
+run('support and notification schema includes replies and user notifications tables', () => {
+  const migrationPath = resolveRepoPath('sql', '011_support_replies_and_notifications.sql');
+  const migrationSql = fs.readFileSync(migrationPath, 'utf8');
+
+  assert.match(migrationSql, /CREATE TABLE dbo\.support_ticket_replies/);
+  assert.match(migrationSql, /CREATE TABLE dbo\.user_notifications/);
+  assert.match(migrationSql, /FK_support_ticket_replies_ticket/);
+});
+
+run('function api env includes fabric graphql endpoint settings', () => {
+  const envPath = resolveFunctionApiPath('src', 'lib', 'env.ts');
+  const envSource = fs.readFileSync(envPath, 'utf8');
+  const settingsPath = resolveFunctionApiPath('local.settings.example.json');
+  const settingsSource = fs.readFileSync(settingsPath, 'utf8');
+
+  assert.match(envSource, /fabricGraphqlEndpoint: process\.env\.FABRIC_GRAPHQL_ENDPOINT \|\| ''/);
+  assert.match(envSource, /fabricGraphqlTimeoutMs: Number\(process\.env\.FABRIC_GRAPHQL_TIMEOUT_MS \|\| '10000'\)/);
+  assert.match(settingsSource, /FABRIC_GRAPHQL_ENDPOINT/);
+  assert.match(settingsSource, /FABRIC_GRAPHQL_TIMEOUT_MS/);
+});
+
+run('company chains function exists and exposes powerbi company-chains route', () => {
+  const functionPath = resolveFunctionApiPath('src', 'functions', 'companyChains.ts');
+  const functionSource = fs.readFileSync(functionPath, 'utf8');
+
+  assert.match(functionSource, /route: 'powerbi\/company-chains'/);
+  assert.match(functionSource, /if \(!actor\.permissions\.includes\('view:reports'\)\)/);
+  assert.match(functionSource, /const effectiveCompanyId = \(body\.companyId \|\| ''\)\.trim\(\);/);
+  assert.match(functionSource, /const effectiveCompanyName = \(body\.companyName \|\| ''\)\.trim\(\);/);
+});
+
+run('fabric graphql helper supports paged company chains and fallback query', () => {
+  const helperPath = resolveFunctionApiPath('src', 'lib', 'fabricGraphql.ts');
+  const helperSource = fs.readFileSync(helperPath, 'utf8');
+
+  assert.match(helperSource, /query CompanyChainsPaged\(\$first: Int!, \$after: String\)/);
+  assert.match(helperSource, /pageInfo\s*\{\s*hasNextPage\s*endCursor\s*\}/);
+  assert.match(helperSource, /query CompanyChainsFallback\(\$first: Int!\)/);
+  assert.match(helperSource, /fetchAllCompanyChains/);
+  assert.match(helperSource, /getFabricAccessToken/);
+  assert.match(helperSource, /export const runGraphqlQuery = async <TData>/);
+});
+
+run('powerbi library defines dedicated scopes for Power BI and Fabric GraphQL', () => {
+  const powerBiPath = resolveFunctionApiPath('src', 'lib', 'powerbi.ts');
+  const powerBiSource = fs.readFileSync(powerBiPath, 'utf8');
+  const envPath = resolveFunctionApiPath('src', 'lib', 'env.ts');
+  const envSource = fs.readFileSync(envPath, 'utf8');
+  const settingsPath = resolveFunctionApiPath('local.settings.example.json');
+  const settingsSource = fs.readFileSync(settingsPath, 'utf8');
+
+  assert.match(powerBiSource, /const POWERBI_SCOPE = 'https:\/\/analysis\.windows\.net\/powerbi\/api\/\.default'/);
+  assert.match(powerBiSource, /const FABRIC_SCOPE_DEFAULT = 'https:\/\/api\.fabric\.microsoft\.com\/\.default'/);
+  assert.match(powerBiSource, /export const getFabricAccessToken = async \(\): Promise<string> =>/);
+  assert.match(envSource, /fabricAadScope: process\.env\.FABRIC_AAD_SCOPE \|\| 'https:\/\/api\.fabric\.microsoft\.com\/\.default'/);
+  assert.match(settingsSource, /FABRIC_AAD_SCOPE/);
+});
+
+run('group projtables lookup endpoint is defined for entity management', () => {
+  const functionPath = resolveFunctionApiPath('src', 'functions', 'groupProjtablesLookup.ts');
+  const functionSource = fs.readFileSync(functionPath, 'utf8');
+
+  assert.match(functionSource, /route: 'identity\/group-projtables'/);
+  assert.match(functionSource, /if \(!actor\.permissions\.includes\('manage:companies'\)\)/);
+  assert.match(functionSource, /fetchAllGroupProjtables/);
+  assert.match(functionSource, /request\.query\.get\('q'\)/);
+  assert.match(functionSource, /request\.query\.get\('limit'\)/);
+});
+
+run('company schema includes optional data_area_id and proj_id fields', () => {
+  const baselineCompaniesSql = fs.readFileSync(resolveRepoPath('sql', '005_create_companies.sql'), 'utf8');
+  const alignSql = fs.readFileSync(resolveRepoPath('sql', '006_align_identity_schema.sql'), 'utf8');
+
+  assert.match(baselineCompaniesSql, /data_area_id NVARCHAR\(64\) NULL/);
+  assert.match(baselineCompaniesSql, /proj_id NVARCHAR\(64\) NULL/);
+  assert.match(alignSql, /IF COL_LENGTH\('dbo\.companies', 'data_area_id'\) IS NULL/);
+  assert.match(alignSql, /IF COL_LENGTH\('dbo\.companies', 'proj_id'\) IS NULL/);
 });

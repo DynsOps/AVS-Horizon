@@ -17,6 +17,7 @@ export const Header: React.FC = () => {
     dashboardCompanyId,
     setDashboardCompanyId,
     notifications,
+    setNotifications,
     openDrawer,
     closeDrawer,
     markNotificationRead,
@@ -44,8 +45,6 @@ export const Header: React.FC = () => {
           id: user.companyId,
           name: user.companyId,
           type: 'Customer',
-          country: '',
-          contactEmail: '',
           status: 'Active',
         };
         if (mounted) setCompanyOptions([fallbackCompany]);
@@ -78,6 +77,27 @@ export const Header: React.FC = () => {
       setDashboardCompanyId(resolvedCompanyId);
     }
   }, [resolvedCompanyId, dashboardCompanyId, setDashboardCompanyId]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadNotifications = async () => {
+      if (!user?.id) {
+        if (mounted) setNotifications([]);
+        return;
+      }
+      try {
+        const rows = await api.notifications.getNotifications();
+        if (mounted) setNotifications(rows);
+      } catch {
+        if (mounted) setNotifications([]);
+      }
+    };
+
+    void loadNotifications();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id, setNotifications]);
 
   useEffect(() => {
     if (!isProfileMenuOpen) return;
@@ -119,6 +139,7 @@ export const Header: React.FC = () => {
               aria-label={notification.title}
               onClick={() => {
                 markNotificationRead(notification.id);
+                void api.notifications.markNotificationRead(notification.id).catch(() => undefined);
                 closeDrawer();
                 navigate(notification.targetRoute);
               }}

@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   isDarkMode: false,
   toggleTheme: vi.fn(),
   getCompanies: vi.fn(),
+  getNotifications: vi.fn(),
+  markNotificationReadApi: vi.fn(),
   clearHostedToken: vi.fn(),
   logoutRedirect: vi.fn(),
   logout: vi.fn(),
@@ -44,6 +46,10 @@ vi.mock('../../services/api', () => ({
     },
     admin: {
       getCompanies: mocks.getCompanies,
+    },
+    notifications: {
+      getNotifications: mocks.getNotifications,
+      markNotificationRead: mocks.markNotificationReadApi,
     },
   },
 }));
@@ -88,9 +94,13 @@ describe('Header', () => {
     mocks.toggleTheme.mockReset();
     mocks.getCompanies.mockReset();
     mocks.clearHostedToken.mockReset();
+    mocks.getNotifications.mockReset();
+    mocks.markNotificationReadApi.mockReset();
     mocks.logoutRedirect.mockReset();
     mocks.logout.mockReset();
     mocks.getCompanies.mockResolvedValue([]);
+    mocks.getNotifications.mockResolvedValue([]);
+    mocks.markNotificationReadApi.mockResolvedValue(undefined);
     mocks.clearHostedToken.mockResolvedValue(undefined);
     (useUIStore as any).setState({
       isSidebarOpen: true,
@@ -133,9 +143,9 @@ describe('Header', () => {
   });
 
   it('seeds the app with unread notifications by default', () => {
-    expect(defaultNotifications.length).toBeGreaterThan(0);
+    expect(defaultNotifications.length).toBe(0);
     expect(useUIStore.getInitialState().notifications).toEqual(defaultNotifications);
-    expect(defaultNotifications.some((notification) => !notification.isRead)).toBe(true);
+    expect(defaultNotifications.some((notification) => !notification.isRead)).toBe(false);
   });
 
   it('shows the unread badge when unread notifications exist', async () => {
@@ -147,17 +157,15 @@ describe('Header', () => {
       permissions: [],
       status: 'Active',
     };
-    (useUIStore as any).setState({
-      notifications: [
-        {
-          id: 'notif-1',
-          title: 'Order approved',
-          message: 'Order ORD-100 is approved.',
-          targetRoute: '/customer/orders',
-          isRead: false,
-        },
-      ],
-    });
+    mocks.getNotifications.mockResolvedValue([
+      {
+        id: 'notif-1',
+        title: 'Order approved',
+        message: 'Order ORD-100 is approved.',
+        targetRoute: '/customer/orders',
+        isRead: false,
+      },
+    ]);
 
     renderHeader();
 
@@ -178,17 +186,15 @@ describe('Header', () => {
       permissions: [],
       status: 'Active',
     };
-    (useUIStore as any).setState({
-      notifications: [
-        {
-          id: 'notif-1',
-          title: 'Order approved',
-          message: 'Order ORD-100 is approved.',
-          targetRoute: '/customer/orders',
-          isRead: false,
-        },
-      ],
-    });
+    mocks.getNotifications.mockResolvedValue([
+      {
+        id: 'notif-1',
+        title: 'Order approved',
+        message: 'Order ORD-100 is approved.',
+        targetRoute: '/customer/orders',
+        isRead: false,
+      },
+    ]);
 
     renderShell();
 
@@ -243,17 +249,15 @@ describe('Header', () => {
       permissions: [],
       status: 'Active',
     };
-    (useUIStore as any).setState({
-      notifications: [
-        {
-          id: 'notif-1',
-          title: 'Order approved',
-          message: 'Order ORD-100 is approved.',
-          targetRoute: '/customer/orders',
-          isRead: false,
-        },
-      ],
-    });
+    mocks.getNotifications.mockResolvedValue([
+      {
+        id: 'notif-1',
+        title: 'Order approved',
+        message: 'Order ORD-100 is approved.',
+        targetRoute: '/customer/orders',
+        isRead: false,
+      },
+    ]);
 
     renderShell();
 
@@ -283,8 +287,6 @@ describe('Header', () => {
         id: 'c-1',
         name: 'Northwind',
         type: 'Customer',
-        country: 'Germany',
-        contactEmail: 'ops@northwind.example',
         status: 'Active',
       },
     ];
@@ -327,16 +329,12 @@ describe('Header', () => {
         id: 'c-1',
         name: 'Northwind',
         type: 'Customer',
-        country: 'Germany',
-        contactEmail: 'ops@northwind.example',
         status: 'Active',
       },
       {
         id: 'c-2',
         name: 'Contoso',
         type: 'Supplier',
-        country: 'Turkey',
-        contactEmail: 'ops@contoso.example',
         status: 'Active',
       },
     ];
