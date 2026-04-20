@@ -8,6 +8,15 @@
 - `POST /api/auth/change-password` (`410 Gone`, retired in Entra-first mode)
 - `POST /api/auth/change-password-password` (`410 Gone`, retired in Entra-first mode)
 - `POST /api/support/tickets`
+- `GET /api/support/tickets/me`
+- `POST /api/support/tickets/{id}/replies`
+- `GET /api/support/admin/tickets`
+- `POST /api/support/admin/tickets/{id}/replies`
+- `PATCH /api/support/admin/tickets/{id}/status`
+- `GET /api/notifications`
+- `PATCH /api/notifications/{id}/read`
+- `POST /api/powerbi/company-chains`
+- `GET /api/identity/group-projtables` (`q` and `limit` query params supported)
 - `GET /api/identity/users`
 - `POST /api/identity/users`
 - `PATCH /api/identity/users/{id}`
@@ -45,6 +54,12 @@
 - `SQL_USER` and `SQL_PASSWORD` (required for `SqlPassword`)
 - `SQL_ENCRYPT` (optional, default `true`)
 - `SQL_TRUST_SERVER_CERTIFICATE` (optional, default `false`)
+- `POWERBI_TENANT_ID` (required for Power BI / Fabric calls)
+- `POWERBI_CLIENT_ID` (required for Power BI / Fabric calls)
+- `POWERBI_CLIENT_SECRET` (required for Power BI / Fabric calls)
+- `FABRIC_AAD_SCOPE` (optional, defaults to `https://api.fabric.microsoft.com/.default`)
+- `FABRIC_GRAPHQL_ENDPOINT` (required for `/api/powerbi/company-chains`)
+- `FABRIC_GRAPHQL_TIMEOUT_MS` (optional, default `10000`)
 
 ## Local run
 ```bash
@@ -66,3 +81,6 @@ func azure functionapp publish avs-horizon-global-func-auth --typescript
 4. `sql/008_add_identity_provider_metadata.sql`
 5. `sql/003_grant_function_identity.sql`
 6. `sql/007_enforce_company_rls.sql`
+7. `sql/011_support_replies_and_notifications.sql`
+8. `sql/012_add_company_project_fields.sql`
+9. `sql/013_drop_company_contact_fields.sql`
