@@ -31,6 +31,9 @@ export const env = {
   powerBiTenantId: process.env.POWERBI_TENANT_ID || '',
   powerBiClientId: process.env.POWERBI_CLIENT_ID || '',
   powerBiClientSecret: process.env.POWERBI_CLIENT_SECRET || '',
+  fabricAadScope: process.env.FABRIC_AAD_SCOPE || 'https://api.fabric.microsoft.com/.default',
+  fabricGraphqlEndpoint: process.env.FABRIC_GRAPHQL_ENDPOINT || '',
+  fabricGraphqlTimeoutMs: Number(process.env.FABRIC_GRAPHQL_TIMEOUT_MS || '10000'),
 };
 
 export const assertEnv = (): void => {

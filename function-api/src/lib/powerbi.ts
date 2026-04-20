@@ -10,6 +10,7 @@ type GenerateTokenResponse = {
 };
 
 const POWERBI_SCOPE = 'https://analysis.windows.net/powerbi/api/.default';
+const FABRIC_SCOPE_DEFAULT = 'https://api.fabric.microsoft.com/.default';
 
 const assertPowerBiEnv = (): void => {
   if (!env.powerBiTenantId) throw new Error('Missing POWERBI_TENANT_ID');
@@ -17,14 +18,14 @@ const assertPowerBiEnv = (): void => {
   if (!env.powerBiClientSecret) throw new Error('Missing POWERBI_CLIENT_SECRET');
 };
 
-const getPowerBiAccessToken = async (): Promise<string> => {
+const getAccessTokenForScope = async (scope: string): Promise<string> => {
   assertPowerBiEnv();
 
   const formBody = new URLSearchParams({
     client_id: env.powerBiClientId,
     client_secret: env.powerBiClientSecret,
     grant_type: 'client_credentials',
-    scope: POWERBI_SCOPE,
+    scope,
   });
 
   const response = await fetch(`https://login.microsoftonline.com/${env.powerBiTenantId}/oauth2/v2.0/token`, {
@@ -41,6 +42,15 @@ const getPowerBiAccessToken = async (): Promise<string> => {
   }
 
   return payload.access_token;
+};
+
+export const getPowerBiAccessToken = async (): Promise<string> => {
+  return getAccessTokenForScope(POWERBI_SCOPE);
+};
+
+export const getFabricAccessToken = async (): Promise<string> => {
+  const configuredScope = (env.fabricAadScope || '').trim() || FABRIC_SCOPE_DEFAULT;
+  return getAccessTokenForScope(configuredScope);
 };
 
 export const generateReportEmbedToken = async (params: {
