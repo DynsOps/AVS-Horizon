@@ -11,7 +11,6 @@ const defaults: Record<UserRole, string[]> = {
     'view:shipments',
     'view:orders',
     'view:supplier',
-    'create:support-ticket',
     'submit:rfq',
     'manage:users',
     'manage:companies',

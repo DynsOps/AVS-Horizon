@@ -149,7 +149,7 @@ const getJwksClient = (jwksUri: string): JwksClient => {
     cacheMaxAge: 10 * 60 * 1000,
     cacheMaxEntries: 10,
     rateLimit: true,
-    jwksRequestsPerMinute: 10,
+    jwksRequestsPerMinute: 30,
   });
   cachedJwksClients.set(jwksUri, client);
   return client;
