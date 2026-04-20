@@ -30,3 +30,4 @@ docs/superpowers
 __azurite*
 __blobstorage__
 package-lock.json
+.env

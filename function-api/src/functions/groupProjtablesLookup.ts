@@ -19,15 +19,15 @@ export async function groupProjtablesLookup(request: HttpRequest, context: Invoc
     return ok({ items: rows });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
-    context.error('identity/group-projtables failed', message);
+    context.error('fabric/group-projtables failed', message);
     const status = message.includes('Missing bearer token') || message.includes('No access record') ? 401 : 500;
     return errorResponse(status, message);
   }
 }
 
-app.http('identity-group-projtables', {
+app.http('fabric-group-projtables', {
   methods: ['GET'],
   authLevel: 'anonymous',
-  route: 'identity/group-projtables',
+  route: 'fabric/group-projtables',
   handler: groupProjtablesLookup,
 });

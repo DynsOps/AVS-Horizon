@@ -1002,7 +1002,7 @@ export const api = {
             if (query) searchParams.set('q', query);
             searchParams.set('limit', String(limit));
             const payload = await callFunctionApi<{ items: Array<{ name: string; dataareaid: string | null; projid: string | null }> }>(
-              `api/identity/group-projtables?${searchParams.toString()}`
+              `api/fabric/group-projtables?${searchParams.toString()}`
             );
             return payload.items
               .map((item) => ({

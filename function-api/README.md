@@ -16,7 +16,7 @@
 - `GET /api/notifications`
 - `PATCH /api/notifications/{id}/read`
 - `POST /api/powerbi/company-chains`
-- `GET /api/identity/group-projtables` (`q` and `limit` query params supported)
+- `GET /api/fabric/group-projtables` (`q` and `limit` query params supported)
 - `GET /api/identity/users`
 - `POST /api/identity/users`
 - `PATCH /api/identity/users/{id}`

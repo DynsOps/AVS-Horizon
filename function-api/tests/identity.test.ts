@@ -496,15 +496,17 @@ run('company chains function exists and exposes powerbi company-chains route', (
 });
 
 run('fabric graphql helper supports paged company chains and fallback query', () => {
-  const helperPath = resolveFunctionApiPath('src', 'lib', 'fabricGraphql.ts');
-  const helperSource = fs.readFileSync(helperPath, 'utf8');
+  const companyChainsPath = resolveFunctionApiPath('src', 'lib', 'fabric', 'companyChains.ts');
+  const companyChainsSource = fs.readFileSync(companyChainsPath, 'utf8');
+  const clientPath = resolveFunctionApiPath('src', 'lib', 'fabric', 'client.ts');
+  const clientSource = fs.readFileSync(clientPath, 'utf8');
 
-  assert.match(helperSource, /query CompanyChainsPaged\(\$first: Int!, \$after: String\)/);
-  assert.match(helperSource, /pageInfo\s*\{\s*hasNextPage\s*endCursor\s*\}/);
-  assert.match(helperSource, /query CompanyChainsFallback\(\$first: Int!\)/);
-  assert.match(helperSource, /fetchAllCompanyChains/);
-  assert.match(helperSource, /getFabricAccessToken/);
-  assert.match(helperSource, /export const runGraphqlQuery = async <TData>/);
+  assert.match(companyChainsSource, /query CompanyChainsPaged\(\$first: Int!, \$after: String\)/);
+  assert.match(companyChainsSource, /pageInfo\s*\{\s*hasNextPage\s*endCursor\s*\}/);
+  assert.match(companyChainsSource, /query CompanyChainsFallback\(\$first: Int!\)/);
+  assert.match(companyChainsSource, /fetchAllCompanyChains/);
+  assert.match(clientSource, /getFabricAccessToken/);
+  assert.match(clientSource, /export const runGraphqlQuery = async <TData>/);
 });
 
 run('powerbi library defines dedicated scopes for Power BI and Fabric GraphQL', () => {
@@ -522,11 +524,11 @@ run('powerbi library defines dedicated scopes for Power BI and Fabric GraphQL', 
   assert.match(settingsSource, /FABRIC_AAD_SCOPE/);
 });
 
-run('group projtables lookup endpoint is defined for entity management', () => {
+run('group projtables lookup endpoint is exposed under fabric namespace', () => {
   const functionPath = resolveFunctionApiPath('src', 'functions', 'groupProjtablesLookup.ts');
   const functionSource = fs.readFileSync(functionPath, 'utf8');
 
-  assert.match(functionSource, /route: 'identity\/group-projtables'/);
+  assert.match(functionSource, /route: 'fabric\/group-projtables'/);
   assert.match(functionSource, /if \(!actor\.permissions\.includes\('manage:companies'\)\)/);
   assert.match(functionSource, /fetchAllGroupProjtables/);
   assert.match(functionSource, /request\.query\.get\('q'\)/);
