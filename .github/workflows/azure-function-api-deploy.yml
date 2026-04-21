@@ -105,17 +105,27 @@ jobs:
                   body = resp.read().decode("utf-8", errors="replace")
                   return resp.status, body
 
+          def call_soft(method: str, url: str):
+              try:
+                  return call(method, url)
+              except HTTPError as exc:
+                  body = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else ""
+                  return exc.code, body
+              except URLError as exc:
+                  return None, str(exc)
+
           sync_url = f"https://{scm_host}/api/functions/synctriggers"
-          try:
-              status, _ = call("POST", sync_url)
+          status, sync_body = call_soft("POST", sync_url)
+          if status in (200, 202, 204):
               print(f"synctriggers status: {status}")
-          except (HTTPError, URLError) as exc:
-              print(f"synctriggers call failed: {exc}")
-              sys.exit(1)
+          else:
+              print(f"synctriggers skipped/unavailable (status={status}).")
+              if sync_body:
+                  print(sync_body[:500])
 
           list_url = f"https://{scm_host}/api/functions"
-          try:
-              status, body = call("GET", list_url)
+          status, body = call_soft("GET", list_url)
+          if status == 200:
               payload = json.loads(body) if body else []
               names = []
               if isinstance(payload, list):
@@ -128,7 +138,28 @@ jobs:
               print("discovered functions:")
               for name in sorted(names):
                   print(f"- {name}")
-          except (HTTPError, URLError, json.JSONDecodeError) as exc:
-              print(f"function listing failed: {exc}")
-              sys.exit(1)
+          else:
+              print(f"/api/functions not available (status={status}). Falling back to deployed file listing.")
+              vfs_url = f"https://{scm_host}/api/vfs/site/wwwroot/dist/src/functions/"
+              vfs_status, vfs_body = call_soft("GET", vfs_url)
+              if vfs_status != 200:
+                  print(f"fallback file listing failed (status={vfs_status}).")
+                  if vfs_body:
+                      print(vfs_body[:500])
+                  sys.exit(1)
+              payload = json.loads(vfs_body) if vfs_body else []
+              js_files = []
+              if isinstance(payload, list):
+                  for item in payload:
+                      if isinstance(item, dict):
+                          name = item.get("name")
+                          if isinstance(name, str) and name.endswith(".js"):
+                              js_files.append(name)
+              print(f"deployed function js file count: {len(js_files)}")
+              print("deployed function js files:")
+              for name in sorted(js_files):
+                  print(f"- {name}")
+              if len(js_files) == 0:
+                  print("No deployed function js files found in dist/src/functions.")
+                  sys.exit(1)
           PY
