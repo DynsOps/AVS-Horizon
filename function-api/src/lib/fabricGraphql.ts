@@ -1,5 +1,5 @@
 export { FabricGraphqlError, runGraphqlQuery } from './fabric/client';
-export { fetchAllCompanyChains } from './fabric/companyChains';
-export { fetchAllGroupProjtables } from './fabric/groupProjtables';
-export type { CompanyChain } from './fabric/companyChains';
-export type { GroupProjtable, GroupProjtableSearchOptions } from './fabric/groupProjtables';
+export { fetchAllCompanyChains, fetchAllCompanyChainsWithCache } from './fabric/companyChains';
+export { fetchAllGroupProjtables, fetchAllGroupProjtablesWithCache } from './fabric/groupProjtables';
+export type { CompanyChain, CompanyChainsLookupResult } from './fabric/companyChains';
+export type { GroupProjtable, GroupProjtableLookupResult, GroupProjtableSearchOptions } from './fabric/groupProjtables';

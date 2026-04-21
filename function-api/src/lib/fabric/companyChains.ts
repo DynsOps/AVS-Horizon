@@ -1,4 +1,6 @@
 import { isCompatibilityError, runGraphqlQuery } from './client';
+import { env } from '../env';
+import { readThroughJsonCache, CacheStatus } from '../cache/cacheAside';
 
 const PAGED_BATCH_SIZE = 500;
 const FALLBACK_BATCH_SIZE = 5000;
@@ -68,6 +70,11 @@ export type CompanyChain = {
   dataareaid: string | null;
 };
 
+export type CompanyChainsLookupResult = {
+  items: CompanyChain[];
+  cacheStatus: CacheStatus;
+};
+
 const normalizeChainRows = (rows: CompanyChainRaw[] | null | undefined): CompanyChain[] => {
   return (rows || [])
     .map((row) => ({
@@ -110,7 +117,13 @@ const fetchLegacyCompanyChains = async (): Promise<CompanyChain[]> => {
   return normalizeChainRows(data.companyChains?.items);
 };
 
-export const fetchAllCompanyChains = async (): Promise<CompanyChain[]> => {
+const parsePositiveInt = (raw: string, fallback: number): number => {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.floor(parsed);
+};
+
+const fetchAllCompanyChainsUncached = async (): Promise<CompanyChain[]> => {
   try {
     return await fetchPagedCompanyChains();
   } catch (error) {
@@ -126,4 +139,23 @@ export const fetchAllCompanyChains = async (): Promise<CompanyChain[]> => {
   }
 
   return fetchLegacyCompanyChains();
+};
+
+export const fetchAllCompanyChainsWithCache = async (): Promise<CompanyChainsLookupResult> => {
+  const ttlSeconds = parsePositiveInt(env.fabricCacheCompanyChainsTtlSecondsRaw, 86400);
+  const cached = await readThroughJsonCache<CompanyChain[]>({
+    key: 'fabric:company-chains:all',
+    ttlSeconds,
+    load: () => fetchAllCompanyChainsUncached(),
+  });
+
+  return {
+    items: cached.value,
+    cacheStatus: cached.cacheStatus,
+  };
+};
+
+export const fetchAllCompanyChains = async (): Promise<CompanyChain[]> => {
+  const result = await fetchAllCompanyChainsWithCache();
+  return result.items;
 };

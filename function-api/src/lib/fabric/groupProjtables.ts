@@ -1,9 +1,9 @@
 import { isCompatibilityError, runGraphqlQuery } from './client';
+import { env } from '../env';
+import { readThroughJsonCache, CacheStatus } from '../cache/cacheAside';
 
 const PAGED_BATCH_SIZE = 500;
 const FALLBACK_BATCH_SIZE = 5000;
-const GROUP_PROJTABLES_LIMIT_DEFAULT = 25;
-const GROUP_PROJTABLES_LIMIT_MAX = 200;
 
 const GROUP_PROJTABLES_PAGED_QUERY = `
 query GroupProjtablesPaged($first: Int!, $after: String) {
@@ -80,6 +80,11 @@ export type GroupProjtableSearchOptions = {
   limit?: number;
 };
 
+export type GroupProjtableLookupResult = {
+  items: GroupProjtable[];
+  cacheStatus: CacheStatus;
+};
+
 const normalizeGroupProjtableRows = (rows: GroupProjtableRaw[] | null | undefined): GroupProjtable[] => {
   return (rows || [])
     .map((row) => ({
@@ -92,9 +97,15 @@ const normalizeGroupProjtableRows = (rows: GroupProjtableRaw[] | null | undefine
 
 const normalizeSearchQuery = (value: string | undefined): string => (value || '').trim().toLowerCase();
 
-const normalizeSearchLimit = (value: number | undefined): number => {
-  if (!Number.isFinite(value)) return GROUP_PROJTABLES_LIMIT_DEFAULT;
-  return Math.max(1, Math.min(GROUP_PROJTABLES_LIMIT_MAX, Number(value)));
+const normalizeSearchLimit = (value: number | undefined): number | null => {
+  if (!Number.isFinite(value)) return null;
+  return Math.max(1, Number(value));
+};
+
+const parsePositiveInt = (raw: string, fallback: number): number => {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.floor(parsed);
 };
 
 const matchesGroupProjtableQuery = (row: GroupProjtable, query: string): boolean => {
@@ -102,26 +113,29 @@ const matchesGroupProjtableQuery = (row: GroupProjtable, query: string): boolean
   return row.name.toLowerCase().includes(query);
 };
 
-const mergeUniqueGroupProjtables = (
-  source: GroupProjtable[],
-  target: GroupProjtable[],
-  query: string,
-  limit: number
-): void => {
+const mergeUniqueGroupProjtables = (source: GroupProjtable[], target: GroupProjtable[]): void => {
   const existing = new Set(target.map((row) => `${row.name}|${row.dataareaid || ''}|${row.projid || ''}`));
 
   for (const row of source) {
-    if (!matchesGroupProjtableQuery(row, query)) continue;
     const key = `${row.name}|${row.dataareaid || ''}|${row.projid || ''}`;
     if (existing.has(key)) continue;
     target.push(row);
     existing.add(key);
-    if (target.length >= limit) break;
   }
 };
 
-const fetchPagedGroupProjtables = async (query: string, limit: number): Promise<GroupProjtable[]> => {
-  const matches: GroupProjtable[] = [];
+const applyGroupProjtablesSearch = (
+  source: GroupProjtable[],
+  query: string,
+  limit: number | null
+): GroupProjtable[] => {
+  const filtered = source.filter((row) => matchesGroupProjtableQuery(row, query));
+  if (limit === null) return filtered;
+  return filtered.slice(0, limit);
+};
+
+const fetchPagedGroupProjtables = async (): Promise<GroupProjtable[]> => {
+  const rows: GroupProjtable[] = [];
   let after: string | null = null;
 
   while (true) {
@@ -131,8 +145,7 @@ const fetchPagedGroupProjtables = async (query: string, limit: number): Promise<
     });
     const page = data.groupProjtables;
     const normalizedRows = normalizeGroupProjtableRows(page?.items);
-    mergeUniqueGroupProjtables(normalizedRows, matches, query, limit);
-    if (matches.length >= limit) break;
+    mergeUniqueGroupProjtables(normalizedRows, rows);
 
     const hasNext = Boolean(page?.pageInfo?.hasNextPage);
     const cursor = (page?.pageInfo?.endCursor || '').trim();
@@ -140,42 +153,59 @@ const fetchPagedGroupProjtables = async (query: string, limit: number): Promise<
     after = cursor;
   }
 
-  return matches;
+  return rows;
 };
 
-const fetchFallbackGroupProjtables = async (query: string, limit: number): Promise<GroupProjtable[]> => {
+const fetchFallbackGroupProjtables = async (): Promise<GroupProjtable[]> => {
   const data = await runGraphqlQuery<GroupProjtablesFallbackData>(GROUP_PROJTABLES_FALLBACK_QUERY, {
     first: FALLBACK_BATCH_SIZE,
   });
-  const matches: GroupProjtable[] = [];
-  mergeUniqueGroupProjtables(normalizeGroupProjtableRows(data.groupProjtables?.items), matches, query, limit);
-  return matches;
+  return normalizeGroupProjtableRows(data.groupProjtables?.items);
 };
 
-const fetchLegacyGroupProjtables = async (query: string, limit: number): Promise<GroupProjtable[]> => {
+const fetchLegacyGroupProjtables = async (): Promise<GroupProjtable[]> => {
   const data = await runGraphqlQuery<GroupProjtablesFallbackData>(GROUP_PROJTABLES_LEGACY_QUERY);
-  const matches: GroupProjtable[] = [];
-  mergeUniqueGroupProjtables(normalizeGroupProjtableRows(data.groupProjtables?.items), matches, query, limit);
-  return matches;
+  return normalizeGroupProjtableRows(data.groupProjtables?.items);
 };
 
-export const fetchAllGroupProjtables = async (options?: GroupProjtableSearchOptions): Promise<GroupProjtable[]> => {
-  const query = normalizeSearchQuery(options?.query);
-  const limit = normalizeSearchLimit(options?.limit);
-
+const fetchGroupProjtablesUncached = async (): Promise<GroupProjtable[]> => {
   try {
-    return await fetchPagedGroupProjtables(query, limit);
+    return await fetchPagedGroupProjtables();
   } catch (error) {
     const canFallbackToFirstOnly = isCompatibilityError(error, ['pageinfo', 'after']);
     if (!canFallbackToFirstOnly) throw error;
   }
 
   try {
-    return await fetchFallbackGroupProjtables(query, limit);
+    return await fetchFallbackGroupProjtables();
   } catch (error) {
     const canFallbackToLegacy = isCompatibilityError(error, ['argument "first"', 'unknown argument']);
     if (!canFallbackToLegacy) throw error;
   }
 
-  return fetchLegacyGroupProjtables(query, limit);
+  return fetchLegacyGroupProjtables();
+};
+
+export const fetchAllGroupProjtablesWithCache = async (
+  options?: GroupProjtableSearchOptions
+): Promise<GroupProjtableLookupResult> => {
+  const query = normalizeSearchQuery(options?.query);
+  const limit = normalizeSearchLimit(options?.limit);
+  const ttlSeconds = parsePositiveInt(env.fabricCacheGroupProjtablesTtlSecondsRaw, 604800);
+
+  const cached = await readThroughJsonCache<GroupProjtable[]>({
+    key: 'fabric:group-projtables:all',
+    ttlSeconds,
+    load: () => fetchGroupProjtablesUncached(),
+  });
+
+  return {
+    items: applyGroupProjtablesSearch(cached.value, query, limit),
+    cacheStatus: cached.cacheStatus,
+  };
+};
+
+export const fetchAllGroupProjtables = async (options?: GroupProjtableSearchOptions): Promise<GroupProjtable[]> => {
+  const result = await fetchAllGroupProjtablesWithCache(options);
+  return result.items;
 };

@@ -530,9 +530,10 @@ run('group projtables lookup endpoint is exposed under fabric namespace', () => 
 
   assert.match(functionSource, /route: 'fabric\/group-projtables'/);
   assert.match(functionSource, /if \(!actor\.permissions\.includes\('manage:companies'\)\)/);
-  assert.match(functionSource, /fetchAllGroupProjtables/);
+  assert.match(functionSource, /fetchAllGroupProjtablesWithCache/);
   assert.match(functionSource, /request\.query\.get\('q'\)/);
   assert.match(functionSource, /request\.query\.get\('limit'\)/);
+  assert.match(functionSource, /'x-cache': result\.cacheStatus/);
 });
 
 run('company schema includes optional data_area_id and proj_id fields', () => {

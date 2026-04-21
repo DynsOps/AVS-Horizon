@@ -1,7 +1,7 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../lib/auth';
 import { runScopedQuery } from '../lib/db';
-import { fetchAllCompanyChains, FabricGraphqlError } from '../lib/fabricGraphql';
+import { fetchAllCompanyChainsWithCache, FabricGraphqlError } from '../lib/fabricGraphql';
 import { errorResponse, ok } from '../lib/http';
 
 type CompanyChainsBody = {
@@ -108,7 +108,8 @@ export async function companyChains(request: HttpRequest, context: InvocationCon
       });
     }
 
-    const companyChainsRows = await fetchAllCompanyChains();
+    const companyChainsResult = await fetchAllCompanyChainsWithCache();
+    const companyChainsRows = companyChainsResult.items;
     const chainsByName = new Map<string, Array<{ chainid: string; dataareaid: string | null }>>();
     companyChainsRows.forEach((row) => {
       const key = normalizeValue(row.chainid);
@@ -144,16 +145,19 @@ export async function companyChains(request: HttpRequest, context: InvocationCon
       });
     });
 
-    return ok({
-      matches,
-      unmatched,
-      meta: {
-        totalCompanies: targetCompanies.length,
-        matchedCompanies: targetCompanies.length - unmatched.length,
-        unmatchedCompanies: unmatched.length,
-        totalMatches: matches.length,
+    return ok(
+      {
+        matches,
+        unmatched,
+        meta: {
+          totalCompanies: targetCompanies.length,
+          matchedCompanies: targetCompanies.length - unmatched.length,
+          unmatchedCompanies: unmatched.length,
+          totalMatches: matches.length,
+        },
       },
-    });
+      { 'x-cache': companyChainsResult.cacheStatus }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     context.error('powerbi/company-chains failed', message);

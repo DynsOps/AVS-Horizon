@@ -3,6 +3,8 @@ import { KPI, Order, Shipment, Invoice, Vessel, VesselPosition, VesselRoute, Ves
 import { getDefaultPermissionsForRole } from '../utils/rbac';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
+import { externalLocalIdentityTokenRequest } from '../auth/authConfig';
+import { externalMsalInstance } from '../auth/msalInstance';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const LOCAL_DB_KEY = 'avs_horizon_local_db_v3';
@@ -11,6 +13,7 @@ const FUNCTION_API_BASE_URL = (import.meta.env.VITE_FUNCTION_API_BASE_URL || '')
 const FORCE_FUNCTION_API = String(import.meta.env.VITE_FORCE_FUNCTION_API || '').toLowerCase() === 'true';
 const DEV_BYPASS_AUTH = String(import.meta.env.VITE_DEV_BYPASS_AUTH || '').toLowerCase() === 'true';
 const DISABLE_MOCK_DATA = String(import.meta.env.VITE_DISABLE_MOCK_DATA ?? 'true').toLowerCase() !== 'false';
+let refreshHostedTokenPromise: Promise<string | null> | null = null;
 
 const getStoredAuthBearerToken = (): string => {
   if (typeof window === 'undefined') return '';
@@ -32,7 +35,48 @@ const ensureMockAllowed = (feature: string): void => {
   }
 };
 
-const callFunctionApi = async <T = any>(path: string, init?: RequestInit): Promise<T> => {
+const shouldRetryWithSilentRefresh = (status: number, message: string): boolean => {
+  return status === 401 || /jwt expired|token expired|invalid token|signature has expired/i.test(message);
+};
+
+const resetSessionAfterTokenRefreshFailure = (): void => {
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(AUTH_BEARER_TOKEN_KEY);
+  }
+  const { setAuthError } = useAuthStore.getState();
+  setAuthError('Oturum suresi doldu. Lutfen tekrar giris yapin.');
+};
+
+const refreshHostedTokenSilently = async (): Promise<string | null> => {
+  if (refreshHostedTokenPromise) {
+    return refreshHostedTokenPromise;
+  }
+
+  refreshHostedTokenPromise = (async () => {
+    const activeAccount = externalMsalInstance.getActiveAccount() || externalMsalInstance.getAllAccounts()[0] || null;
+    if (!activeAccount) return null;
+
+    const tokenResult = await externalMsalInstance.acquireTokenSilent({
+      ...externalLocalIdentityTokenRequest,
+      account: activeAccount,
+      forceRefresh: true,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(AUTH_BEARER_TOKEN_KEY, tokenResult.idToken);
+    }
+    return tokenResult.idToken;
+  })().catch(() => {
+    resetSessionAfterTokenRefreshFailure();
+    return null;
+  }).finally(() => {
+    refreshHostedTokenPromise = null;
+  });
+
+  return refreshHostedTokenPromise;
+};
+
+const callFunctionApi = async <T = any>(path: string, init?: RequestInit, allowAuthRetry = true): Promise<T> => {
   if (!FUNCTION_API_BASE_URL) {
     throw new Error('Function API base URL is not configured.');
   }
@@ -64,6 +108,12 @@ const callFunctionApi = async <T = any>(path: string, init?: RequestInit): Promi
 
   if (!response.ok) {
     const message = payload?.error || payload?.message || `Function API request failed (${response.status})`;
+    if (allowAuthRetry && shouldRetryWithSilentRefresh(response.status, message)) {
+      const refreshedToken = await refreshHostedTokenSilently();
+      if (refreshedToken) {
+        return callFunctionApi<T>(path, init, false);
+      }
+    }
     throw new Error(message);
   }
 

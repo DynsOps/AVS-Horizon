@@ -1,6 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../lib/auth';
-import { fetchAllGroupProjtables } from '../lib/fabricGraphql';
+import { fetchAllGroupProjtablesWithCache } from '../lib/fabricGraphql';
 import { errorResponse, ok } from '../lib/http';
 
 export async function groupProjtablesLookup(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
@@ -12,11 +12,14 @@ export async function groupProjtablesLookup(request: HttpRequest, context: Invoc
 
     const q = (request.query.get('q') || '').trim();
     const rawLimit = Number(request.query.get('limit') || '');
-    const rows = await fetchAllGroupProjtables({
+    const result = await fetchAllGroupProjtablesWithCache({
       query: q || undefined,
       limit: Number.isFinite(rawLimit) ? rawLimit : undefined,
     });
-    return ok({ items: rows });
+    return ok(
+      { items: result.items },
+      { 'x-cache': result.cacheStatus }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     context.error('fabric/group-projtables failed', message);

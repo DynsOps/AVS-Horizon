@@ -9,12 +9,13 @@
     "clean": "rimraf dist",
     "prestart": "npm run clean && npm run build",
     "start": "func start",
-    "test": "npm run clean && npm run build && node dist/tests/identity.test.js"
+    "test": "npm run clean && npm run build && node dist/tests/identity.test.js && node dist/tests/fabricCache.test.js"
   },
   "dependencies": {
     "@azure/functions": "^4.0.0",
     "@azure/identity": "^4.13.1",
     "@types/jsonwebtoken": "^9.0.10",
+    "ioredis": "^5.8.1",
     "jose": "^6.2.2",
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^4.0.1",

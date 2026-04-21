@@ -47,6 +47,11 @@
     "// Fabric GraphQL": "Optional company chain lookup integration",
     "FABRIC_AAD_SCOPE": "https://api.fabric.microsoft.com/.default",
     "FABRIC_GRAPHQL_ENDPOINT": "https://<graphql-host>/v1/workspaces/<workspace-id>/graphqlapis/<graphql-api-id>/graphql",
-    "FABRIC_GRAPHQL_TIMEOUT_MS": "10000"
+    "FABRIC_GRAPHQL_TIMEOUT_MS": "10000",
+    "// Fabric Redis Cache": "Optional cache-aside layer for Fabric datasets",
+    "REDIS_URL": "redis://localhost:6379",
+    "FABRIC_CACHE_ENABLED": "true",
+    "FABRIC_CACHE_GROUP_PROJTABLES_TTL_SECONDS": "604800",
+    "FABRIC_CACHE_COMPANY_CHAINS_TTL_SECONDS": "86400"
   }
 }
