@@ -7,8 +7,8 @@ type CompanyRow = {
   id: string;
   name: string;
   type: 'Customer' | 'Supplier';
-  country: string;
-  contactEmail: string | null;
+  dataAreaId: string | null;
+  projId: string | null;
   status: 'Active' | 'Inactive';
   latestCreatedAt: string;
 };
@@ -30,13 +30,13 @@ export async function listAdminCompanies(request: HttpRequest, context: Invocati
         c.id,
         c.name,
         c.type,
-        c.country,
-        c.contact_email AS contactEmail,
+        c.data_area_id AS dataAreaId,
+        c.proj_id AS projId,
         c.status,
         MAX(c.created_at) AS latestCreatedAt
       FROM dbo.companies c
       ${isAdminActor ? 'WHERE c.id = @companyId' : ''}
-      GROUP BY c.id, c.name, c.type, c.country, c.contact_email, c.status
+      GROUP BY c.id, c.name, c.type, c.data_area_id, c.proj_id, c.status
       ORDER BY latestCreatedAt DESC
       `,
       isAdminActor ? { companyId: actor.companyId } : undefined

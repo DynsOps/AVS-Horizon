@@ -33,7 +33,7 @@ export const useAuthStore = create<AuthState>()(
       clearAuthFeedback: () => set({ authStatus: 'idle', authError: null }),
     }),
     {
-      name: 'avs_auth_store_v1',
+      name: 'avs_auth_store_v2',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         user: state.user,

@@ -1,9 +1,15 @@
 import React from 'react';
 import avsLogo from '../../assets/avslogo.png';
+import { useAuthStore } from '../../store/authStore';
+import { MapWidget } from '../../components/maritime/MapWidget';
 
 export const CustomerDashboard: React.FC = () => {
+  const { user } = useAuthStore();
+  const isSupadmin = user?.role === 'supadmin';
+
   return (
-    <div className="relative min-h-[calc(100vh-9rem)] overflow-hidden rounded-3xl border border-slate-200/70 bg-gradient-to-br from-slate-950 via-[#0a2a4d] to-[#0f4979] p-8 shadow-xl dark:border-slate-700/60 md:p-12">
+    <div className="space-y-6">
+    <div className={`relative ${isSupadmin ? 'min-h-[320px]' : 'min-h-[calc(100vh-9rem)]'} overflow-hidden rounded-3xl border border-slate-200/70 bg-gradient-to-br from-slate-950 via-[#0a2a4d] to-[#0f4979] p-8 shadow-xl dark:border-slate-700/60 md:p-12`}>
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-20 -top-20 h-72 w-72 rounded-full bg-cyan-300/20 blur-3xl" />
         <div className="absolute -bottom-24 right-0 h-80 w-80 rounded-full bg-yellow-300/20 blur-3xl" />
@@ -34,6 +40,9 @@ export const CustomerDashboard: React.FC = () => {
           />
         </div>
       </div>
+    </div>
+
+    {isSupadmin && <MapWidget />}
     </div>
   );
 };

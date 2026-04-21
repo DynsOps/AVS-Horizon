@@ -1,7 +1,7 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { randomUUID } from 'crypto';
 import { authenticateRequest } from '../lib/auth';
-import { runQuery } from '../lib/db';
+import { runScopedQuery } from '../lib/db';
 import { created, errorResponse } from '../lib/http';
 
 type TicketCategory = 'General' | 'Operational' | 'Invoice' | 'Technical';
@@ -9,6 +9,9 @@ type TicketCategory = 'General' | 'Operational' | 'Invoice' | 'Technical';
 export async function createSupportTicket(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
     const user = await authenticateRequest(request);
+    if (user.role === 'supadmin') {
+      return errorResponse(403, 'Supadmin cannot create support tickets.');
+    }
     if (!user.permissions.includes('create:support-ticket')) {
       return errorResponse(403, 'Missing permission: create:support-ticket');
     }
@@ -26,7 +29,8 @@ export async function createSupportTicket(request: HttpRequest, context: Invocat
 
     const ticketId = `TCK-${randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
 
-    await runQuery(
+    await runScopedQuery(
+      { role: user.role, companyId: user.companyId, userId: user.id },
       `
       INSERT INTO dbo.support_tickets (
         id,
@@ -67,6 +71,8 @@ export async function createSupportTicket(request: HttpRequest, context: Invocat
         description: body.description.trim(),
         category: body.category,
         status: 'Open',
+        createdAt: new Date().toISOString(),
+        replies: [],
       },
     });
   } catch (error) {

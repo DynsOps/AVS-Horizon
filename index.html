@@ -32,6 +32,7 @@
       }
     </script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
       body {
         font-family: 'Manrope', system-ui, -apple-system, sans-serif;
@@ -62,6 +63,11 @@
         0% { transform: translateY(0); }
         50% { transform: translateY(-6px); }
         100% { transform: translateY(0); }
+      }
+      @keyframes avs-pulse {
+        0% { transform: scale(1); opacity: 0.35; }
+        70% { transform: scale(1.8); opacity: 0; }
+        100% { transform: scale(1.8); opacity: 0; }
       }
       .anim-enter { animation: fade-slide-up 0.35s ease both; }
       .anim-toast { animation: toast-in 0.35s ease both; }

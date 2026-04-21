@@ -6,6 +6,7 @@ import { useUIStore } from '../../../store/uiStore';
 
 const mocks = vi.hoisted(() => ({
   getCompanies: vi.fn(),
+  getGroupProjtables: vi.fn(),
   createCompany: vi.fn(),
   createUser: vi.fn(),
   updateCompany: vi.fn(),
@@ -16,6 +17,7 @@ vi.mock('../../../services/api', () => ({
   api: {
     admin: {
       getCompanies: mocks.getCompanies,
+      getGroupProjtables: mocks.getGroupProjtables,
       createCompany: mocks.createCompany,
       createUser: mocks.createUser,
       updateCompany: mocks.updateCompany,
@@ -40,11 +42,15 @@ const renderEntityManagement = () => render(<TestHost />);
 describe('EntityManagement', () => {
   beforeEach(() => {
     mocks.getCompanies.mockReset();
+    mocks.getGroupProjtables.mockReset();
     mocks.createCompany.mockReset();
     mocks.createUser.mockReset();
     mocks.updateCompany.mockReset();
     mocks.deleteCompany.mockReset();
     mocks.getCompanies.mockResolvedValue([]);
+    mocks.getGroupProjtables.mockResolvedValue([
+      { name: 'Northwind Logistics', dataAreaId: 'DAT', projId: 'PRJ-1001' },
+    ]);
 
     useUIStore.setState({
       isDrawerOpen: false,
@@ -87,12 +93,14 @@ describe('EntityManagement', () => {
 
     await act(async () => {
       fireEvent.click(screen.getByLabelText(/create company admin user/i));
-      fireEvent.change(screen.getByPlaceholderText(/nordic hamburg/i), {
+      fireEvent.change(screen.getByPlaceholderText(/type to search firm name/i), {
         target: { value: 'Northwind Logistics' },
       });
-      fireEvent.change(screen.getByPlaceholderText(/germany/i), {
-        target: { value: 'Germany' },
-      });
+    });
+
+    await waitFor(() => expect(mocks.getGroupProjtables).toHaveBeenCalled());
+    await act(async () => {
+      await waitFor(() => expect(screen.getByDisplayValue('DAT')).toBeTruthy());
       fireEvent.click(screen.getByRole('button', { name: /create entity/i }));
     });
 

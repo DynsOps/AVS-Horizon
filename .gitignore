@@ -26,3 +26,8 @@ docs/superpowers
 *.njsproj
 *.sln
 *.sw?
+.claude
+__azurite*
+__blobstorage__
+package-lock.json
+.env
