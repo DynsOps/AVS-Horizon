@@ -2,8 +2,9 @@
   "name": "",
   "version": "1.0.0",
   "description": "",
-  "main": "dist/src/functions/*.js",
+  "main": "dist/src/index.js",
   "scripts": {
+    "prebuild": "node scripts/generate-function-index.cjs",
     "build": "tsc",
     "watch": "tsc -w",
     "clean": "rimraf dist",
