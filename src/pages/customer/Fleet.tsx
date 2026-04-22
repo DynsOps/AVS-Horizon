@@ -22,9 +22,9 @@ export const Fleet: React.FC = () => {
         const data = await api.customer.getContractedVessels();
         setVessels(data);
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Veri yüklenirken bir hata oluştu.';
+        const msg = err instanceof Error ? err.message : 'Failed to load vessel data.';
         setError(msg);
-        addToast({ title: 'Hata', message: msg, type: 'error' });
+        addToast({ title: 'Error', message: msg, type: 'error' });
       } finally {
         setIsLoading(false);
       }
@@ -45,11 +45,11 @@ export const Fleet: React.FC = () => {
             Vessels
           </div>
           {isLoading ? (
-            <div className="p-4 text-slate-500 dark:text-slate-400 text-sm">Yükleniyor...</div>
+            <div className="p-4 text-slate-500 dark:text-slate-400 text-sm">Loading...</div>
           ) : error ? (
             <div className="p-4 text-red-600 dark:text-red-400 text-sm">{error}</div>
           ) : vessels.length === 0 ? (
-            <div className="p-4 text-slate-500 dark:text-slate-400 text-sm">Bu şirket için contracted vessel bulunamadı.</div>
+            <div className="p-4 text-slate-500 dark:text-slate-400 text-sm">No contracted vessels found for this company.</div>
           ) : (
             <div className="divide-y divide-gray-100 dark:divide-slate-800">
               {vessels.map(vessel => (
@@ -108,7 +108,7 @@ export const Fleet: React.FC = () => {
           </Card>
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-slate-500 bg-gray-50/50 dark:bg-slate-900/50 rounded-lg border-2 border-dashed border-gray-200 dark:border-slate-800">
-            Bir vessel seçin
+            Select a vessel to view details
           </div>
         )}
       </div>
