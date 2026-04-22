@@ -30,6 +30,7 @@ export async function createSupportTicket(request: HttpRequest, context: Invocat
 
     const ticketId = `TCK-${randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
     const subject = body.subject.trim();
+    const description = body.description.trim();
     const category = body.category;
     const createdAt = new Date().toISOString();
 
@@ -39,7 +40,7 @@ export async function createSupportTicket(request: HttpRequest, context: Invocat
       INSERT INTO dbo.support_tickets (
         id, created_by_user_id, created_by_email, subject, description, category, status, created_at
       ) VALUES (
-        @id, @createdByUserId, @createdByEmail, @subject, @description, @category, 'Open', SYSUTCDATETIME()
+        @id, @createdByUserId, @createdByEmail, @subject, @description, @category, 'Open', @createdAt
       )
       `,
       {
@@ -47,19 +48,22 @@ export async function createSupportTicket(request: HttpRequest, context: Invocat
         createdByUserId: user.id,
         createdByEmail: user.email,
         subject,
-        description: body.description.trim(),
+        description,
         category,
+        createdAt,
       }
     );
 
-    void sendTicketCreatedEmails({
-      ticketId,
-      subject,
-      category,
-      createdAt,
-      userName: user.name,
-      userEmail: user.email,
-    }).catch((err) => context.warn('ticket created email failed', err instanceof Error ? err.message : String(err)));
+    if (user.email) {
+      void sendTicketCreatedEmails({
+        ticketId,
+        subject,
+        category,
+        createdAt,
+        userName: user.name,
+        userEmail: user.email,
+      }).catch((err) => context.warn('ticket created email failed', err instanceof Error ? err.message : String(err)));
+    }
 
     return created({
       ticket: {
@@ -67,7 +71,7 @@ export async function createSupportTicket(request: HttpRequest, context: Invocat
         createdByUserId: user.id,
         createdByEmail: user.email,
         subject,
-        description: body.description.trim(),
+        description,
         category,
         status: 'Open',
         createdAt,
