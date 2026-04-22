@@ -30,7 +30,7 @@ type ContractedProjtablesData = {
 
 export type ContractedVessel = {
   imo: string;
-  name: string;
+  name: string | null;
   dataAreaId: string | null;
   projIdDataAreaIds: string[];
 };
@@ -53,10 +53,9 @@ const groupContractedVesselRows = (rows: ProjtableRow[] | null | undefined): Con
     const imo = (row.avscarriercode || '').trim();
     if (!imo) continue;
 
-    if (!grouped.has(imo)) {
-      grouped.set(imo, []);
-    }
-    grouped.get(imo)!.push(row);
+    const bucket = grouped.get(imo) ?? [];
+    grouped.set(imo, bucket);
+    bucket.push(row);
   }
 
   const result: ContractedVessel[] = [];
@@ -65,7 +64,7 @@ const groupContractedVesselRows = (rows: ProjtableRow[] | null | undefined): Con
     const name =
       groupRows
         .map((r) => (r.refShippingCarriername || '').trim())
-        .find((n) => n !== '') ?? '';
+        .find((n) => n !== '') ?? null;
 
     const dataAreaId =
       groupRows
