@@ -323,7 +323,7 @@ let mockSupportTickets: SupportTicket[] = [
     subject: 'Nordic Aurora spare parts request follow-up',
     description: 'Need ETA confirmation for critical spare parts before docking.',
     category: 'Operational',
-    status: 'In Progress',
+    status: 'Open',
     createdAt: '2023-10-12T08:15:00Z',
   },
   {

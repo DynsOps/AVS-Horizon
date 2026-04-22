@@ -25,7 +25,7 @@ export async function createAdminSupportTicketReply(request: HttpRequest, contex
     }
 
     const dbContext = { role: actor.role, companyId: actor.companyId, userId: actor.id };
-    const ticketResult = await runScopedQuery<{ id: string; createdByUserId: string; status: 'Open' | 'In Progress' | 'Resolved' }>(
+    const ticketResult = await runScopedQuery<{ id: string; createdByUserId: string; status: 'Open' | 'Resolved' }>(
       dbContext,
       `
       SELECT TOP 1

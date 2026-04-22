@@ -3,7 +3,7 @@ import { authenticateRequest } from '../lib/auth';
 import { runScopedQuery } from '../lib/db';
 import { errorResponse, ok } from '../lib/http';
 
-type TicketStatus = 'Open' | 'In Progress' | 'Resolved';
+type TicketStatus = 'Open' | 'Resolved';
 type TicketCategory = 'General' | 'Operational' | 'Invoice' | 'Technical';
 
 type SupportTicketRow = {
