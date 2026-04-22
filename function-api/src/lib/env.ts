@@ -39,6 +39,7 @@ export const env = {
   fabricCacheEnabledRaw: process.env.FABRIC_CACHE_ENABLED || 'true',
   fabricCacheGroupProjtablesTtlSecondsRaw: process.env.FABRIC_CACHE_GROUP_PROJTABLES_TTL_SECONDS || '604800',
   fabricCacheCompanyChainsTtlSecondsRaw: process.env.FABRIC_CACHE_COMPANY_CHAINS_TTL_SECONDS || '86400',
+  fabricCacheContractedVesselsTtlSecondsRaw: process.env.FABRIC_CACHE_CONTRACTED_VESSELS_TTL_SECONDS || '86400',
 };
 
 export const assertEnv = (): void => {
