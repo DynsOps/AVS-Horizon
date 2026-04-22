@@ -88,6 +88,7 @@ const callFunctionApi = async <T = any>(path: string, init?: RequestInit, allowA
     throw new Error('Hosted sign-in token is missing. Please sign in again.');
   }
 
+  const activeCompanyId = useUIStore.getState().dashboardCompanyId || '';
   const normalizedPath = path.startsWith('/') ? path.slice(1) : path;
   const response = await fetch(`${FUNCTION_API_BASE_URL}/${normalizedPath}`, {
     ...init,
@@ -95,6 +96,7 @@ const callFunctionApi = async <T = any>(path: string, init?: RequestInit, allowA
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(canUseDevBypass ? { 'x-dev-user-email': devUserEmail } : {}),
+      ...(activeCompanyId ? { 'x-active-company-id': activeCompanyId } : {}),
       ...(init?.headers || {}),
     },
   });
@@ -1040,6 +1042,22 @@ export const api = {
     },
     resetUserPassword: async (): Promise<never> => {
       throw new Error('Password reset is managed by Entra ID. Use the hosted Entra reset flow.');
+    },
+    getAdminUserCompanies: async (userId: string): Promise<string[]> => {
+      if (shouldUseFunctionApi()) {
+        const payload = await callFunctionApi<{ companyIds: string[] }>(`api/identity/users/${userId}/companies`);
+        return payload.companyIds;
+      }
+      return [];
+    },
+    setAdminUserCompanies: async (userId: string, companyIds: string[]): Promise<void> => {
+      if (shouldUseFunctionApi()) {
+        await callFunctionApi<{ success: boolean }>(`api/identity/users/${userId}/companies`, {
+          method: 'PUT',
+          body: JSON.stringify({ companyIds }),
+        });
+        return;
+      }
     },
     getGroupProjtables: async (params?: {
       query?: string;

@@ -27,6 +27,9 @@ export const Header: React.FC = () => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const isSupadmin = user?.role === 'supadmin';
+  // companyIds may be absent on stale sessions — fall back to deriving from companyId
+  const effectiveCompanyIds = user?.companyIds ?? (user?.companyId ? [user.companyId] : []);
+  const isMultiCompanyUser = (user?.role === 'admin' || user?.role === 'user') && effectiveCompanyIds.length > 1;
   const hasHostedSession = externalMsalInstance.getAllAccounts().length > 0;
 
   useEffect(() => {
@@ -36,18 +39,19 @@ export const Header: React.FC = () => {
         if (mounted) setCompanyOptions([]);
         return;
       }
-      if (user.role === 'user') {
-        if (!user.companyId) {
+      if (user.role === 'user' || user.role === 'admin') {
+        const ids = effectiveCompanyIds;
+        if (ids.length === 0) {
           if (mounted) setCompanyOptions([]);
           return;
         }
-        const fallbackCompany: Company = {
-          id: user.companyId,
-          name: user.companyId,
-          type: 'Customer',
-          status: 'Active',
-        };
-        if (mounted) setCompanyOptions([fallbackCompany]);
+        try {
+          const allCompanies = await api.admin.getCompanies();
+          const scopedCompanies = allCompanies.filter((c) => ids.includes(c.id));
+          if (mounted) setCompanyOptions(scopedCompanies.length ? scopedCompanies : ids.map((id) => ({ id, name: id, type: 'Customer' as const, status: 'Active' as const })));
+        } catch {
+          if (mounted) setCompanyOptions(ids.map((id) => ({ id, name: id, type: 'Customer' as const, status: 'Active' as const })));
+        }
         return;
       }
       try {
@@ -62,7 +66,7 @@ export const Header: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [user?.id, user?.role, user?.companyId]);
+  }, [user?.id, user?.role, user?.companyId, user?.companyIds]);
 
   const resolvedCompanyId = useMemo(() => {
     if (!companyOptions.length) return '';
@@ -188,14 +192,14 @@ export const Header: React.FC = () => {
             <Building2 size={15} className="text-slate-500 dark:text-slate-300" />
             <select
               value={resolvedCompanyId}
-              onChange={isSupadmin ? (e) => setDashboardCompanyId(e.target.value) : undefined}
-              disabled={!isSupadmin}
-              aria-readonly={!isSupadmin}
+              onChange={(isSupadmin || isMultiCompanyUser) ? (e) => setDashboardCompanyId(e.target.value) : undefined}
+              disabled={!isSupadmin && !isMultiCompanyUser}
+              aria-readonly={!isSupadmin && !isMultiCompanyUser}
               className="bg-transparent pr-2 text-sm text-slate-700 outline-none disabled:cursor-not-allowed disabled:opacity-80 dark:text-slate-200"
             >
               {companyOptions.map((company) => (
                 <option key={company.id} value={company.id}>
-                  {company.name} ({company.id})
+                  {company.name}{company.dataAreaId ? ` · ${company.dataAreaId}` : ''}
                 </option>
               ))}
             </select>

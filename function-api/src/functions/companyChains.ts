@@ -1,8 +1,9 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
-import { authenticateRequest } from '../lib/auth';
+import { authenticateRequest, buildActorContext } from '../lib/auth';
 import { runScopedQuery } from '../lib/db';
 import { fetchAllCompanyChainsWithCache, FabricGraphqlError } from '../lib/fabricGraphql';
 import { errorResponse, ok } from '../lib/http';
+import { SessionContext } from '../lib/identity';
 
 type CompanyChainsBody = {
   companyId?: string;
@@ -33,7 +34,7 @@ const parseBody = async (request: HttpRequest): Promise<CompanyChainsBody> => {
 };
 
 const getTargetCompanies = async (
-  context: { role: 'supadmin' | 'admin' | 'user'; companyId: string | null; userId: string },
+  context: SessionContext,
   companyId: string,
   companyName: string
 ): Promise<CompanyRow[]> => {
@@ -85,10 +86,10 @@ export async function companyChains(request: HttpRequest, context: InvocationCon
     }
 
     const body = await parseBody(request);
-    const effectiveCompanyId = (body.companyId || '').trim();
+    const effectiveCompanyId = (body.companyId || actor.activeCompanyId || '').trim();
     const effectiveCompanyName = (body.companyName || '').trim();
     const targetCompanies = await getTargetCompanies(
-      { role: actor.role, companyId: actor.companyId, userId: actor.id },
+      buildActorContext(actor),
       effectiveCompanyId,
       effectiveCompanyName
     );

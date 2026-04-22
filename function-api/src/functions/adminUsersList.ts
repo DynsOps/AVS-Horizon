@@ -32,14 +32,11 @@ export async function listAdminUsers(request: HttpRequest, context: InvocationCo
     }
 
     const isAdminActor = actor.role === 'admin';
-    if (isAdminActor && !actor.companyId) {
+    if (isAdminActor && actor.companyIds.length === 0) {
       return ok({ users: [] });
     }
 
-    const usersResult = await runScopedQuery<DbUserRow>(
-      { role: actor.role, companyId: actor.companyId, userId: actor.id },
-      `
-      SELECT
+    const USER_COLS = `
         id,
         display_name AS name,
         email,
@@ -57,10 +54,24 @@ export async function listAdminUsers(request: HttpRequest, context: InvocationCo
         power_bi_workspace_id AS powerBiWorkspaceId,
         power_bi_report_id AS powerBiReportId,
         CONVERT(varchar(33), last_login_at, 127) AS lastLogin
-      FROM dbo.users
-      ORDER BY created_at DESC
-      `
-    );
+    `;
+
+    let usersResult;
+    if (isAdminActor) {
+      const placeholders = actor.companyIds.map((_, i) => `@cid${i}`).join(', ');
+      const params: Record<string, string> = {};
+      actor.companyIds.forEach((id, i) => { params[`cid${i}`] = id; });
+      usersResult = await runScopedQuery<DbUserRow>(
+        { role: 'user', internalBypass: true },
+        `SELECT ${USER_COLS} FROM dbo.users WHERE company_id IN (${placeholders}) ORDER BY created_at DESC`,
+        params
+      );
+    } else {
+      usersResult = await runScopedQuery<DbUserRow>(
+        { role: actor.role, companyId: actor.companyId, userId: actor.id },
+        `SELECT ${USER_COLS} FROM dbo.users ORDER BY created_at DESC`
+      );
+    }
 
     const permissionsResult = await runScopedQuery<{ userId: string; permission: string }>(
       { role: actor.role, companyId: actor.companyId, userId: actor.id },

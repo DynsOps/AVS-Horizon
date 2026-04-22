@@ -21,7 +21,17 @@ export async function listAdminCompanies(request: HttpRequest, context: Invocati
     }
 
     const isAdminActor = actor.role === 'admin';
-    if (isAdminActor && !actor.companyId) return ok({ companies: [] });
+    if (isAdminActor && actor.companyIds.length === 0) return ok({ companies: [] });
+
+    let whereClause = '';
+    let queryParams: Record<string, string> | undefined;
+
+    if (isAdminActor) {
+      const placeholders = actor.companyIds.map((_, i) => `@cid${i}`).join(', ');
+      whereClause = `WHERE c.id IN (${placeholders})`;
+      queryParams = {};
+      actor.companyIds.forEach((id, i) => { queryParams![`cid${i}`] = id; });
+    }
 
     const result = await runScopedQuery<CompanyRow>(
       { role: actor.role, companyId: actor.companyId, userId: actor.id },
@@ -35,11 +45,11 @@ export async function listAdminCompanies(request: HttpRequest, context: Invocati
         c.status,
         MAX(c.created_at) AS latestCreatedAt
       FROM dbo.companies c
-      ${isAdminActor ? 'WHERE c.id = @companyId' : ''}
+      ${whereClause}
       GROUP BY c.id, c.name, c.type, c.data_area_id, c.proj_id, c.status
       ORDER BY latestCreatedAt DESC
       `,
-      isAdminActor ? { companyId: actor.companyId } : undefined
+      queryParams
     );
 
     return ok({

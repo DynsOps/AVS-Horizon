@@ -116,20 +116,23 @@ export const UserManagement: React.FC = () => {
 
     const handleSaveUser = async (userData: Partial<User>, isNew: boolean) => {
         const existingUser = !isNew && userData.id ? users.find((u) => u.id === userData.id) : undefined;
+        const adminCompanyIds = actor?.companyIds ?? (actor?.companyId ? [actor.companyId] : []);
         const normalizedUserData: Partial<User> = isAdminActor
             ? {
                 ...userData,
                 role: 'user',
                 isGuest: false,
-                companyId: actor?.companyId || '',
+                companyId: userData.companyId && adminCompanyIds.includes(userData.companyId)
+                    ? userData.companyId
+                    : (adminCompanyIds[0] || ''),
                 provisioningSource: existingUser?.provisioningSource || 'external_local_account',
                 permissions: userData.permissions || (existingUser?.id ? [] : [...COMPANY_ADMIN_BASE_PERMISSIONS]),
                 showOnlyCoreAdminPermissions: false,
             }
             : userData;
         const normalizedEmail = normalizedUserData.email?.trim().toLowerCase();
-        if (isAdminActor && !actor?.companyId) {
-            addToast({ title: 'Permission Denied', message: 'Admin user is not linked to a company.', type: 'error' });
+        if (isAdminActor && adminCompanyIds.length === 0) {
+            addToast({ title: 'Permission Denied', message: 'Admin user is not linked to any company.', type: 'error' });
             return;
         }
         if (!normalizedUserData.name?.trim()) {
@@ -183,6 +186,10 @@ export const UserManagement: React.FC = () => {
                     ...normalizedUserData,
                     email: normalizedEmail,
                 } as Omit<User, 'id'>);
+                if (Array.isArray(normalizedUserData.companyIds) && newUser?.id &&
+                    (normalizedUserData.role === 'admin' || normalizedUserData.role === 'user')) {
+                    await api.admin.setAdminUserCompanies(newUser.id, normalizedUserData.companyIds);
+                }
                 setNewUserCredentials(bootstrapCredentials || null);
                 setShowNewCredentialPassword(false);
                 await loadData();
@@ -206,6 +213,10 @@ export const UserManagement: React.FC = () => {
                 });
                 if (!confirmed) return;
                 await api.admin.updateUser(normalizedUserData.id, { ...normalizedUserData, email: normalizedEmail });
+                if (Array.isArray(normalizedUserData.companyIds) &&
+                    (normalizedUserData.role === 'admin' || normalizedUserData.role === 'user')) {
+                    await api.admin.setAdminUserCompanies(normalizedUserData.id, normalizedUserData.companyIds);
+                }
                 await loadData();
                 addToast({ title: 'User Updated', message: 'User details saved.', type: 'success' });
             }
@@ -216,7 +227,7 @@ export const UserManagement: React.FC = () => {
         }
     };
 
-    const openUserDrawer = (user?: User) => {
+    const openUserDrawer = async (user?: User) => {
         if (user && !canManageTargetUser(user)) {
             addToast({
                 title: 'Permission Denied',
@@ -225,15 +236,25 @@ export const UserManagement: React.FC = () => {
             });
             return;
         }
+        let enrichedUser = user;
+        if (user && (user.role === 'admin' || user.role === 'user')) {
+            try {
+                const companyIds = await api.admin.getAdminUserCompanies(user.id);
+                enrichedUser = { ...user, companyIds };
+            } catch {
+                enrichedUser = user;
+            }
+        }
         openDrawer(
             <UserForm
-                user={user}
+                user={enrichedUser}
                 companies={companies}
                 assignableRoles={assignableRoles}
                 isSupAdminActor={isSupAdminActor}
                 isCoreAdminActor={isCoreAdminActor}
                 isCompanyAdminActor={isCompanyAdminActor}
                 actorCompanyId={actor?.companyId || ''}
+                actorCompanyIds={actor?.companyIds ?? (actor?.companyId ? [actor.companyId] : [])}
                 actorPermissions={actor?.permissions || []}
                 availablePermissions={allPermissions}
                 analysisReports={analysisReports}
@@ -444,6 +465,7 @@ const UserForm = ({
     isCoreAdminActor,
     isCompanyAdminActor,
     actorCompanyId,
+    actorCompanyIds,
     actorPermissions,
     availablePermissions,
     analysisReports,
@@ -457,6 +479,7 @@ const UserForm = ({
     isCoreAdminActor: boolean,
     isCompanyAdminActor: boolean,
     actorCompanyId: string,
+    actorCompanyIds: string[],
     actorPermissions: Permission[],
     availablePermissions: Permission[],
     analysisReports: AnalysisReport[],
@@ -500,12 +523,16 @@ const UserForm = ({
         return formUser?.permissions || getAllowedBasicPermissionsForContext(formUser?.role || 'user', formUser?.isGuest || false);
     };
 
+    const defaultAdminCompanyId = user?.companyId && actorCompanyIds.includes(user.companyId)
+        ? user.companyId
+        : (actorCompanyIds[0] || actorCompanyId);
+
     const [formData, setFormData] = useState<Partial<User>>({
         id: user?.id,
         name: user?.name || '',
         email: user?.email || '',
         role: isCompanyAdminActor ? 'user' : (user?.role || 'user'),
-        companyId: isCompanyAdminActor ? actorCompanyId : (user?.companyId || ''),
+        companyId: isCompanyAdminActor ? defaultAdminCompanyId : (user?.companyId || ''),
         isGuest: isCompanyAdminActor ? false : (user?.isGuest || false),
         status: user?.status || 'Active',
         provisioningSource: user?.provisioningSource || 'external_local_account',
@@ -513,21 +540,35 @@ const UserForm = ({
     });
     const [showOnlyAdminCorePermissions, setShowOnlyAdminCorePermissions] = useState<boolean>(inferShowOnlyAdminCore(user));
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>(
+        user?.companyIds ?? (user?.companyId ? [user.companyId] : [])
+    );
+    const [companySearch, setCompanySearch] = useState('');
+
+    const toggleAdminCompany = (companyId: string) => {
+        setSelectedCompanyIds((prev) =>
+            prev.includes(companyId) ? prev.filter((id) => id !== companyId) : [...prev, companyId]
+        );
+    };
 
     useEffect(() => {
+        const resolvedCompanyId = user?.companyId && actorCompanyIds.includes(user.companyId)
+            ? user.companyId
+            : (actorCompanyIds[0] || actorCompanyId);
         setFormData({
             id: user?.id,
             name: user?.name || '',
             email: user?.email || '',
             role: isCompanyAdminActor ? 'user' : (user?.role || 'user'),
-            companyId: isCompanyAdminActor ? actorCompanyId : (user?.companyId || ''),
+            companyId: isCompanyAdminActor ? resolvedCompanyId : (user?.companyId || ''),
             isGuest: isCompanyAdminActor ? false : (user?.isGuest || false),
             status: user?.status || 'Active',
             provisioningSource: user?.provisioningSource || 'external_local_account',
             permissions: getInitialPermissions(user)
         });
         setShowOnlyAdminCorePermissions(inferShowOnlyAdminCore(user));
-    }, [actorCompanyId, isCompanyAdminActor, user]);
+        setSelectedCompanyIds(user?.companyIds ?? (user?.companyId ? [user.companyId] : []));
+    }, [actorCompanyId, actorCompanyIds, isCompanyAdminActor, user]);
 
     const togglePermission = (perm: Permission) => {
         if (isCompanyAdminActor && !isCompanyAdminManageablePermission(perm)) return;
@@ -623,7 +664,6 @@ const UserForm = ({
                     </div>
                 </div>
                 {!isCompanyAdminActor && (
-                <div>
                     <label className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 mb-2">
                         <input
                             type="checkbox"
@@ -641,16 +681,67 @@ const UserForm = ({
                         />
                         Guest user (Global)
                     </label>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Company</label>
-                    <select className="w-full p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-sm text-slate-900 dark:text-white"
-                            value={formData.companyId}
-                            disabled={formData.role === 'supadmin' || (formData.role === 'user' && !!formData.isGuest)}
-                            onChange={e => setFormData({...formData, companyId: e.target.value})}>
-                        <option value="">-- Select Company --</option>
-                        {companies.map(c => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
-                    </select>
+                )}
+
+                {formData.role !== 'supadmin' && !formData.isGuest && (
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Companies</label>
+                    {(() => {
+                        const availableCompanies = isCompanyAdminActor
+                            ? companies.filter((c) => actorCompanyIds.includes(c.id))
+                            : companies;
+                        const filtered = availableCompanies.filter((c) =>
+                            !companySearch.trim() ||
+                            c.name.toLowerCase().includes(companySearch.toLowerCase()) ||
+                            c.id.toLowerCase().includes(companySearch.toLowerCase()) ||
+                            (c.dataAreaId || '').toLowerCase().includes(companySearch.toLowerCase())
+                        );
+                        return (
+                            <div className="rounded border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800">
+                                <div className="px-2 pt-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Search by name, ID or data area…"
+                                        value={companySearch}
+                                        onChange={(e) => setCompanySearch(e.target.value)}
+                                        className="w-full rounded border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500"
+                                    />
+                                </div>
+                                <div className="mt-1 space-y-0.5 max-h-40 overflow-y-auto p-2">
+                                    {availableCompanies.length === 0 && (
+                                        <p className="text-xs text-slate-400 px-1">No companies available.</p>
+                                    )}
+                                    {filtered.map((c) => (
+                                        <label key={c.id} className="flex items-center gap-2 cursor-pointer rounded px-2 py-1 hover:bg-white dark:hover:bg-slate-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedCompanyIds.includes(c.id)}
+                                                onChange={() => toggleAdminCompany(c.id)}
+                                                className="accent-blue-600"
+                                            />
+                                            <span className="text-sm text-slate-800 dark:text-slate-200">{c.name}</span>
+                                            {c.dataAreaId && (
+                                                <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">·{c.dataAreaId}</span>
+                                            )}
+                                            <span className="ml-auto text-[11px] text-slate-400">{c.type}</span>
+                                        </label>
+                                    ))}
+                                    {companySearch.trim() && filtered.length === 0 && (
+                                        <p className="text-xs text-slate-400 px-1">No results for "{companySearch}".</p>
+                                    )}
+                                </div>
+                                {selectedCompanyIds.length > 0 && (
+                                    <div className="border-t border-gray-200 dark:border-slate-700 px-3 py-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                        {selectedCompanyIds.length} selected
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
                     <p className="mt-1 text-[11px] text-slate-500">
-                        Company selection is required for `admin` and non-guest `user` roles.
+                        {formData.role === 'admin'
+                            ? 'Select all companies this admin can manage.'
+                            : 'Select all companies this user can access.'}
                     </p>
                 </div>
                 )}
@@ -776,7 +867,7 @@ const UserForm = ({
                                 : [];
                             nextData.role = 'user';
                             nextData.isGuest = false;
-                            nextData.companyId = actorCompanyId;
+                            nextData.companyId = actorCompanyIds[0] || actorCompanyId;
                             nextData.provisioningSource = user?.provisioningSource || 'external_local_account';
                             nextData.permissions = [
                                 ...(formData.permissions || COMPANY_ADMIN_BASE_PERMISSIONS)
@@ -785,6 +876,10 @@ const UserForm = ({
                             ];
                         } else if (showOnlyAdminCorePermissions && formData.role === 'admin') {
                             nextData.permissions = (formData.permissions || []).filter((permission) => ADMIN_CORE_PERMISSIONS.includes(permission));
+                        }
+                        if (nextData.role === 'admin' || (nextData.role === 'user' && !nextData.isGuest)) {
+                            nextData.companyIds = selectedCompanyIds;
+                            nextData.companyId = selectedCompanyIds[0] || '';
                         }
                         setIsSubmitting(true);
                         try {

@@ -107,7 +107,7 @@ export const ContractedAnalysisReport: React.FC = () => {
         powerBiServiceRef.current.reset(embedContainerRef.current);
       }
     };
-  }, [activeReportId, activeIsContracted, activeReport]);
+  }, [activeReportId, activeIsContracted, activeReport, effectiveCompanyId]);
 
   return (
     <div className="space-y-6">

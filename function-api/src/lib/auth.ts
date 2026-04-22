@@ -10,6 +10,7 @@ import {
   normalizeEmail,
   IdentityProviderType,
   ProvisioningSource,
+  SessionContext,
 } from './identity';
 
 type DbUserRow = {
@@ -34,6 +35,10 @@ type DbUserRow = {
 
 export type AuthUser = DbUserRow & {
   permissions: string[];
+  companyIds: string[];
+  activeCompanyId: string | null;
+  activeProjId: string | null;
+  activeDataAreaId: string | null;
 };
 
 const USER_SELECT = `
@@ -257,9 +262,32 @@ const getPermissionsForUser = async (userId: string): Promise<string[]> => {
   return permissionsResult.recordset.map((p) => p.permission);
 };
 
+const getCompanyIdsForAdmin = async (userId: string): Promise<string[]> => {
+  const result = await runScopedQuery<{ company_id: string }>(
+    AUTH_INTERNAL_CONTEXT,
+    'SELECT company_id FROM dbo.admin_company_access WHERE admin_user_id = @userId',
+    { userId }
+  );
+  return result.recordset.map((r) => r.company_id);
+};
+
+type CompanyContext = { projId: string | null; dataAreaId: string | null };
+
+const getCompanyContext = async (companyId: string): Promise<CompanyContext | null> => {
+  const result = await runScopedQuery<CompanyContext>(
+    AUTH_INTERNAL_CONTEXT,
+    'SELECT TOP 1 proj_id AS projId, data_area_id AS dataAreaId FROM dbo.companies WHERE id = @companyId',
+    { companyId }
+  );
+  return result.recordset[0] ?? null;
+};
+
 const hydrateUser = async (row?: DbUserRow | null): Promise<AuthUser | null> => {
   if (!row || row.status !== 'Active') return null;
-  const permissions = await getPermissionsForUser(row.id);
+  const [permissions, companyIds] = await Promise.all([
+    getPermissionsForUser(row.id),
+    (row.role === 'admin' || row.role === 'user') ? getCompanyIdsForAdmin(row.id).then((ids) => ids.length ? ids : (row.companyId ? [row.companyId] : [])) : Promise.resolve([]),
+  ]);
   return {
     ...row,
     accessState: deriveAccessState({
@@ -268,6 +296,10 @@ const hydrateUser = async (row?: DbUserRow | null): Promise<AuthUser | null> => 
       hasLinkedIdentity: Boolean(row.entraObjectId),
     }),
     permissions,
+    companyIds,
+    activeCompanyId: null,
+    activeProjId: null,
+    activeDataAreaId: null,
   };
 };
 
@@ -358,7 +390,29 @@ export const touchLastLogin = async (userId: string): Promise<void> => {
   );
 };
 
+const resolveActiveCompany = async (user: AuthUser, requestedId: string | null): Promise<Partial<AuthUser>> => {
+  const effectiveId = requestedId && (
+    user.role === 'supadmin' ||
+    user.companyIds.includes(requestedId) ||
+    user.companyId === requestedId
+  ) ? requestedId : (user.companyIds[0] ?? user.companyId ?? null);
+
+  if (!effectiveId) return { activeCompanyId: null, activeProjId: null, activeDataAreaId: null };
+  const ctx = await getCompanyContext(effectiveId);
+  return { activeCompanyId: effectiveId, activeProjId: ctx?.projId ?? null, activeDataAreaId: ctx?.dataAreaId ?? null };
+};
+
+export const buildActorContext = (actor: AuthUser): SessionContext => ({
+  role: actor.role,
+  companyId: actor.activeCompanyId,
+  userId: actor.id,
+  projId: actor.activeProjId,
+  dataAreaId: actor.activeDataAreaId,
+});
+
 export const authenticateRequest = async (request: HttpRequest): Promise<AuthUser> => {
+  const activeCompanyHeader = (request.headers.get('x-active-company-id') || '').trim() || null;
+
   const token = getBearerToken(request);
   if (!token && env.devBypassAuth) {
     const devEmailRaw = request.headers.get('x-dev-user-email') || request.headers.get('X-Dev-User-Email');
@@ -370,7 +424,8 @@ export const authenticateRequest = async (request: HttpRequest): Promise<AuthUse
     if (!devUser) {
       throw new Error(`No access record found for this sign-in email: ${devEmail}`);
     }
-    return devUser;
+    const active = await resolveActiveCompany(devUser, activeCompanyHeader);
+    return { ...devUser, ...active };
   }
   if (!token) {
     throw new Error('Missing bearer token.');
@@ -409,5 +464,6 @@ export const authenticateRequest = async (request: HttpRequest): Promise<AuthUse
     throw new Error(`No access record found for this sign-in email: ${email}`);
   }
 
-  return user;
+  const active = await resolveActiveCompany(user, activeCompanyHeader);
+  return { ...user, ...active };
 };

@@ -14,6 +14,8 @@ export type SessionContext = {
   role: 'supadmin' | 'admin' | 'user';
   companyId?: string | null;
   userId?: string | null;
+  projId?: string | null;
+  dataAreaId?: string | null;
   internalBypass?: boolean;
 };
 
@@ -115,10 +117,15 @@ export const buildSessionContextPrefix = (context: SessionContext): string => {
   const role = `'${escapeSqlStringLiteral(context.role)}'`;
   const internalBypass = context.internalBypass ? '1' : '0';
 
+  const projId = context.projId ? `'${escapeSqlStringLiteral(context.projId)}'` : 'NULL';
+  const dataAreaId = context.dataAreaId ? `'${escapeSqlStringLiteral(context.dataAreaId)}'` : 'NULL';
+
   return [
     `EXEC sp_set_session_context @key=N'app.role', @value=${role};`,
     `EXEC sp_set_session_context @key=N'app.company_id', @value=${companyId};`,
     `EXEC sp_set_session_context @key=N'app.user_id', @value=${userId};`,
     `EXEC sp_set_session_context @key=N'app.internal_bypass', @value=${internalBypass};`,
+    `EXEC sp_set_session_context @key=N'app.proj_id', @value=${projId};`,
+    `EXEC sp_set_session_context @key=N'app.data_area_id', @value=${dataAreaId};`,
   ].join('\n');
 };

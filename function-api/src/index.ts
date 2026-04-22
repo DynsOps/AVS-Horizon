@@ -12,6 +12,7 @@ import './functions/adminReportsUpdate';
 import './functions/adminSupportTicketsList';
 import './functions/adminSupportTicketsReplyCreate';
 import './functions/adminSupportTicketsStatusUpdate';
+import './functions/adminUserCompanies';
 import './functions/adminUsersCreate';
 import './functions/adminUsersDelete';
 import './functions/adminUsersList';
