@@ -14,6 +14,7 @@ export const env = {
   mailLoginUrl: process.env.MAIL_LOGIN_URL || '',
   mailLogoUrl: process.env.MAIL_LOGO_URL || '',
   mailGraphScope: process.env.MAIL_GRAPH_SCOPE || 'https://graph.microsoft.com/.default',
+  mailSupportAdminEmail: process.env.MAIL_SUPPORT_ADMIN_EMAIL || '',
   externalIdIssuers: (process.env.EXTERNAL_ID_ISSUERS || '')
     .split(',')
     .map((value) => value.trim())

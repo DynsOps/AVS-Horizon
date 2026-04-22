@@ -53,13 +53,13 @@ const buildEmailHeaderHtml = (title: string): string => {
   `;
 };
 
-const buildEmailWrapper = (headerHtml: string, bodyHtml: string): string => `
+const buildEmailWrapper = (headerHtml: string, bodyHtml: string, includeLoginSection = true): string => `
   <div style="background:#f3f6fb;padding:32px 16px;font-family:Segoe UI,Arial,sans-serif;color:#0f172a;">
     <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #dbe4f0;border-radius:20px;overflow:hidden;">
       ${headerHtml}
       <div style="padding:32px;">
         ${bodyHtml}
-        ${buildLoginSectionHtml()}
+        ${includeLoginSection ? buildLoginSectionHtml() : ''}
       </div>
     </div>
   </div>
@@ -110,7 +110,8 @@ const buildTicketCreatedAdminHtml = (params: {
       <p style="margin:0 0 6px;font-size:14px;"><strong>Submitted by:</strong> ${params.userName} &lt;${params.userEmail}&gt;</p>
       <p style="margin:0;font-size:14px;"><strong>Opened:</strong> ${params.createdAt}</p>
     </div>
-  `
+  `,
+  false   // admin notification — no login CTA
 );
 
 const buildTicketRepliedHtml = (params: {
@@ -236,8 +237,6 @@ export const sendWelcomeCredentialsEmail = async (params: {
   });
 };
 
-const SUPPORT_ADMIN_EMAIL = 'muharrem.baylan@avsglobalsupply.com';
-
 export const sendTicketCreatedEmails = async (params: {
   ticketId: string;
   subject: string;
@@ -246,7 +245,9 @@ export const sendTicketCreatedEmails = async (params: {
   userName: string;
   userEmail: string;
 }): Promise<void> => {
-  const sendToUser = callMailGraph(`/users/${encodeURIComponent(env.mailSender)}/sendMail`, {
+  const sends: Promise<void>[] = [];
+
+  sends.push(callMailGraph(`/users/${encodeURIComponent(env.mailSender)}/sendMail`, {
     method: 'POST',
     body: JSON.stringify({
       message: {
@@ -256,21 +257,28 @@ export const sendTicketCreatedEmails = async (params: {
       },
       saveToSentItems: false,
     }),
-  });
+  }));
 
-  const sendToAdmin = callMailGraph(`/users/${encodeURIComponent(env.mailSender)}/sendMail`, {
-    method: 'POST',
-    body: JSON.stringify({
-      message: {
-        subject: `New Support Ticket ${params.ticketId} — ${params.subject}`,
-        body: { contentType: 'HTML', content: buildTicketCreatedAdminHtml(params) },
-        toRecipients: [{ emailAddress: { address: SUPPORT_ADMIN_EMAIL } }],
-      },
-      saveToSentItems: false,
-    }),
-  });
+  if (env.mailSupportAdminEmail) {
+    sends.push(callMailGraph(`/users/${encodeURIComponent(env.mailSender)}/sendMail`, {
+      method: 'POST',
+      body: JSON.stringify({
+        message: {
+          subject: `New Support Ticket ${params.ticketId} — ${params.subject}`,
+          body: { contentType: 'HTML', content: buildTicketCreatedAdminHtml(params) },
+          toRecipients: [{ emailAddress: { address: env.mailSupportAdminEmail } }],
+        },
+        saveToSentItems: false,
+      }),
+    }));
+  }
 
-  await Promise.allSettled([sendToUser, sendToAdmin]);
+  const results = await Promise.allSettled(sends);
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      console.warn('[mail] sendTicketCreatedEmails: failed to send email:', result.reason instanceof Error ? result.reason.message : String(result.reason));
+    }
+  }
 };
 
 export const sendTicketRepliedEmail = async (params: {
