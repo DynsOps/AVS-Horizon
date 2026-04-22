@@ -29,6 +29,7 @@
     "MAIL_LOGIN_URL": "https://your-app-domain/#/login",
     "MAIL_LOGO_URL": "https://horizon.avsglobalsupply.com/assets/avslogo-CA24d8DQ.png",
     "MAIL_GRAPH_SCOPE": "https://graph.microsoft.com/.default",
+    "MAIL_SUPPORT_ADMIN_EMAIL": "admin@your-domain.com",
     "// SQL": "Choose ManagedIdentity for Azure or SqlPassword for local development",
     "SQL_SERVER": "<your-sql-server>.database.windows.net",
     "SQL_PORT": "1433",

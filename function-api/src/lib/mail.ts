@@ -2,6 +2,9 @@ import { assertMailEnv, env } from './env';
 
 const GRAPH_BASE_URL = 'https://graph.microsoft.com/v1.0';
 
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
 const buildLoginSectionHtml = (): string => {
   if (!env.mailLoginUrl) return '';
 
@@ -74,16 +77,16 @@ const buildTicketCreatedUserHtml = (params: {
 }): string => buildEmailWrapper(
   buildEmailHeaderHtml('Support Ticket Opened'),
   `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">Hello ${params.userName},</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">Hello ${escapeHtml(params.userName)},</p>
     <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">
       Your support ticket has been successfully opened. Our team will get back to you as soon as possible.
     </p>
     <div style="margin:24px 0;padding:20px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:16px;">
       <p style="margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#1d4ed8;">Ticket Details</p>
-      <p style="margin:0 0 6px;font-size:14px;"><strong>Ticket ID:</strong> ${params.ticketId}</p>
-      <p style="margin:0 0 6px;font-size:14px;"><strong>Subject:</strong> ${params.subject}</p>
-      <p style="margin:0 0 6px;font-size:14px;"><strong>Category:</strong> ${params.category}</p>
-      <p style="margin:0;font-size:14px;"><strong>Opened:</strong> ${params.createdAt}</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Ticket ID:</strong> ${escapeHtml(params.ticketId)}</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Subject:</strong> ${escapeHtml(params.subject)}</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Category:</strong> ${escapeHtml(params.category)}</p>
+      <p style="margin:0;font-size:14px;"><strong>Opened:</strong> ${escapeHtml(params.createdAt)}</p>
     </div>
     <p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">
       You can track the status of your ticket by signing into the portal.
@@ -104,11 +107,11 @@ const buildTicketCreatedAdminHtml = (params: {
     <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">A new support ticket has been submitted.</p>
     <div style="margin:24px 0;padding:20px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:16px;">
       <p style="margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#1d4ed8;">Ticket Details</p>
-      <p style="margin:0 0 6px;font-size:14px;"><strong>Ticket ID:</strong> ${params.ticketId}</p>
-      <p style="margin:0 0 6px;font-size:14px;"><strong>Subject:</strong> ${params.subject}</p>
-      <p style="margin:0 0 6px;font-size:14px;"><strong>Category:</strong> ${params.category}</p>
-      <p style="margin:0 0 6px;font-size:14px;"><strong>Submitted by:</strong> ${params.userName} &lt;${params.userEmail}&gt;</p>
-      <p style="margin:0;font-size:14px;"><strong>Opened:</strong> ${params.createdAt}</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Ticket ID:</strong> ${escapeHtml(params.ticketId)}</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Subject:</strong> ${escapeHtml(params.subject)}</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Category:</strong> ${escapeHtml(params.category)}</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Submitted by:</strong> ${escapeHtml(params.userName)} &lt;${escapeHtml(params.userEmail)}&gt;</p>
+      <p style="margin:0;font-size:14px;"><strong>Opened:</strong> ${escapeHtml(params.createdAt)}</p>
     </div>
   `,
   false   // admin notification — no login CTA
@@ -122,14 +125,14 @@ const buildTicketRepliedHtml = (params: {
 }): string => buildEmailWrapper(
   buildEmailHeaderHtml('Support Ticket Replied'),
   `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">Hello ${params.userName},</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">Hello ${escapeHtml(params.userName)},</p>
     <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">
-      Your support ticket <strong>${params.ticketId}</strong> has received a reply.
+      Your support ticket <strong>${escapeHtml(params.ticketId)}</strong> has received a reply.
     </p>
     <div style="margin:24px 0;padding:20px;border:1px solid #d1fae5;background:#f0fdf4;border-radius:16px;">
       <p style="margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#059669;">Reply</p>
-      <p style="margin:0 0 12px;font-size:14px;color:#374151;"><strong>Subject:</strong> ${params.subject}</p>
-      <p style="margin:0;font-size:14px;line-height:1.7;color:#374151;white-space:pre-wrap;">${params.replyMessage}</p>
+      <p style="margin:0 0 12px;font-size:14px;color:#374151;"><strong>Subject:</strong> ${escapeHtml(params.subject)}</p>
+      <p style="margin:0;font-size:14px;line-height:1.7;color:#374151;white-space:pre-wrap;">${escapeHtml(params.replyMessage)}</p>
     </div>
     <p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">
       Sign in to view the full conversation and follow up if needed.
