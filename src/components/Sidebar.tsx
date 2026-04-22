@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { externalMsalInstance } from '../auth/msalInstance';
 import { AsyncActionButton } from './ui/AsyncActionButton';
@@ -9,18 +9,19 @@ import { Permission } from '../types';
 import { isPendingAccessUser } from '../utils/rbac';
 import avsLogo from '../assets/avslogo.png';
 import { performSignOut } from './signOut';
-import { 
+import { api } from '../services/api';
+import {
   LayoutDashboard, Ship, Package, ClipboardList, ReceiptText, Landmark,
   Truck, ShieldAlert, Activity, Settings, LogOut, Users, UserCircle, FilePlus2, BarChart3, Building2, ChevronDown, MapPin, Anchor, LifeBuoy
 } from 'lucide-react';
 
-const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: string }) => (
-  <NavLink 
-    to={to} 
-    className={({ isActive }) => 
+const NavItem = ({ to, icon: Icon, label, badge }: { to: string, icon: any, label: string, badge?: number }) => (
+  <NavLink
+    to={to}
+    className={({ isActive }) =>
       `group flex items-center space-x-3 px-4 py-2.5 rounded-xl transition-all duration-200 mb-1 relative overflow-hidden ${
-        isActive 
-          ? 'text-white shadow-lg shadow-blue-500/20' 
+        isActive
+          ? 'text-white shadow-lg shadow-blue-500/20'
           : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
       }`
     }
@@ -31,10 +32,15 @@ const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: stri
         {isActive && (
             <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-100" />
         )}
-        
+
         {/* Icon & Label */}
         <Icon size={18} strokeWidth={1.5} className={`relative z-10 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-blue-400'}`} />
-        <span className="relative z-10 font-medium text-sm tracking-wide">{label}</span>
+        <span className="relative z-10 font-medium text-sm tracking-wide flex-1">{label}</span>
+        {badge != null && badge > 0 && (
+          <span className="relative z-10 ml-auto min-w-[18px] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
       </>
     )}
   </NavLink>
@@ -55,6 +61,12 @@ export const Sidebar: React.FC = () => {
   const [supadminOperationsOpen, setSupadminOperationsOpen] = useState(true);
   const [supadminSupplierOpen, setSupadminSupplierOpen] = useState(true);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [openTicketsCount, setOpenTicketsCount] = useState(0);
+
+  useEffect(() => {
+    if (role !== 'supadmin') return;
+    api.support.getOpenTicketsCount().then(setOpenTicketsCount).catch(() => undefined);
+  }, [role]);
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
@@ -170,7 +182,7 @@ export const Sidebar: React.FC = () => {
             {hasPermission('manage:vessels') && <NavItem to="/admin/vessels" icon={Anchor} label="Vessel Management" />}
             {hasPermission('view:maritime-map') && <NavItem to="/admin/maritime-map" icon={MapPin} label="Maritime Map" />}
             <NavItem to="/admin/reports" icon={BarChart3} label="Report Management" />
-            <NavItem to="/admin/support-tickets" icon={LifeBuoy} label="Support Tickets" />
+            <NavItem to="/admin/support-tickets" icon={LifeBuoy} label="Support Tickets" badge={openTicketsCount} />
             {hasPermission('system:settings') && <NavItem to="/admin/security" icon={ShieldAlert} label="Security Logs" />}
             {hasPermission('system:settings') && <NavItem to="/admin/feature-flags" icon={Settings} label="Feature Flags" />}
 

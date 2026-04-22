@@ -41,6 +41,7 @@ interface UIState {
   notifications: AppNotification[];
   setNotifications: (notifications: AppNotification[]) => void;
   markNotificationRead: (id: string) => void;
+  deleteNotification: (id: string) => void;
   toasts: ToastMessage[];
   addToast: (toast: Omit<ToastMessage, 'id'>) => void;
   removeToast: (id: string) => void;
@@ -95,6 +96,10 @@ export const useUIStore = create<UIState>((set, get) => ({
       notifications: state.notifications.map((notification) =>
         notification.id === id ? { ...notification, isRead: true } : notification
       ),
+    })),
+  deleteNotification: (id) =>
+    set((state) => ({
+      notifications: state.notifications.filter((notification) => notification.id !== id),
     })),
   toasts: [],
   addToast: (toast) => {
