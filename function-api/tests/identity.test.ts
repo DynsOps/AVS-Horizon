@@ -545,3 +545,16 @@ run('company schema includes optional data_area_id and proj_id fields', () => {
   assert.match(alignSql, /IF COL_LENGTH\('dbo\.companies', 'data_area_id'\) IS NULL/);
   assert.match(alignSql, /IF COL_LENGTH\('dbo\.companies', 'proj_id'\) IS NULL/);
 });
+
+run('customer contracted-vessels handler exposes the correct route and permissions', () => {
+  const functionPath = resolveFunctionApiPath('src', 'functions', 'customerContractedVessels.ts');
+  const functionSource = fs.readFileSync(functionPath, 'utf8');
+
+  assert.match(functionSource, /route: 'customer\/contracted-vessels'/);
+  assert.match(functionSource, /methods: \['GET'\]/);
+  assert.match(functionSource, /actor\.permissions\.includes\('view:fleet'\)/);
+  assert.match(functionSource, /actor\.activeProjId/);
+  assert.match(functionSource, /actor\.activeDataAreaId/);
+  assert.match(functionSource, /fetchContractedVesselsWithCache/);
+  assert.match(functionSource, /'x-cache': result\.cacheStatus/);
+});
