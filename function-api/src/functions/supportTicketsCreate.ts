@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { authenticateRequest } from '../lib/auth';
 import { runScopedQuery } from '../lib/db';
 import { created, errorResponse } from '../lib/http';
+import { sendTicketCreatedEmails } from '../lib/mail';
 
 type TicketCategory = 'General' | 'Operational' | 'Invoice' | 'Technical';
 
@@ -28,50 +29,48 @@ export async function createSupportTicket(request: HttpRequest, context: Invocat
     }
 
     const ticketId = `TCK-${randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+    const subject = body.subject.trim();
+    const category = body.category;
+    const createdAt = new Date().toISOString();
 
     await runScopedQuery(
       { role: user.role, companyId: user.companyId, userId: user.id },
       `
       INSERT INTO dbo.support_tickets (
-        id,
-        created_by_user_id,
-        created_by_email,
-        subject,
-        description,
-        category,
-        status,
-        created_at
+        id, created_by_user_id, created_by_email, subject, description, category, status, created_at
       ) VALUES (
-        @id,
-        @createdByUserId,
-        @createdByEmail,
-        @subject,
-        @description,
-        @category,
-        'Open',
-        SYSUTCDATETIME()
+        @id, @createdByUserId, @createdByEmail, @subject, @description, @category, 'Open', SYSUTCDATETIME()
       )
       `,
       {
         id: ticketId,
         createdByUserId: user.id,
         createdByEmail: user.email,
-        subject: body.subject.trim(),
+        subject,
         description: body.description.trim(),
-        category: body.category,
+        category,
       }
     );
+
+    void sendTicketCreatedEmails({
+      ticketId,
+      subject,
+      category,
+      createdAt,
+      userName: user.name,
+      userEmail: user.email,
+    }).catch((err) => context.warn('ticket created email failed', err instanceof Error ? err.message : String(err)));
 
     return created({
       ticket: {
         id: ticketId,
         createdByUserId: user.id,
         createdByEmail: user.email,
-        subject: body.subject.trim(),
+        subject,
         description: body.description.trim(),
-        category: body.category,
+        category,
         status: 'Open',
-        createdAt: new Date().toISOString(),
+        createdAt,
         replies: [],
       },
     });
