@@ -85,12 +85,12 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
 
     const isAdminActor = actor.role === 'admin';
     if (isAdminActor) {
-      if (!actor.companyId) return errorResponse(403, 'Admin user is not linked to a company.');
+      if (actor.companyIds.length === 0) return errorResponse(403, 'Admin user is not linked to any company.');
       if (target.role !== 'user') {
         return errorResponse(403, 'Admin can only manage standard user accounts.');
       }
-      if (target.companyId !== actor.companyId) {
-        return errorResponse(403, 'Admin can only manage users in their own company.');
+      if (!target.companyId || !actor.companyIds.includes(target.companyId)) {
+        return errorResponse(403, 'Admin can only manage users in their own companies.');
       }
     }
 
@@ -130,11 +130,11 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
       if (body.isGuest) {
         return errorResponse(403, 'Admin cannot assign guest scope.');
       }
-      if (nextCompanyId && nextCompanyId !== actor.companyId) {
-        return errorResponse(403, 'Admin can only assign users to their own company.');
+      if (nextCompanyId && !actor.companyIds.includes(nextCompanyId)) {
+        return errorResponse(403, 'Admin can only assign users to their own companies.');
       }
     }
-    const scopedCompanyId = isAdminActor ? actor.companyId : nextCompanyId;
+    const scopedCompanyId = isAdminActor ? (nextCompanyId || actor.companyIds[0] || null) : nextCompanyId;
     const normalizedRole: UserRole = isAdminActor ? 'user' : nextRole;
     if ((normalizedRole === 'user' && !nextIsGuest && !scopedCompanyId) || (normalizedRole === 'admin' && !scopedCompanyId)) {
       return errorResponse(400, 'Company is required for admin and non-guest user roles.');

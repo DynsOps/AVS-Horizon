@@ -77,25 +77,25 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
     const status = body.status || 'Active';
 
     if (isAdminActor) {
-      if (!actor.companyId) {
-        return errorResponse(403, 'Admin user is not linked to a company.');
+      if (actor.companyIds.length === 0) {
+        return errorResponse(403, 'Admin user is not linked to any company.');
       }
       if (body.isGuest) {
         return errorResponse(403, 'Admin cannot create guest users.');
       }
-      if (companyId && companyId !== actor.companyId) {
-        return errorResponse(403, 'Admin can only create users for their own company.');
+      if (companyId && !actor.companyIds.includes(companyId)) {
+        return errorResponse(403, 'Admin can only create users for their own companies.');
       }
     }
 
-    const scopedCompanyId = isAdminActor ? actor.companyId : companyId;
+    const scopedCompanyId = isAdminActor ? (companyId || actor.companyIds[0]) : companyId;
 
     if ((normalizedRole === 'user' && !isGuest && !scopedCompanyId) || (normalizedRole === 'admin' && !scopedCompanyId)) {
       return errorResponse(400, 'Company is required for admin and non-guest user roles.');
     }
 
     const existsResult = await runScopedQuery<{ count: number }>(
-      { role: actor.role, companyId: actor.companyId, userId: actor.id },
+      { role: 'user', internalBypass: true },
       'SELECT COUNT(1) AS count FROM dbo.users WHERE LOWER(email) = @email',
       { email: normalizedEmail }
     );

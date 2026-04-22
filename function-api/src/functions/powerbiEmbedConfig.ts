@@ -20,9 +20,6 @@ type ReportRow = {
   defaultRoles: string | null;
 };
 
-type CompanyRow = {
-  name: string;
-};
 
 export async function powerBiEmbedConfig(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   try {
@@ -76,25 +73,24 @@ export async function powerBiEmbedConfig(request: HttpRequest, context: Invocati
     let rlsUsername: string | null = null;
 
     if (rlsRoles.length > 0) {
-      const effectiveCompanyId = actor.role === 'supadmin' ? selectedCompanyId : (actor.companyId || '');
+      const { activeProjId, activeDataAreaId, activeCompanyId } = actor;
+      const effectiveCompanyId = activeCompanyId || (actor.role === 'supadmin' ? selectedCompanyId : (actor.companyId || ''));
       if (!effectiveCompanyId) {
         return errorResponse(400, 'RLS report requires a selected company.');
       }
 
-      const companyResult = await runQuery<CompanyRow>(
-        `
-        SELECT TOP 1 name
-        FROM dbo.companies
-        WHERE id = @companyId
-        `,
-        { companyId: effectiveCompanyId }
-      );
-      const companyName = (companyResult.recordset[0]?.name || '').trim();
-      if (!companyName) {
-        return errorResponse(400, 'RLS company name not found for current user.');
+      if (activeProjId && activeDataAreaId) {
+        rlsUsername = `${activeProjId},${activeDataAreaId}`;
+      } else {
+        // Fallback: look up projId/dataAreaId from DB (e.g., supadmin with body companyId)
+        const companyResult = await runQuery<{ projId: string | null; dataAreaId: string | null }>(
+          `SELECT TOP 1 proj_id AS projId, data_area_id AS dataAreaId FROM dbo.companies WHERE id = @companyId`,
+          { companyId: effectiveCompanyId }
+        );
+        const row = companyResult.recordset[0];
+        if (!row) return errorResponse(400, 'RLS company not found.');
+        rlsUsername = row.projId && row.dataAreaId ? `${row.projId},${row.dataAreaId}` : effectiveCompanyId;
       }
-
-      rlsUsername = companyName;
     }
 
     const tokenPayload = await generateReportEmbedToken({

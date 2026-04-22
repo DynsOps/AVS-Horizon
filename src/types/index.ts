@@ -75,7 +75,8 @@ export interface User {
   powerBiWorkspaceId?: string;
   powerBiReportId?: string;
   avatarUrl?: string;
-  companyId?: string; // Links to Company
+  companyId?: string;
+  companyIds?: string[];
   permissions: Permission[];
   status: 'Active' | 'Inactive' | 'Suspended';
   provisioningSource?: ProvisioningSource;
