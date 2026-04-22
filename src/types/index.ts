@@ -196,7 +196,7 @@ export interface SupportTicket {
   subject: string;
   description: string;
   category: 'General' | 'Operational' | 'Invoice' | 'Technical';
-  status: 'Open' | 'In Progress' | 'Resolved';
+  status: 'Open' | 'Resolved';
   createdAt: string;
   replies?: SupportTicketReply[];
 }
