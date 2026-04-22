@@ -136,6 +136,13 @@ export interface Vessel {
   vesselStatus?: 'Active' | 'Laid Up' | 'Under Repair' | 'Scrapped';
 }
 
+export interface ContractedVessel {
+  imo: string;
+  name: string | null;
+  dataAreaId: string | null;
+  projIdDataAreaIds: string[];
+}
+
 export interface VesselPosition {
   id: string;
   vesselId: string;

@@ -1,5 +1,5 @@
 
-import { KPI, Order, Shipment, Invoice, Vessel, VesselPosition, VesselRoute, VesselOperation, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport, BootstrapCredentials, UserCreateResponse, AppNotification } from '../types';
+import { KPI, Order, Shipment, Invoice, Vessel, VesselPosition, VesselRoute, VesselOperation, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport, BootstrapCredentials, UserCreateResponse, AppNotification, ContractedVessel } from '../types';
 import { getDefaultPermissionsForRole } from '../utils/rbac';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
@@ -1388,6 +1388,15 @@ export const api = {
       ensureMockAllowed('Fleet');
       await delay(400);
       return byCompanyScope(mockVessels, companyId);
+    },
+    getContractedVessels: async (): Promise<ContractedVessel[]> => {
+      if (shouldUseFunctionApi()) {
+        const payload = await callFunctionApi<{ vessels: ContractedVessel[] }>('api/customer/contracted-vessels');
+        return payload.vessels;
+      }
+      ensureMockAllowed('Contracted vessels');
+      await delay(120);
+      return [];
     },
     getShipments: async (companyId?: string): Promise<Shipment[]> => {
       ensureMockAllowed('Shipments');
