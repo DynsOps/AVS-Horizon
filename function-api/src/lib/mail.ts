@@ -36,6 +36,106 @@ const buildWelcomeHeaderHtml = (): string => {
   `;
 };
 
+const buildEmailHeaderHtml = (title: string): string => {
+  if (env.mailLogoUrl) {
+    return `
+      <div style="padding:28px 32px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#ffffff;">
+        <img src="${env.mailLogoUrl}" alt="AVS Horizon" style="display:block;max-width:220px;width:100%;height:auto;margin:0 0 14px;" />
+        <h1 style="margin:0;font-size:24px;line-height:1.2;">${title}</h1>
+      </div>
+    `;
+  }
+  return `
+    <div style="padding:28px 32px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#ffffff;">
+      <p style="margin:0 0 8px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.9;">AVS Horizon</p>
+      <h1 style="margin:0;font-size:24px;line-height:1.2;">${title}</h1>
+    </div>
+  `;
+};
+
+const buildEmailWrapper = (headerHtml: string, bodyHtml: string): string => `
+  <div style="background:#f3f6fb;padding:32px 16px;font-family:Segoe UI,Arial,sans-serif;color:#0f172a;">
+    <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #dbe4f0;border-radius:20px;overflow:hidden;">
+      ${headerHtml}
+      <div style="padding:32px;">
+        ${bodyHtml}
+        ${buildLoginSectionHtml()}
+      </div>
+    </div>
+  </div>
+`;
+
+const buildTicketCreatedUserHtml = (params: {
+  userName: string;
+  ticketId: string;
+  subject: string;
+  category: string;
+  createdAt: string;
+}): string => buildEmailWrapper(
+  buildEmailHeaderHtml('Support Ticket Opened'),
+  `
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">Hello ${params.userName},</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">
+      Your support ticket has been successfully opened. Our team will get back to you as soon as possible.
+    </p>
+    <div style="margin:24px 0;padding:20px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:16px;">
+      <p style="margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#1d4ed8;">Ticket Details</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Ticket ID:</strong> ${params.ticketId}</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Subject:</strong> ${params.subject}</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Category:</strong> ${params.category}</p>
+      <p style="margin:0;font-size:14px;"><strong>Opened:</strong> ${params.createdAt}</p>
+    </div>
+    <p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">
+      You can track the status of your ticket by signing into the portal.
+    </p>
+  `
+);
+
+const buildTicketCreatedAdminHtml = (params: {
+  ticketId: string;
+  subject: string;
+  category: string;
+  userName: string;
+  userEmail: string;
+  createdAt: string;
+}): string => buildEmailWrapper(
+  buildEmailHeaderHtml('New Support Ticket'),
+  `
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">A new support ticket has been submitted.</p>
+    <div style="margin:24px 0;padding:20px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:16px;">
+      <p style="margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#1d4ed8;">Ticket Details</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Ticket ID:</strong> ${params.ticketId}</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Subject:</strong> ${params.subject}</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Category:</strong> ${params.category}</p>
+      <p style="margin:0 0 6px;font-size:14px;"><strong>Submitted by:</strong> ${params.userName} &lt;${params.userEmail}&gt;</p>
+      <p style="margin:0;font-size:14px;"><strong>Opened:</strong> ${params.createdAt}</p>
+    </div>
+  `
+);
+
+const buildTicketRepliedHtml = (params: {
+  userName: string;
+  ticketId: string;
+  subject: string;
+  replyMessage: string;
+}): string => buildEmailWrapper(
+  buildEmailHeaderHtml('Support Ticket Replied'),
+  `
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">Hello ${params.userName},</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.7;">
+      Your support ticket <strong>${params.ticketId}</strong> has received a reply.
+    </p>
+    <div style="margin:24px 0;padding:20px;border:1px solid #d1fae5;background:#f0fdf4;border-radius:16px;">
+      <p style="margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#059669;">Reply</p>
+      <p style="margin:0 0 12px;font-size:14px;color:#374151;"><strong>Subject:</strong> ${params.subject}</p>
+      <p style="margin:0;font-size:14px;line-height:1.7;color:#374151;white-space:pre-wrap;">${params.replyMessage}</p>
+    </div>
+    <p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">
+      Sign in to view the full conversation and follow up if needed.
+    </p>
+  `
+);
+
 const buildWelcomeEmailHtml = (params: { displayName: string; email: string; temporaryPassword: string }): string => `
   <div style="background:#f3f6fb;padding:32px 16px;font-family:Segoe UI,Arial,sans-serif;color:#0f172a;">
     <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #dbe4f0;border-radius:20px;overflow:hidden;">
@@ -130,6 +230,63 @@ export const sendWelcomeCredentialsEmail = async (params: {
             },
           },
         ],
+      },
+      saveToSentItems: false,
+    }),
+  });
+};
+
+const SUPPORT_ADMIN_EMAIL = 'muharrem.baylan@avsglobalsupply.com';
+
+export const sendTicketCreatedEmails = async (params: {
+  ticketId: string;
+  subject: string;
+  category: string;
+  createdAt: string;
+  userName: string;
+  userEmail: string;
+}): Promise<void> => {
+  const sendToUser = callMailGraph(`/users/${encodeURIComponent(env.mailSender)}/sendMail`, {
+    method: 'POST',
+    body: JSON.stringify({
+      message: {
+        subject: `Support Ticket ${params.ticketId} Opened`,
+        body: { contentType: 'HTML', content: buildTicketCreatedUserHtml(params) },
+        toRecipients: [{ emailAddress: { address: params.userEmail } }],
+      },
+      saveToSentItems: false,
+    }),
+  });
+
+  const sendToAdmin = callMailGraph(`/users/${encodeURIComponent(env.mailSender)}/sendMail`, {
+    method: 'POST',
+    body: JSON.stringify({
+      message: {
+        subject: `New Support Ticket ${params.ticketId} — ${params.subject}`,
+        body: { contentType: 'HTML', content: buildTicketCreatedAdminHtml(params) },
+        toRecipients: [{ emailAddress: { address: SUPPORT_ADMIN_EMAIL } }],
+      },
+      saveToSentItems: false,
+    }),
+  });
+
+  await Promise.allSettled([sendToUser, sendToAdmin]);
+};
+
+export const sendTicketRepliedEmail = async (params: {
+  ticketId: string;
+  subject: string;
+  replyMessage: string;
+  userName: string;
+  userEmail: string;
+}): Promise<void> => {
+  await callMailGraph(`/users/${encodeURIComponent(env.mailSender)}/sendMail`, {
+    method: 'POST',
+    body: JSON.stringify({
+      message: {
+        subject: `Your Support Ticket ${params.ticketId} Has Been Replied To`,
+        body: { contentType: 'HTML', content: buildTicketRepliedHtml(params) },
+        toRecipients: [{ emailAddress: { address: params.userEmail } }],
       },
       saveToSentItems: false,
     }),
