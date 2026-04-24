@@ -7,3 +7,5 @@ export { fetchContractedVesselsWithCache } from './fabric/contractedProjtables';
 export type { ContractedVessel, ContractedVesselsLookupResult } from './fabric/contractedProjtables';
 export { fetchMergedMandaysWithCache } from './fabric/mergedMandays';
 export type { FleetMandayRecord, FleetMandayLookupResult } from './fabric/mergedMandays';
+export { fetchProjInvoiceItemsWithCache } from './fabric/projInvoiceItems';
+export type { InvoiceRecord, InvoiceLookupResult } from './fabric/projInvoiceItems';

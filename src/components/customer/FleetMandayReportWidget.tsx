@@ -183,8 +183,16 @@ const MiniKpi: React.FC<MiniKpiProps> = ({ icon, label, value, sub, accent = 'de
 // ── Widget ────────────────────────────────────────────────────────────────────
 
 export const FleetMandayReportWidget: React.FC = () => {
-  const [year, setYear] = useState(() => new Date().getFullYear());
-  const [month, setMonth] = useState(() => new Date().getMonth() + 1);
+  const [year, setYear] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return d.getFullYear();
+  });
+  const [month, setMonth] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return d.getMonth() + 1;
+  });
   const [report, setReport] = useState<FleetMandayReport | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -211,6 +219,7 @@ export const FleetMandayReportWidget: React.FC = () => {
 
   const totalBudget = report?.kpis.totalBudget ?? 0;
   const totalActual = report?.kpis.totalSpendMtd ?? 0;
+  const totalYtd = report?.kpis.totalSpendYtd ?? 0;
   const avgCost = report?.kpis.avgCostPerManday ?? 0;
   const vesselsExceeded = report?.kpis.vesselsExceeded ?? 0;
   const vesselsTotal = report?.kpis.vesselsTotal ?? 0;
@@ -262,7 +271,7 @@ export const FleetMandayReportWidget: React.FC = () => {
 
       {/* ── KPI row ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MiniKpi icon={<IconCurrency />} label="Total Spend MTD" value={fmt(totalActual)} />
+        <MiniKpi icon={<IconCurrency />} label="Total Spend MTD" value={fmt(totalActual)} sub={`YTD: ${fmt(totalYtd)}`} />
         <MiniKpi icon={<IconRate />} label="Avg Cost / Manday" value={fmt(avgCost)} sub="fleet daily avg" />
         <MiniKpi
           icon={<IconShipExceeded />}

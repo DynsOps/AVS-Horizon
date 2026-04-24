@@ -1,6 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../lib/auth';
-import { fetchContractedVesselsWithCache, fetchMergedMandaysWithCache, FabricGraphqlError } from '../lib/fabricGraphql';
+import { fetchContractedVesselsWithCache, fetchMergedMandaysWithCache, fetchProjInvoiceItemsWithCache, FabricGraphqlError } from '../lib/fabricGraphql';
 import { errorResponse, ok } from '../lib/http';
 
 export async function customerFleetMandayReport(
@@ -38,13 +38,19 @@ export async function customerFleetMandayReport(
       .filter((v) => v.imo && v.dataAreaId)
       .map((v) => `${v.imo},${v.dataAreaId}`);
 
+    // Build projId pairs for invoice query — flat unique list of all projIdDataAreaIds
+    const projPairs = [...new Set(vessels.items.flatMap((v) => v.projIdDataAreaIds))];
+
     // Build a name lookup from contracted vessels for fallback
     const vesselNameByImo = new Map<string, string | null>(
       vessels.items.map((v) => [v.imo, v.name]),
     );
 
-    // Step 2: get mergedMandays (from cache)
-    const mandays = await fetchMergedMandaysWithCache(topProjectIdDataAreaId, pairs);
+    // Step 2: fetch mergedMandays and invoice items in parallel (both from cache)
+    const [mandays, invoices] = await Promise.all([
+      fetchMergedMandaysWithCache(topProjectIdDataAreaId, pairs),
+      fetchProjInvoiceItemsWithCache(topProjectIdDataAreaId, projPairs),
+    ]);
 
     // Filter to requested year + month
     const filtered = mandays.items.filter((r) => r.year === year && r.month === month);
@@ -110,15 +116,22 @@ export async function customerFleetMandayReport(
         severity: (v.budget === 0 || v.variancePct >= 15 ? 'high' : 'medium') as 'high' | 'medium',
       }));
 
-    // Build KPIs (backend computes; frontend does NOT render in this iteration)
+    // Build KPIs
     const totalBudget = vesselRows.reduce((s, v) => s + v.budget, 0);
-    const totalSpendMtd = vesselRows.reduce((s, v) => s + v.actual, 0);
+    // Invoice-based spend: MTD = selected month, YTD = all months of selected year
+    const totalSpendMtd = invoices.items
+      .filter((r) => r.year === year && r.month === month)
+      .reduce((s, r) => s + r.lineamount, 0);
+    const totalSpendYtd = invoices.items
+      .filter((r) => r.year === year)
+      .reduce((s, r) => s + r.lineamount, 0);
     // Average daily manday rate across the fleet (sum of per-vessel daily rates / vessel count)
     const avgCostPerManday = vesselRows.length > 0
       ? vesselRows.reduce((s, v) => s + v.rate, 0) / vesselRows.length
       : 0;
     const kpis = {
       totalSpendMtd,
+      totalSpendYtd,
       totalBudget,
       avgCostPerManday,
       targetCostPerManday: null as number | null,
