@@ -166,7 +166,8 @@ export interface FleetMandayReportException {
   imo: string;
   vesselName: string;
   mandayRate: number;
-  overPct: number;
+  overPct: number | null;
+  noBudget?: boolean;
   severity: 'high' | 'medium';
 }
 

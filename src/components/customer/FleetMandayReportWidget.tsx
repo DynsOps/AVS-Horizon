@@ -19,7 +19,7 @@ const exportToXLSX = (vessels: FleetMandayReportVessel[], year: number, month: n
     Vessel: v.vesselName,
     Budget: Math.round(v.budget),
     Actual: Math.round(v.actual),
-    'Var%': v.variancePct.toFixed(1) + '%',
+    'Var%': v.budget === 0 ? '—' : (v.variancePct > 0 ? '+' : '') + v.variancePct.toFixed(1) + '%',
     Rate: v.rate.toFixed(2),
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -40,7 +40,7 @@ const exportToPDF = (vessels: FleetMandayReportVessel[], year: number, month: nu
       <td>${v.vesselName}</td>
       <td>${fmt(v.budget)}</td>
       <td>${fmt(v.actual)}</td>
-      <td style="color:${v.variancePct > 0 ? '#dc2626' : '#16a34a'}">${v.variancePct > 0 ? '+' : ''}${v.variancePct.toFixed(1)}%</td>
+      <td style="color:${v.budget === 0 ? '#9ca3af' : v.variancePct > 0 ? '#dc2626' : '#16a34a'}">${v.budget === 0 ? '—' : (v.variancePct > 0 ? '+' : '') + v.variancePct.toFixed(1) + '%'}</td>
       <td>${v.rate.toFixed(2)}</td>
     </tr>`).join('');
 
@@ -147,7 +147,9 @@ export const FleetMandayReportWidget: React.FC = () => {
                 <span className={`size-2 rounded-full flex-shrink-0 ${exc.severity === 'high' ? 'bg-red-500' : 'bg-amber-500'}`} />
                 <span className="font-medium text-sm">{exc.vesselName}</span>
                 <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Manday rate ${exc.mandayRate.toFixed(2)} (+{exc.overPct}% over)
+                  {exc.noBudget
+                    ? `Manday rate $${exc.mandayRate.toFixed(2)} — no budget set`
+                    : `Manday rate $${exc.mandayRate.toFixed(2)} (+${exc.overPct}% over)`}
                 </span>
               </div>
             ))}
@@ -216,13 +218,17 @@ export const FleetMandayReportWidget: React.FC = () => {
                       <td className="px-4 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmt(v.budget)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmt(v.actual)}</td>
                       <td className="px-4 py-3 text-right">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          v.variancePct > 0
-                            ? 'bg-red-500/15 text-red-500 dark:text-red-400'
-                            : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                        }`}>
-                          {v.variancePct > 0 ? '+' : ''}{v.variancePct.toFixed(0)}%
-                        </span>
+                        {v.budget === 0 ? (
+                          <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                        ) : (
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            v.variancePct > 0
+                              ? 'bg-red-500/15 text-red-500 dark:text-red-400'
+                              : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          }`}>
+                            {v.variancePct > 0 ? '+' : ''}{v.variancePct.toFixed(1)}%
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-gray-600 dark:text-gray-300">
                         ${v.rate.toFixed(2)}

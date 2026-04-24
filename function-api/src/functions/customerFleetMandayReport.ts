@@ -105,8 +105,9 @@ export async function customerFleetMandayReport(
         imo: v.imo,
         vesselName: v.vesselName,
         mandayRate: v.rate,
-        overPct: Math.round(v.variancePct),
-        severity: (v.variancePct >= 15 ? 'high' : 'medium') as 'high' | 'medium',
+        overPct: v.budget > 0 ? Math.round(v.variancePct) : null,
+        noBudget: v.budget === 0,
+        severity: (v.budget === 0 || v.variancePct >= 15 ? 'high' : 'medium') as 'high' | 'medium',
       }));
 
     // Build KPIs (backend computes; frontend does NOT render in this iteration)
