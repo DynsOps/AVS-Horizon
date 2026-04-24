@@ -3,8 +3,8 @@ import { env } from '../env';
 import { readThroughJsonCache, CacheStatus } from '../cache/cacheAside';
 
 const CONTRACTED_PROJTABLES_QUERY = `
-query ContractedProjtables($filter: ProjtablesFilter) {
-  projtables(filter: $filter) {
+query ContractedProjtables($topId: String!) {
+  projtables(filter: { TopProjectId_dataAreaId: { eq: $topId }, projgroupid: { eq: "CONTRACTED" } }) {
     items {
       avscarriercode
       dataareaid
@@ -98,10 +98,7 @@ export const fetchContractedVesselsWithCache = async (
     ttlSeconds,
     load: async () => {
       const data = await runGraphqlQuery<ContractedProjtablesData>(CONTRACTED_PROJTABLES_QUERY, {
-        filter: {
-          TopProjectId_dataAreaId: { eq: topProjectIdDataAreaId },
-          projgroupid: { eq: 'CONTRACTED' },
-        },
+        topId: topProjectIdDataAreaId,
       });
       return groupContractedVesselRows(data.projtables?.items);
     },
