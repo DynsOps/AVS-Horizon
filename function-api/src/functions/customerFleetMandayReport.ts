@@ -49,20 +49,22 @@ export async function customerFleetMandayReport(
     // Filter to requested year + month
     const filtered = mandays.items.filter((r) => r.year === year && r.month === month);
 
-    // Aggregate per vessel
+    // Aggregate per vessel — BudgetPPD and Manday are daily rates, multiply by 30 for monthly
     type VesselAgg = {
       imo: string;
       vesselName: string;
       budget: number;
       actual: number;
+      rawManday: number; // sum of daily manday values (rate before ×30)
     };
 
     const agg = new Map<string, VesselAgg>();
     for (const row of filtered) {
       const existing = agg.get(row.imo);
       if (existing) {
-        existing.budget += row.budgetPpd;
-        existing.actual += row.manday;
+        existing.budget += row.budgetPpd * 30;
+        existing.actual += row.manday * 30;
+        existing.rawManday += row.manday;
       } else {
         const name =
           (row.vesselName || '').trim() ||
@@ -71,8 +73,9 @@ export async function customerFleetMandayReport(
         agg.set(row.imo, {
           imo: row.imo,
           vesselName: name,
-          budget: row.budgetPpd,
-          actual: row.manday,
+          budget: row.budgetPpd * 30,
+          actual: row.manday * 30,
+          rawManday: row.manday,
         });
       }
     }
@@ -86,6 +89,7 @@ export async function customerFleetMandayReport(
         vesselName: v.vesselName,
         budget: v.budget,
         actual: v.actual,
+        rate: v.rawManday,  // daily manday rate (person count will be added to Fabric data later)
         variancePct,
         exceeded,
       };
@@ -100,7 +104,7 @@ export async function customerFleetMandayReport(
       .map((v) => ({
         imo: v.imo,
         vesselName: v.vesselName,
-        mandayRate: v.actual,
+        mandayRate: v.rate,
         overPct: Math.round(v.variancePct),
         severity: (v.variancePct >= 15 ? 'high' : 'medium') as 'high' | 'medium',
       }));

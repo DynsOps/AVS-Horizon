@@ -148,6 +148,7 @@ export interface FleetMandayReportVessel {
   vesselName: string;
   budget: number;
   actual: number;
+  rate: number;
   variancePct: number;
   exceeded: boolean;
 }
@@ -155,7 +156,7 @@ export interface FleetMandayReportVessel {
 export interface FleetMandayReportKpis {
   totalSpendMtd: number;
   totalBudget: number;
-  avgCostPerManday: number;
+  avgCostPerManday: number | null;
   targetCostPerManday: number | null;
   vesselsExceeded: number;
   vesselsTotal: number;
