@@ -5,3 +5,5 @@ export type { CompanyChain, CompanyChainsLookupResult } from './fabric/companyCh
 export type { GroupProjtable, GroupProjtableLookupResult, GroupProjtableSearchOptions } from './fabric/groupProjtables';
 export { fetchContractedVesselsWithCache } from './fabric/contractedProjtables';
 export type { ContractedVessel, ContractedVesselsLookupResult } from './fabric/contractedProjtables';
+export { fetchMergedMandaysWithCache } from './fabric/mergedMandays';
+export type { FleetMandayRecord, FleetMandayLookupResult } from './fabric/mergedMandays';
