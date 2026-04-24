@@ -5,6 +5,7 @@ import { setRedisFactoryForTests } from '../src/lib/cache/redis';
 import { fetchAllCompanyChainsWithCache } from '../src/lib/fabric/companyChains';
 import { fetchAllGroupProjtablesWithCache } from '../src/lib/fabric/groupProjtables';
 import { fetchContractedVesselsWithCache } from '../src/lib/fabric/contractedProjtables';
+import { fetchMergedMandaysWithCache } from '../src/lib/fabric/mergedMandays';
 
 const run = async (name: string, fn: () => Promise<void>) => {
   try {
@@ -40,6 +41,7 @@ const restoreDefaults = () => {
   env.fabricCacheGroupProjtablesTtlSecondsRaw = '604800';
   env.fabricCacheCompanyChainsTtlSecondsRaw = '86400';
   env.fabricCacheContractedVesselsTtlSecondsRaw = '86400';
+  env.fabricCacheMergedMandaysTtlSecondsRaw = '86400';
   setRedisFactoryForTests(null);
 };
 
@@ -299,6 +301,139 @@ const main = async () => {
       async () => ({ projtables: { items: [] } }),
       async () => {
         await fetchContractedVesselsWithCache('Prj-001,avs');
+      }
+    );
+
+    assert.equal(redis.setCalls.length, 1);
+    assert.equal(redis.setCalls[0].ttl, 86400);
+  });
+
+  // ── merged-mandays ────────────────────────────────────────────────────────
+
+  const MM_TOP   = 'PROJ001,avs';
+  const MM_PAIRS = ['9274628,avs', '9241803,avs'];
+  const MM_CACHE_KEY = `fabric:merged-mandays:top:${MM_TOP}`;
+
+  const MM_RAW_ROWS = [
+    { carriercode_dataareaid: '9274628,avs', monthname: 'January', vesselName: 'MV Atlas', Year: 2026, BudgetPPD: 120, Manday: 135 },
+    { carriercode_dataareaid: '9241803,avs', monthname: '3',       vesselName: 'MV Nova',  Year: 2026, BudgetPPD: 180, Manday: 160 },
+  ];
+
+  const MM_EXPECTED = [
+    { imo: '9274628', dataAreaId: 'avs', vesselName: 'MV Atlas', year: 2026, month: 1, budgetPpd: 120, manday: 135 },
+    { imo: '9241803', dataAreaId: 'avs', vesselName: 'MV Nova',  year: 2026, month: 3, budgetPpd: 180, manday: 160 },
+  ];
+
+  await run('merged-mandays cache hit skips upstream call', async () => {
+    restoreDefaults();
+    const redis = new FakeRedis();
+    redis.store.set(MM_CACHE_KEY, JSON.stringify(MM_EXPECTED));
+    setRedisFactoryForTests(() => redis);
+
+    let upstreamCalls = 0;
+    await withPatchedGraphql(
+      async () => { upstreamCalls += 1; return { mergedMandays: { items: [] } }; },
+      async () => {
+        const result = await fetchMergedMandaysWithCache(MM_TOP, MM_PAIRS);
+        assert.equal(result.cacheStatus, 'hit');
+        assert.deepEqual(result.items, MM_EXPECTED);
+      }
+    );
+    assert.equal(upstreamCalls, 0);
+  });
+
+  await run('merged-mandays cache miss calls upstream and writes result to redis', async () => {
+    restoreDefaults();
+    const redis = new FakeRedis();
+    setRedisFactoryForTests(() => redis);
+
+    await withPatchedGraphql(
+      async () => ({ mergedMandays: { items: MM_RAW_ROWS } }),
+      async () => {
+        const result = await fetchMergedMandaysWithCache(MM_TOP, MM_PAIRS);
+        assert.equal(result.cacheStatus, 'miss');
+        assert.deepEqual(result.items, MM_EXPECTED);
+      }
+    );
+
+    assert.equal(redis.setCalls.length, 1);
+    assert.equal(redis.setCalls[0].key, MM_CACHE_KEY);
+    assert.deepEqual(JSON.parse(redis.store.get(MM_CACHE_KEY)!), MM_EXPECTED);
+  });
+
+  await run('merged-mandays redis error triggers bypass and still returns upstream value', async () => {
+    restoreDefaults();
+    const redis = new FakeRedis();
+    redis.throwOnGet = true;
+    setRedisFactoryForTests(() => redis);
+
+    await withPatchedGraphql(
+      async () => ({ mergedMandays: { items: MM_RAW_ROWS } }),
+      async () => {
+        const result = await fetchMergedMandaysWithCache(MM_TOP, MM_PAIRS);
+        assert.equal(result.cacheStatus, 'bypass');
+        assert.deepEqual(result.items, MM_EXPECTED);
+      }
+    );
+
+    assert.equal(redis.setCalls.length, 0);
+  });
+
+  await run('merged-mandays empty pairs returns bypass without touching redis or upstream', async () => {
+    restoreDefaults();
+    const redis = new FakeRedis();
+    setRedisFactoryForTests(() => redis);
+
+    let upstreamCalls = 0;
+    await withPatchedGraphql(
+      async () => { upstreamCalls += 1; return { mergedMandays: { items: [] } }; },
+      async () => {
+        const result = await fetchMergedMandaysWithCache(MM_TOP, []);
+        assert.equal(result.cacheStatus, 'bypass');
+        assert.deepEqual(result.items, []);
+      }
+    );
+
+    assert.equal(upstreamCalls, 0);
+    assert.equal(redis.setCalls.length, 0);
+  });
+
+  await run('merged-mandays normalization handles month names, numeric strings, and skips bad rows', async () => {
+    restoreDefaults();
+    const redis = new FakeRedis();
+    setRedisFactoryForTests(() => redis);
+
+    const mixedRows = [
+      { carriercode_dataareaid: '1111111,avs', monthname: 'January', vesselName: 'Vessel A', Year: 2026, BudgetPPD: 10, Manday: 20 },
+      { carriercode_dataareaid: '2222222,avs', monthname: '2',       vesselName: 'Vessel B', Year: 2026, BudgetPPD: 30, Manday: 40 },
+      { carriercode_dataareaid: '3333333,avs', monthname: '03',      vesselName: 'Vessel C', Year: 2026, BudgetPPD: 50, Manday: 60 },
+      { carriercode_dataareaid: '4444444,avs', monthname: 'xyz',     vesselName: 'Bad Month', Year: 2026, BudgetPPD: 0, Manday: 0 },
+      { carriercode_dataareaid: '5555555,avs', monthname: 'March',   vesselName: 'Bad Year',  Year: 'notanumber', BudgetPPD: 0, Manday: 0 },
+      { carriercode_dataareaid: '',            monthname: 'March',   vesselName: 'No Pair',   Year: 2026, BudgetPPD: 0, Manday: 0 },
+    ];
+
+    await withPatchedGraphql(
+      async () => ({ mergedMandays: { items: mixedRows } }),
+      async () => {
+        const result = await fetchMergedMandaysWithCache(MM_TOP, ['1111111,avs', '2222222,avs', '3333333,avs', '4444444,avs', '5555555,avs']);
+        assert.equal(result.items.length, 3);
+        assert.equal(result.items[0].month, 1);
+        assert.equal(result.items[1].month, 2);
+        assert.equal(result.items[2].month, 3);
+      }
+    );
+  });
+
+  await run('merged-mandays invalid ttl falls back to 86400 default', async () => {
+    restoreDefaults();
+    env.fabricCacheMergedMandaysTtlSecondsRaw = 'notanumber';
+    const redis = new FakeRedis();
+    setRedisFactoryForTests(() => redis);
+
+    await withPatchedGraphql(
+      async () => ({ mergedMandays: { items: MM_RAW_ROWS } }),
+      async () => {
+        await fetchMergedMandaysWithCache(MM_TOP, MM_PAIRS);
       }
     );
 

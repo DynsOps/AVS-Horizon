@@ -558,3 +558,17 @@ run('customer contracted-vessels handler exposes the correct route and permissio
   assert.match(functionSource, /fetchContractedVesselsWithCache/);
   assert.match(functionSource, /'x-cache': result\.cacheStatus/);
 });
+
+run('customer fleet-manday-report handler exposes the correct route and permissions', () => {
+  const functionPath = resolveFunctionApiPath('src', 'functions', 'customerFleetMandayReport.ts');
+  const functionSource = fs.readFileSync(functionPath, 'utf8');
+
+  assert.match(functionSource, /route: 'customer\/fleet-manday-report'/);
+  assert.match(functionSource, /methods: \['GET'\]/);
+  assert.match(functionSource, /actor\.permissions\.includes\('view:fleet'\)/);
+  assert.match(functionSource, /actor\.activeProjId/);
+  assert.match(functionSource, /actor\.activeDataAreaId/);
+  assert.match(functionSource, /fetchContractedVesselsWithCache/);
+  assert.match(functionSource, /fetchMergedMandaysWithCache/);
+  assert.match(functionSource, /'x-cache':/);
+});
