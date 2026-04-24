@@ -26,7 +26,7 @@ export async function customerFleetMandayReport(
     const rawMonth = request.query.get('month') ?? String(now.getUTCMonth() + 1);
     const year = parseInt(rawYear, 10);
     const month = parseInt(rawMonth, 10);
-    if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+    if (isNaN(year) || year < 2000 || year > 2100 || isNaN(month) || month < 1 || month > 12) {
       return errorResponse(400, 'Invalid year or month. month must be 1–12.');
     }
 
@@ -108,12 +108,10 @@ export async function customerFleetMandayReport(
     // Build KPIs (backend computes; frontend does NOT render in this iteration)
     const totalBudget = vesselRows.reduce((s, v) => s + v.budget, 0);
     const totalSpendMtd = vesselRows.reduce((s, v) => s + v.actual, 0);
-    const totalMandays = filtered.reduce((s, r) => s + r.manday, 0);
-    const avgCostPerManday = totalMandays > 0 ? totalSpendMtd / totalMandays : 0;
     const kpis = {
       totalSpendMtd,
       totalBudget,
-      avgCostPerManday,
+      avgCostPerManday: null as number | null,
       targetCostPerManday: null as number | null,
       vesselsExceeded: vesselRows.filter((v) => v.exceeded).length,
       vesselsTotal: vesselRows.length,

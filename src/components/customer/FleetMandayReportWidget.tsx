@@ -40,7 +40,7 @@ export const FleetMandayReportWidget: React.FC = () => {
         }
       });
     return () => { cancelled = true; };
-  }, [dashboardCompanyId, user?.companyId, year, month, addToast]);
+  }, [dashboardCompanyId, user?.companyId, year, month]);
 
   const selector = (
     <div className="flex items-center gap-2 text-sm">
