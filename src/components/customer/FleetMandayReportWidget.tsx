@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { api } from '../../services/api';
 import { FleetMandayReport, FleetMandayReportVessel } from '../../types';
 import { Card } from '../ui/Card';
@@ -9,6 +10,10 @@ import { useUIStore } from '../../store/uiStore';
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const DONUT_COLORS = [
+  '#22d3ee', '#8b5cf6', '#f97316', '#ec4899', '#10b981', '#f59e0b', '#6b7280',
 ];
 
 const fmt = (n: number) =>
@@ -66,6 +71,32 @@ const exportToPDF = (vessels: FleetMandayReportVessel[], year: number, month: nu
   win.document.close();
   win.focus();
   win.print();
+};
+
+const buildPieData = (vessels: FleetMandayReportVessel[]) => {
+  const sorted = [...vessels].sort((a, b) => b.actual - a.actual);
+  const top = sorted.slice(0, 5);
+  const rest = sorted.slice(5);
+  const totalActual = vessels.reduce((s, v) => s + v.actual, 0);
+
+  const entries = top.map((v) => ({
+    name: v.vesselName,
+    value: v.actual,
+    pct: totalActual > 0 ? (v.actual / totalActual) * 100 : 0,
+    isOther: false,
+  }));
+
+  if (rest.length > 0) {
+    const otherActual = rest.reduce((s, v) => s + v.actual, 0);
+    entries.push({
+      name: `Other (${rest.length} vessel${rest.length > 1 ? 's' : ''})`,
+      value: otherActual,
+      pct: totalActual > 0 ? (otherActual / totalActual) * 100 : 0,
+      isOther: true,
+    });
+  }
+
+  return { entries, totalActual };
 };
 
 export const FleetMandayReportWidget: React.FC = () => {
@@ -130,10 +161,33 @@ export const FleetMandayReportWidget: React.FC = () => {
   const actualPct = Math.min((totalActual / maxVal) * 100, 100);
   const diff = totalBudget - totalActual;
 
+  // Donut chart data
+  const { entries: pieEntries } = report && report.vessels.length > 0
+    ? buildPieData(report.vessels)
+    : { entries: [] };
+
+  // Top offenders: budget > 0, variance positive, sorted desc
+  const topOffenders = report
+    ? [...report.vessels]
+        .filter((v) => v.budget > 0 && v.variancePct > 0)
+        .sort((a, b) => b.variancePct - a.variancePct)
+        .slice(0, 3)
+    : [];
+
+  // Top improvers: budget > 0, variance negative, sorted asc (most negative first)
+  const topImprovers = report
+    ? [...report.vessels]
+        .filter((v) => v.budget > 0 && v.variancePct < 0)
+        .sort((a, b) => a.variancePct - b.variancePct)
+        .slice(0, 3)
+    : [];
+
+  const hasVessels = report && report.vessels.length > 0;
+
   return (
     <div className="space-y-4">
       {/* Exception Alerts */}
-      <Card title="Exception Alerts">
+      <Card title="Exception Alerts" action={selector}>
         {isLoading ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">Loading...</p>
         ) : error ? (
@@ -157,13 +211,122 @@ export const FleetMandayReportWidget: React.FC = () => {
         )}
       </Card>
 
-      {/* Fleet Spend vs Budget */}
-      <Card title="Fleet Spend vs Budget" action={selector}>
+      {/* Spend by Vessel donut */}
+      <Card title="Spend by Vessel">
         {isLoading ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">Loading...</p>
         ) : error ? (
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-        ) : !report || report.vessels.length === 0 ? (
+        ) : !hasVessels ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">No data for selected month.</p>
+        ) : (
+          <div className="flex flex-col md:flex-row items-center gap-6">
+            {/* Donut */}
+            <div className="relative shrink-0" style={{ width: 260, height: 260 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieEntries}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={80}
+                    outerRadius={120}
+                    paddingAngle={2}
+                    dataKey="value"
+                    strokeWidth={0}
+                  >
+                    {pieEntries.map((_, i) => (
+                      <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: number) => [fmt(value), 'Actual']}
+                    contentStyle={{ background: '#1f2937', border: 'none', borderRadius: 8, fontSize: 12 }}
+                    itemStyle={{ color: '#e5e7eb' }}
+                    labelStyle={{ color: '#9ca3af' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Center label */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">Total</span>
+                <span className="text-lg font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                  {fmt(totalActual)}
+                </span>
+              </div>
+            </div>
+
+            {/* Legend */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 flex-1">
+              {pieEntries.map((entry, i) => (
+                <div key={i} className="flex items-start gap-2 min-w-0">
+                  <span
+                    className="mt-1 size-2.5 rounded-full shrink-0"
+                    style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{entry.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+                      {fmt(entry.value)} · {entry.pct.toFixed(1)}%
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Top Offenders + Top Improvers */}
+      {hasVessels && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Top Offenders */}
+          <Card title="Top Offenders">
+            {topOffenders.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No vessels over budget.</p>
+            ) : (
+              <ol className="space-y-3">
+                {topOffenders.map((v, i) => (
+                  <li key={v.imo} className="flex items-center gap-3">
+                    <span className="text-sm text-gray-400 dark:text-gray-500 w-5 shrink-0">{i + 1}.</span>
+                    <span className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{v.vesselName}</span>
+                    <span className="text-sm font-semibold tabular-nums text-red-500">
+                      +{v.variancePct.toFixed(1)}%
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Card>
+
+          {/* Top Improvers */}
+          <Card title="Top Improvers">
+            {topImprovers.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No vessels under budget.</p>
+            ) : (
+              <ol className="space-y-3">
+                {topImprovers.map((v, i) => (
+                  <li key={v.imo} className="flex items-center gap-3">
+                    <span className="text-sm text-gray-400 dark:text-gray-500 w-5 shrink-0">{i + 1}.</span>
+                    <span className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{v.vesselName}</span>
+                    <span className="text-sm font-semibold tabular-nums text-emerald-500">
+                      {v.variancePct.toFixed(1)}%
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* Fleet Spend vs Budget */}
+      <Card title="Fleet Spend vs Budget">
+        {isLoading ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">Loading...</p>
+        ) : error ? (
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        ) : !hasVessels ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">No manday data for selected month.</p>
         ) : (
           <>
@@ -209,7 +372,7 @@ export const FleetMandayReportWidget: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {report.vessels.map((v, idx) => (
+                  {report!.vessels.map((v, idx) => (
                     <tr
                       key={v.imo}
                       className={`border-t border-gray-100 dark:border-gray-800 ${idx % 2 === 0 ? '' : 'bg-gray-50/50 dark:bg-gray-800/20'}`}
@@ -242,7 +405,7 @@ export const FleetMandayReportWidget: React.FC = () => {
             {/* Export buttons */}
             <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
               <button
-                onClick={() => exportToPDF(report.vessels, year, month, totalBudget, totalActual)}
+                onClick={() => exportToPDF(report!.vessels, year, month, totalBudget, totalActual)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -251,7 +414,7 @@ export const FleetMandayReportWidget: React.FC = () => {
                 PDF
               </button>
               <button
-                onClick={() => exportToXLSX(report.vessels, year, month)}
+                onClick={() => exportToXLSX(report!.vessels, year, month)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
