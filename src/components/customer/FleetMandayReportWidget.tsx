@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { api } from '../../services/api';
 import { FleetMandayReport, FleetMandayReportVessel } from '../../types';
 import { Card } from '../ui/Card';
@@ -13,24 +14,18 @@ const MONTH_NAMES = [
 const fmt = (n: number) =>
   '$' + Math.round(n).toLocaleString('en-US');
 
-const exportToCSV = (vessels: FleetMandayReportVessel[], year: number, month: number) => {
-  const header = ['Vessel', 'Budget', 'Actual', 'Rate', 'Var%', 'Status'];
-  const rows = vessels.map((v) => [
-    v.vesselName,
-    Math.round(v.budget),
-    Math.round(v.actual),
-    v.rate.toFixed(2),
-    v.variancePct.toFixed(1) + '%',
-    v.exceeded ? 'EXCEEDED' : 'OK',
-  ]);
-  const csv = [header, ...rows].map((r) => r.join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `fleet-spend-${year}-${String(month).padStart(2, '0')}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+const exportToXLSX = (vessels: FleetMandayReportVessel[], year: number, month: number) => {
+  const rows = vessels.map((v) => ({
+    Vessel: v.vesselName,
+    Budget: Math.round(v.budget),
+    Actual: Math.round(v.actual),
+    'Var%': v.variancePct.toFixed(1) + '%',
+    Rate: v.rate.toFixed(2),
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Fleet Spend');
+  XLSX.writeFile(wb, `fleet-spend-${year}-${String(month).padStart(2, '0')}.xlsx`);
 };
 
 const exportToPDF = (vessels: FleetMandayReportVessel[], year: number, month: number, totalBudget: number, totalActual: number) => {
@@ -45,9 +40,8 @@ const exportToPDF = (vessels: FleetMandayReportVessel[], year: number, month: nu
       <td>${v.vesselName}</td>
       <td>${fmt(v.budget)}</td>
       <td>${fmt(v.actual)}</td>
-      <td>${fmt(v.rate)}</td>
       <td style="color:${v.variancePct > 0 ? '#dc2626' : '#16a34a'}">${v.variancePct > 0 ? '+' : ''}${v.variancePct.toFixed(1)}%</td>
-      <td>${v.exceeded ? 'EXCEEDED' : 'OK'}</td>
+      <td>${v.rate.toFixed(2)}</td>
     </tr>`).join('');
 
   const html = `<!DOCTYPE html><html><head><title>Fleet Spend vs Budget — ${monthName} ${year}</title>
@@ -62,7 +56,7 @@ const exportToPDF = (vessels: FleetMandayReportVessel[], year: number, month: nu
   </style></head><body>
   <h2>Fleet Spend vs Budget</h2>
   <div class="summary">${monthName} ${year} &nbsp;·&nbsp; Budget: ${fmt(totalBudget)} &nbsp;·&nbsp; Actual: ${fmt(totalActual)} &nbsp;·&nbsp; ${diffLabel}</div>
-  <table><thead><tr><th>Vessel</th><th>Budget</th><th>Actual</th><th>Rate</th><th>Var%</th><th>Status</th></tr></thead>
+  <table><thead><tr><th>Vessel</th><th>Budget</th><th>Actual</th><th>Var%</th><th>Rate</th></tr></thead>
   <tbody>${rows}</tbody></table>
   </body></html>`;
 
@@ -201,34 +195,36 @@ export const FleetMandayReportWidget: React.FC = () => {
             </div>
 
             {/* By Vessel table */}
-            <div className="overflow-x-auto">
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">By Vessel</p>
+            <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-gray-500 dark:text-gray-400">
-                    <th className="pb-2 font-medium uppercase text-xs tracking-wider">Vessel</th>
-                    <th className="pb-2 font-medium text-right uppercase text-xs tracking-wider">Budget</th>
-                    <th className="pb-2 font-medium text-right uppercase text-xs tracking-wider">Actual</th>
-                    <th className="pb-2 font-medium text-right uppercase text-xs tracking-wider">Var %</th>
-                    <th className="pb-2 font-medium text-right uppercase text-xs tracking-wider">Rate</th>
+                  <tr className="bg-gray-50 dark:bg-gray-800/60">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Vessel</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Budget</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Actual</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Var %</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Rate</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {report.vessels.map((v) => (
-                    <tr key={v.imo}>
-                      <td className="py-2 font-medium">{v.vesselName}</td>
-                      <td className="py-2 text-right tabular-nums">{fmt(v.budget)}</td>
-                      <td className="py-2 text-right tabular-nums">{fmt(v.actual)}</td>
-                      <td className="py-2 text-right">
+                <tbody>
+                  {report.vessels.map((v, idx) => (
+                    <tr
+                      key={v.imo}
+                      className={`border-t border-gray-100 dark:border-gray-800 ${idx % 2 === 0 ? '' : 'bg-gray-50/50 dark:bg-gray-800/20'}`}
+                    >
+                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{v.vesselName}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmt(v.budget)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmt(v.actual)}</td>
+                      <td className="px-4 py-3 text-right">
                         <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
                           v.variancePct > 0
-                            ? 'bg-red-500/20 text-red-400'
-                            : 'bg-emerald-500/20 text-emerald-400'
+                            ? 'bg-red-500/15 text-red-500 dark:text-red-400'
+                            : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
                         }`}>
                           {v.variancePct > 0 ? '+' : ''}{v.variancePct.toFixed(0)}%
                         </span>
                       </td>
-                      <td className="py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">
+                      <td className="px-4 py-3 text-right tabular-nums text-gray-600 dark:text-gray-300">
                         ${v.rate.toFixed(2)}
                       </td>
                     </tr>
@@ -249,7 +245,7 @@ export const FleetMandayReportWidget: React.FC = () => {
                 PDF
               </button>
               <button
-                onClick={() => exportToCSV(report.vessels, year, month)}
+                onClick={() => exportToXLSX(report.vessels, year, month)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
