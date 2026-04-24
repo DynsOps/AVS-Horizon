@@ -383,11 +383,12 @@ export const FleetMandayReportWidget: React.FC = () => {
           !hasVessels
             ? <p className="text-sm text-gray-500 dark:text-gray-400">No data for selected month.</p>
             : (
-              <div className="flex flex-col md:flex-row items-center gap-6">
-                <div className="relative shrink-0" style={{ width: 260, height: 260 }}>
+              <div className="flex flex-col items-center gap-8">
+                {/* Donut */}
+                <div className="relative" style={{ width: 280, height: 280 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={pieEntries} cx="50%" cy="50%" innerRadius={80} outerRadius={120} paddingAngle={2} dataKey="value" strokeWidth={0}>
+                      <Pie data={pieEntries} cx="50%" cy="50%" innerRadius={90} outerRadius={130} paddingAngle={2} dataKey="value" strokeWidth={0}>
                         {pieEntries.map((_, i) => (
                           <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
                         ))}
@@ -401,11 +402,13 @@ export const FleetMandayReportWidget: React.FC = () => {
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">Total</span>
-                    <span className="text-lg font-bold tabular-nums text-gray-900 dark:text-gray-100">{fmt(totalActual)}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 mb-1">Total</span>
+                    <span className="text-xl font-bold tabular-nums text-gray-900 dark:text-gray-100">{fmt(totalActual)}</span>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 flex-1">
+
+                {/* Legend */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-10 gap-y-3 w-full max-w-lg mx-auto">
                   {pieEntries.map((entry, i) => (
                     <div key={i} className="flex items-start gap-2 min-w-0">
                       <span className="mt-1 size-2.5 rounded-full shrink-0" style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }} />
