@@ -328,7 +328,7 @@ export const FleetMandayReportWidget: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <span className="w-16 text-sm text-gray-500 dark:text-gray-400 shrink-0">Actual</span>
                     <div className="flex-1 h-5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                      <div className={`h-full rounded-full transition-all duration-500 ${totalActual > totalBudget ? 'bg-red-400' : 'bg-cyan-500'}`} style={{ width: `${actualPct}%` }} />
+                      <div className={`h-full rounded-full transition-all duration-500 ${mandayActual > totalBudget ? 'bg-red-400' : 'bg-cyan-500'}`} style={{ width: `${actualPct}%` }} />
                     </div>
                     <span className="w-32 text-right text-sm font-medium tabular-nums">{fmt(mandayActual)}</span>
                   </div>
@@ -375,7 +375,7 @@ export const FleetMandayReportWidget: React.FC = () => {
 
                 {/* Export */}
                 <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                  <button onClick={() => exportToPDF(report!.vessels, year, month, totalBudget, totalActual)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                  <button onClick={() => exportToPDF(report!.vessels, year, month, totalBudget, mandayActual)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
                     PDF
                   </button>
