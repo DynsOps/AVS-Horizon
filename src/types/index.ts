@@ -156,7 +156,7 @@ export interface FleetMandayReportVessel {
 export interface FleetMandayReportKpis {
   totalSpendMtd: number;
   totalBudget: number;
-  avgCostPerManday: number | null;
+  avgCostPerManday: number;
   targetCostPerManday: number | null;
   vesselsExceeded: number;
   vesselsTotal: number;

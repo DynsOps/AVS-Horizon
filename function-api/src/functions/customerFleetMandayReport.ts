@@ -113,10 +113,12 @@ export async function customerFleetMandayReport(
     // Build KPIs (backend computes; frontend does NOT render in this iteration)
     const totalBudget = vesselRows.reduce((s, v) => s + v.budget, 0);
     const totalSpendMtd = vesselRows.reduce((s, v) => s + v.actual, 0);
+    const totalRawManday = vesselRows.reduce((s, v) => s + v.rate, 0);
+    const avgCostPerManday = totalRawManday > 0 ? totalSpendMtd / totalRawManday : 0;
     const kpis = {
       totalSpendMtd,
       totalBudget,
-      avgCostPerManday: null as number | null,
+      avgCostPerManday,
       targetCostPerManday: null as number | null,
       vesselsExceeded: vesselRows.filter((v) => v.exceeded).length,
       vesselsTotal: vesselRows.length,
