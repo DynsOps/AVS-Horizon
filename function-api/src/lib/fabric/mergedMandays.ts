@@ -1,6 +1,7 @@
 import { runGraphqlQuery } from './client';
 import { env } from '../env';
 import { readThroughJsonCache, CacheStatus } from '../cache/cacheAside';
+import { parsePositiveInt } from './utils';
 
 const FLEET_MANDAYS_QUERY = `
 query FleetMandays($pairs: [String!]!) {
@@ -49,12 +50,6 @@ export type FleetMandayLookupResult = {
   cacheStatus: CacheStatus;
 };
 
-const parsePositiveInt = (raw: string, fallback: number): number => {
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.floor(parsed);
-};
-
 const MONTH_NAMES = [
   'january',
   'february',
@@ -92,7 +87,7 @@ const normalizeRows = (rows: MergedMandayRow[] | null | undefined): FleetMandayR
     if (month === null) continue;
 
     const year = parseInt(String(row.Year ?? ''), 10);
-    if (isNaN(year)) continue;
+    if (isNaN(year) || year < 2000 || year > 2100) continue;
 
     result.push({
       imo,
@@ -116,6 +111,8 @@ export const fetchMergedMandaysWithCache = async (
   }
 
   const ttlSeconds = parsePositiveInt(env.fabricCacheMergedMandaysTtlSecondsRaw, 86400);
+  // Cache key is scoped to the company; pairs are always derived from the same company's
+  // contracted-vessels cache (same TTL), so key correctness is guaranteed by that coupling.
   const key = `fabric:merged-mandays:top:${topProjectIdDataAreaId}`;
 
   const cached = await readThroughJsonCache<FleetMandayRecord[]>({
