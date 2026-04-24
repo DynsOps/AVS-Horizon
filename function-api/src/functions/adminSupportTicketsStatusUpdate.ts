@@ -3,7 +3,7 @@ import { authenticateRequest } from '../lib/auth';
 import { runScopedQuery } from '../lib/db';
 import { errorResponse, ok } from '../lib/http';
 
-type TicketStatus = 'Open' | 'In Progress' | 'Resolved';
+type TicketStatus = 'Open' | 'Resolved';
 type StatusUpdateBody = { status?: TicketStatus };
 
 export async function updateAdminSupportTicketStatus(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
@@ -17,7 +17,7 @@ export async function updateAdminSupportTicketStatus(request: HttpRequest, conte
     if (!ticketId) return errorResponse(400, 'Ticket id is required.');
 
     const body = (await request.json()) as StatusUpdateBody;
-    const allowedStatuses: TicketStatus[] = ['Open', 'In Progress', 'Resolved'];
+    const allowedStatuses: TicketStatus[] = ['Open', 'Resolved'];
     if (!body.status || !allowedStatuses.includes(body.status)) {
       return errorResponse(400, 'Invalid status.');
     }

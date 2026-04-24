@@ -1,5 +1,5 @@
 
-import { KPI, Order, Shipment, Invoice, Vessel, VesselPosition, VesselRoute, VesselOperation, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport, BootstrapCredentials, UserCreateResponse, AppNotification } from '../types';
+import { KPI, Order, Shipment, Invoice, Vessel, VesselPosition, VesselRoute, VesselOperation, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport, BootstrapCredentials, UserCreateResponse, AppNotification, ContractedVessel } from '../types';
 import { getDefaultPermissionsForRole } from '../utils/rbac';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
@@ -323,7 +323,7 @@ let mockSupportTickets: SupportTicket[] = [
     subject: 'Nordic Aurora spare parts request follow-up',
     description: 'Need ETA confirmation for critical spare parts before docking.',
     category: 'Operational',
-    status: 'In Progress',
+    status: 'Open',
     createdAt: '2023-10-12T08:15:00Z',
   },
   {
@@ -1389,6 +1389,15 @@ export const api = {
       await delay(400);
       return byCompanyScope(mockVessels, companyId);
     },
+    getContractedVessels: async (): Promise<ContractedVessel[]> => {
+      if (shouldUseFunctionApi()) {
+        const payload = await callFunctionApi<{ vessels: ContractedVessel[] }>('api/customer/contracted-vessels');
+        return payload.vessels;
+      }
+      ensureMockAllowed('Contracted vessels');
+      await delay(120);
+      return [];
+    },
     getShipments: async (companyId?: string): Promise<Shipment[]> => {
       ensureMockAllowed('Shipments');
       await delay(500);
@@ -1537,6 +1546,15 @@ export const api = {
       if (actor?.role !== 'supadmin') throw new Error('Only supadmin can list all support tickets.');
       return [...mockSupportTickets].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
+    getOpenTicketsCount: async (): Promise<number> => {
+      if (shouldUseFunctionApi()) {
+        const payload = await callFunctionApi<{ count: number }>('api/support/admin/tickets/open-count');
+        return payload.count;
+      }
+      ensureMockAllowed('Open tickets count');
+      await delay(80);
+      return 0;
+    },
     replyToTicket: async (ticketId: string, message: string): Promise<void> => {
       if (shouldUseFunctionApi()) {
         await callFunctionApi<{ reply: unknown }>(`api/support/admin/tickets/${ticketId}/replies`, {
@@ -1600,6 +1618,14 @@ export const api = {
         return;
       }
       ensureMockAllowed('Mark notification read');
+      await delay(80);
+    },
+    deleteNotification: async (id: string): Promise<void> => {
+      if (shouldUseFunctionApi()) {
+        await callFunctionApi<{ deleted: boolean }>(`api/notifications/${id}`, { method: 'DELETE' });
+        return;
+      }
+      ensureMockAllowed('Delete notification');
       await delay(80);
     },
   },

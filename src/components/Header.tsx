@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, User as UserIcon, Sun, Moon, Sparkles, Building2, ChevronDown } from 'lucide-react';
+import { Bell, User as UserIcon, Sun, Moon, Sparkles, Building2, ChevronDown, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { useNavigate } from 'react-router-dom';
@@ -8,6 +8,69 @@ import { api } from '../services/api';
 import { externalMsalInstance } from '../auth/msalInstance';
 import { Company } from '../types';
 import { performSignOut } from './signOut';
+
+const NotificationsDrawerContent: React.FC = () => {
+  const { notifications, markNotificationRead, deleteNotification, closeDrawer } = useUIStore();
+  const navigate = useNavigate();
+
+  if (!notifications.length) {
+    return (
+      <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+        No notifications yet.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {notifications.map((notification) => (
+        <div
+          key={notification.id}
+          className={`w-full rounded-2xl border px-4 py-3 transition-colors ${
+            notification.isRead
+              ? 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+              : 'border-blue-200 bg-blue-50 text-slate-800 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-slate-100'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <button
+              type="button"
+              aria-label={notification.title}
+              onClick={() => {
+                markNotificationRead(notification.id);
+                void api.notifications.markNotificationRead(notification.id).catch(() => undefined);
+                closeDrawer();
+                navigate(notification.targetRoute);
+              }}
+              className="flex-1 text-left"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">{notification.title}</p>
+                  <p className="mt-1 text-xs leading-relaxed">{notification.message}</p>
+                </div>
+                {!notification.isRead && (
+                  <span className="mt-1 inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" aria-hidden="true" />
+                )}
+              </div>
+            </button>
+            <button
+              type="button"
+              aria-label="Delete notification"
+              onClick={() => {
+                deleteNotification(notification.id);
+                void api.notifications.deleteNotification(notification.id).catch(() => undefined);
+              }}
+              className="mt-0.5 shrink-0 rounded-lg p-1 text-slate-400 transition-colors hover:bg-rose-100 hover:text-rose-500 dark:hover:bg-rose-900/30 dark:hover:text-rose-400"
+            >
+              <Trash2 size={14} strokeWidth={1.5} />
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuthStore();
@@ -19,8 +82,6 @@ export const Header: React.FC = () => {
     notifications,
     setNotifications,
     openDrawer,
-    closeDrawer,
-    markNotificationRead,
   } = useUIStore();
   const navigate = useNavigate();
   const [companyOptions, setCompanyOptions] = useState<Company[]>([]);
@@ -133,45 +194,7 @@ export const Header: React.FC = () => {
   );
 
   const openNotificationsDrawer = () => {
-    openDrawer(
-      <div className="space-y-3">
-        {notifications.length ? (
-          notifications.map((notification) => (
-            <button
-              key={notification.id}
-              type="button"
-              aria-label={notification.title}
-              onClick={() => {
-                markNotificationRead(notification.id);
-                void api.notifications.markNotificationRead(notification.id).catch(() => undefined);
-                closeDrawer();
-                navigate(notification.targetRoute);
-              }}
-              className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
-                notification.isRead
-                  ? 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-                  : 'border-blue-200 bg-blue-50 text-slate-800 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-slate-100'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold">{notification.title}</p>
-                  <p className="mt-1 text-xs leading-relaxed">{notification.message}</p>
-                </div>
-                {!notification.isRead && (
-                  <span className="mt-1 inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" aria-hidden="true" />
-                )}
-              </div>
-            </button>
-          ))
-        ) : (
-          <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-            No notifications yet.
-          </p>
-        )}
-      </div>,
-      'Notifications'
-    );
+    openDrawer(<NotificationsDrawerContent />, 'Notifications');
   };
 
   return (

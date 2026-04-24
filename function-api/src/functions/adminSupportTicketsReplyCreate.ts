@@ -3,9 +3,19 @@ import { randomUUID } from 'crypto';
 import { authenticateRequest } from '../lib/auth';
 import { runScopedQuery } from '../lib/db';
 import { created, errorResponse } from '../lib/http';
+import { sendTicketRepliedEmail } from '../lib/mail';
 
 type ReplyCreateBody = {
   message?: string;
+};
+
+type TicketRow = {
+  id: string;
+  subject: string;
+  createdByUserId: string;
+  createdByEmail: string | null;
+  creatorName: string | null;
+  status: 'Open' | 'Resolved';
 };
 
 export async function createAdminSupportTicketReply(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
@@ -25,15 +35,19 @@ export async function createAdminSupportTicketReply(request: HttpRequest, contex
     }
 
     const dbContext = { role: actor.role, companyId: actor.companyId, userId: actor.id };
-    const ticketResult = await runScopedQuery<{ id: string; createdByUserId: string; status: 'Open' | 'In Progress' | 'Resolved' }>(
+    const ticketResult = await runScopedQuery<TicketRow>(
       dbContext,
       `
       SELECT TOP 1
-        id,
-        created_by_user_id AS createdByUserId,
-        status
-      FROM dbo.support_tickets
-      WHERE id = @id
+        t.id,
+        t.subject,
+        t.created_by_user_id AS createdByUserId,
+        t.created_by_email AS createdByEmail,
+        u.display_name AS creatorName,
+        t.status
+      FROM dbo.support_tickets t
+      LEFT JOIN dbo.users u ON u.id = t.created_by_user_id
+      WHERE t.id = @id
       `,
       { id: ticketId }
     );
@@ -53,19 +67,9 @@ export async function createAdminSupportTicketReply(request: HttpRequest, contex
       dbContext,
       `
       INSERT INTO dbo.support_ticket_replies (
-        id,
-        ticket_id,
-        author_user_id,
-        author_role,
-        message,
-        created_at
+        id, ticket_id, author_user_id, author_role, message, created_at
       ) VALUES (
-        @id,
-        @ticketId,
-        @authorUserId,
-        @authorRole,
-        @message,
-        SYSUTCDATETIME()
+        @id, @ticketId, @authorUserId, @authorRole, @message, SYSUTCDATETIME()
       );
 
       UPDATE dbo.support_tickets
@@ -73,23 +77,10 @@ export async function createAdminSupportTicketReply(request: HttpRequest, contex
       WHERE id = @ticketId;
 
       INSERT INTO dbo.user_notifications (
-        id,
-        user_id,
-        notification_type,
-        title,
-        message,
-        target_route,
-        is_read,
-        created_at
+        id, user_id, notification_type, title, message, target_route, is_read, created_at
       ) VALUES (
-        @notificationId,
-        @notificationUserId,
-        'support_ticket_reply',
-        'Support ticket resolved',
-        @notificationMessage,
-        '/support/tickets',
-        0,
-        SYSUTCDATETIME()
+        @notificationId, @notificationUserId, 'support_ticket_reply',
+        'Support ticket resolved', @notificationMessage, '/support/tickets', 0, SYSUTCDATETIME()
       );
       `,
       {
@@ -103,6 +94,16 @@ export async function createAdminSupportTicketReply(request: HttpRequest, contex
         notificationMessage: `Your ticket ${ticketId} has been resolved with a response.`,
       }
     );
+
+    if (ticket.createdByEmail) {
+      void sendTicketRepliedEmail({
+        ticketId,
+        subject: ticket.subject,
+        replyMessage: message,
+        userName: ticket.creatorName || ticket.createdByEmail,
+        userEmail: ticket.createdByEmail,
+      }).catch((err) => context.warn('ticket replied email failed', err instanceof Error ? err.message : String(err)));
+    }
 
     return created({
       reply: {

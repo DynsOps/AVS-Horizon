@@ -136,6 +136,13 @@ export interface Vessel {
   vesselStatus?: 'Active' | 'Laid Up' | 'Under Repair' | 'Scrapped';
 }
 
+export interface ContractedVessel {
+  imo: string;
+  name: string | null;
+  dataAreaId: string | null;
+  projIdDataAreaIds: string[];
+}
+
 export interface VesselPosition {
   id: string;
   vesselId: string;
@@ -196,7 +203,7 @@ export interface SupportTicket {
   subject: string;
   description: string;
   category: 'General' | 'Operational' | 'Invoice' | 'Technical';
-  status: 'Open' | 'In Progress' | 'Resolved';
+  status: 'Open' | 'Resolved';
   createdAt: string;
   replies?: SupportTicketReply[];
 }

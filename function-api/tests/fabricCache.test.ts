@@ -4,6 +4,7 @@ import { readThroughJsonCache } from '../src/lib/cache/cacheAside';
 import { setRedisFactoryForTests } from '../src/lib/cache/redis';
 import { fetchAllCompanyChainsWithCache } from '../src/lib/fabric/companyChains';
 import { fetchAllGroupProjtablesWithCache } from '../src/lib/fabric/groupProjtables';
+import { fetchContractedVesselsWithCache } from '../src/lib/fabric/contractedProjtables';
 
 const run = async (name: string, fn: () => Promise<void>) => {
   try {
@@ -38,6 +39,7 @@ const restoreDefaults = () => {
   env.fabricCacheEnabledRaw = 'true';
   env.fabricCacheGroupProjtablesTtlSecondsRaw = '604800';
   env.fabricCacheCompanyChainsTtlSecondsRaw = '86400';
+  env.fabricCacheContractedVesselsTtlSecondsRaw = '86400';
   setRedisFactoryForTests(null);
 };
 
@@ -188,6 +190,120 @@ const main = async () => {
     }
 
     assert.equal(thrownMessage, 'upstream-failed');
+  });
+
+  await run('contracted-vessels cache hit skips upstream call', async () => {
+    restoreDefaults();
+    const redis = new FakeRedis();
+    const cached = [{ imo: 'IMO1234567', name: 'Test Vessel', dataAreaId: 'avs', projIdDataAreaIds: ['Prj-001,avs'] }];
+    redis.store.set('fabric:contracted-vessels:top:Prj-001,avs', JSON.stringify(cached));
+    setRedisFactoryForTests(() => redis);
+
+    let upstreamCalls = 0;
+    await withPatchedGraphql(
+      async () => { upstreamCalls += 1; return { projtables: { items: [] } }; },
+      async () => {
+        const result = await fetchContractedVesselsWithCache('Prj-001,avs');
+        assert.equal(result.cacheStatus, 'hit');
+        assert.equal(result.items.length, 1);
+        assert.equal(result.items[0].imo, 'IMO1234567');
+      }
+    );
+    assert.equal(upstreamCalls, 0);
+  });
+
+  await run('contracted-vessels cache miss calls upstream and writes grouped result to redis', async () => {
+    restoreDefaults();
+    const redis = new FakeRedis();
+    setRedisFactoryForTests(() => redis);
+
+    await withPatchedGraphql(
+      async () => ({
+        projtables: {
+          items: [
+            { avscarriercode: 'IMO9999999', dataareaid: 'avs', refShippingCarriername: 'Sea Star', ProjId_dataAreaId: 'Prj-001,avs' },
+          ],
+        },
+      }),
+      async () => {
+        const result = await fetchContractedVesselsWithCache('Prj-001,avs');
+        assert.equal(result.cacheStatus, 'miss');
+        assert.equal(result.items.length, 1);
+        assert.equal(result.items[0].imo, 'IMO9999999');
+        assert.equal(result.items[0].name, 'Sea Star');
+      }
+    );
+
+    assert.equal(redis.setCalls.length, 1);
+    assert.equal(redis.setCalls[0].key, 'fabric:contracted-vessels:top:Prj-001,avs');
+    assert.equal(redis.setCalls[0].ttl, 86400);
+  });
+
+  await run('contracted-vessels redis error triggers bypass and still returns upstream value', async () => {
+    restoreDefaults();
+    const redis = new FakeRedis();
+    redis.throwOnGet = true;
+    setRedisFactoryForTests(() => redis);
+
+    await withPatchedGraphql(
+      async () => ({
+        projtables: {
+          items: [
+            { avscarriercode: 'IMO1111111', dataareaid: 'avs', refShippingCarriername: 'Bypass Ship', ProjId_dataAreaId: 'Prj-001,avs' },
+          ],
+        },
+      }),
+      async () => {
+        const result = await fetchContractedVesselsWithCache('Prj-001,avs');
+        assert.equal(result.cacheStatus, 'bypass');
+        assert.equal(result.items.length, 1);
+        assert.equal(result.items[0].imo, 'IMO1111111');
+      }
+    );
+
+    assert.equal(redis.setCalls.length, 0);
+  });
+
+  await run('contracted-vessels groups multiple rows by avscarriercode into single vessel', async () => {
+    restoreDefaults();
+    const redis = new FakeRedis();
+    setRedisFactoryForTests(() => redis);
+
+    await withPatchedGraphql(
+      async () => ({
+        projtables: {
+          items: [
+            { avscarriercode: 'IMO7777777', dataareaid: 'avs', refShippingCarriername: 'Alpha Carrier', ProjId_dataAreaId: 'Prj-001,avs' },
+            { avscarriercode: 'IMO7777777', dataareaid: 'avs', refShippingCarriername: null, ProjId_dataAreaId: 'Prj-002,avs' },
+            { avscarriercode: 'IMO7777777', dataareaid: 'avs', refShippingCarriername: '', ProjId_dataAreaId: 'Prj-003,avs' },
+          ],
+        },
+      }),
+      async () => {
+        const result = await fetchContractedVesselsWithCache('Prj-001,avs');
+        assert.equal(result.items.length, 1);
+        assert.equal(result.items[0].imo, 'IMO7777777');
+        assert.equal(result.items[0].name, 'Alpha Carrier');
+        assert.equal(result.items[0].projIdDataAreaIds.length, 3);
+      }
+    );
+  });
+
+  await run('contracted-vessels invalid ttl falls back to 86400 default', async () => {
+    restoreDefaults();
+    env.fabricCacheContractedVesselsTtlSecondsRaw = 'not-a-number';
+    const redis = new FakeRedis();
+    setRedisFactoryForTests(() => redis);
+
+    await withPatchedGraphql(
+      async () => ({ projtables: { items: [] } }),
+      async () => {
+        await fetchContractedVesselsWithCache('Prj-001,avs');
+      }
+    );
+
+    assert.equal(redis.setCalls.length, 1);
+    assert.equal(redis.setCalls[0].ttl, 86400);
   });
 };
 

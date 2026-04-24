@@ -10,7 +10,6 @@ type AdminFilter = 'All' | SupportTicket['status'];
 
 const statusClasses: Record<SupportTicket['status'], string> = {
   Open: 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/20 dark:border-amber-900 dark:text-amber-300',
-  'In Progress': 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/20 dark:border-blue-900 dark:text-blue-300',
   Resolved: 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/20 dark:border-emerald-900 dark:text-emerald-300',
 };
 
@@ -96,7 +95,7 @@ export const SupportTicketManagement: React.FC = () => {
     }
   };
 
-  const filterButtons: AdminFilter[] = ['Open', 'In Progress', 'Resolved', 'All'];
+  const filterButtons: AdminFilter[] = ['Open', 'Resolved', 'All'];
 
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">

@@ -12,7 +12,6 @@ type TicketFilter = 'All' | SupportTicket['status'];
 
 const statusClasses: Record<SupportTicket['status'], string> = {
   Open: 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/20 dark:border-amber-900 dark:text-amber-300',
-  'In Progress': 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/20 dark:border-blue-900 dark:text-blue-300',
   Resolved: 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/20 dark:border-emerald-900 dark:text-emerald-300',
 };
 
@@ -104,7 +103,7 @@ export const SupportTickets: React.FC = () => {
     return supportReply ? supportReply.message : 'Waiting for support response';
   };
 
-  const filterButtons: TicketFilter[] = ['All', 'Open', 'In Progress', 'Resolved'];
+  const filterButtons: TicketFilter[] = ['All', 'Open', 'Resolved'];
 
   return (
     <div className="space-y-6">

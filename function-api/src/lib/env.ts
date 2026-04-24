@@ -14,6 +14,7 @@ export const env = {
   mailLoginUrl: process.env.MAIL_LOGIN_URL || '',
   mailLogoUrl: process.env.MAIL_LOGO_URL || '',
   mailGraphScope: process.env.MAIL_GRAPH_SCOPE || 'https://graph.microsoft.com/.default',
+  mailSupportAdminEmail: process.env.MAIL_SUPPORT_ADMIN_EMAIL || '',
   externalIdIssuers: (process.env.EXTERNAL_ID_ISSUERS || '')
     .split(',')
     .map((value) => value.trim())
@@ -38,6 +39,7 @@ export const env = {
   fabricCacheEnabledRaw: process.env.FABRIC_CACHE_ENABLED || 'true',
   fabricCacheGroupProjtablesTtlSecondsRaw: process.env.FABRIC_CACHE_GROUP_PROJTABLES_TTL_SECONDS || '604800',
   fabricCacheCompanyChainsTtlSecondsRaw: process.env.FABRIC_CACHE_COMPANY_CHAINS_TTL_SECONDS || '86400',
+  fabricCacheContractedVesselsTtlSecondsRaw: process.env.FABRIC_CACHE_CONTRACTED_VESSELS_TTL_SECONDS || '86400',
 };
 
 export const assertEnv = (): void => {

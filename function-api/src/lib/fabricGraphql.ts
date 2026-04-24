@@ -3,3 +3,5 @@ export { fetchAllCompanyChains, fetchAllCompanyChainsWithCache } from './fabric/
 export { fetchAllGroupProjtables, fetchAllGroupProjtablesWithCache } from './fabric/groupProjtables';
 export type { CompanyChain, CompanyChainsLookupResult } from './fabric/companyChains';
 export type { GroupProjtable, GroupProjtableLookupResult, GroupProjtableSearchOptions } from './fabric/groupProjtables';
+export { fetchContractedVesselsWithCache } from './fabric/contractedProjtables';
+export type { ContractedVessel, ContractedVesselsLookupResult } from './fabric/contractedProjtables';
