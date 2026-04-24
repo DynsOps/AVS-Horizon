@@ -143,6 +143,40 @@ export interface ContractedVessel {
   projIdDataAreaIds: string[];
 }
 
+export interface FleetMandayReportVessel {
+  imo: string;
+  vesselName: string;
+  budget: number;
+  actual: number;
+  variancePct: number;
+  exceeded: boolean;
+}
+
+export interface FleetMandayReportKpis {
+  totalSpendMtd: number;
+  totalBudget: number;
+  avgCostPerManday: number;
+  targetCostPerManday: number | null;
+  vesselsExceeded: number;
+  vesselsTotal: number;
+}
+
+export interface FleetMandayReportException {
+  imo: string;
+  vesselName: string;
+  mandayRate: number;
+  overPct: number;
+  severity: 'high' | 'medium';
+}
+
+export interface FleetMandayReport {
+  year: number;
+  month: number;
+  kpis: FleetMandayReportKpis;
+  exceptions: FleetMandayReportException[];
+  vessels: FleetMandayReportVessel[];
+}
+
 export interface VesselPosition {
   id: string;
   vesselId: string;
