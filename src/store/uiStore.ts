@@ -1,5 +1,6 @@
 import React from 'react';
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { AppNotification } from '../types';
 
 interface ToastMessage {
@@ -81,7 +82,7 @@ const playToastSound = (type: ToastMessage['type']) => {
   }
 };
 
-export const useUIStore = create<UIState>((set, get) => ({
+export const useUIStore = create<UIState>()(persist((set, get) => ({
   isSidebarOpen: true,
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   isDrawerOpen: false,
@@ -156,4 +157,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     });
     if (resolver) resolver(confirmed);
   },
+}), {
+  name: 'avs-ui-store',
+  partialize: (state) => ({ dashboardCompanyId: state.dashboardCompanyId }),
 }));

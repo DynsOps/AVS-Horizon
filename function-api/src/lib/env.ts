@@ -40,6 +40,8 @@ export const env = {
   fabricCacheGroupProjtablesTtlSecondsRaw: process.env.FABRIC_CACHE_GROUP_PROJTABLES_TTL_SECONDS || '604800',
   fabricCacheCompanyChainsTtlSecondsRaw: process.env.FABRIC_CACHE_COMPANY_CHAINS_TTL_SECONDS || '86400',
   fabricCacheContractedVesselsTtlSecondsRaw: process.env.FABRIC_CACHE_CONTRACTED_VESSELS_TTL_SECONDS || '86400',
+  fabricCacheMergedMandaysTtlSecondsRaw: process.env.FABRIC_CACHE_MERGED_MANDAYS_TTL_SECONDS || '86400',
+  fabricCacheProjInvoiceItemsTtlSecondsRaw: process.env.FABRIC_CACHE_PROJ_INVOICE_ITEMS_TTL_SECONDS || '3600',
 };
 
 export const assertEnv = (): void => {

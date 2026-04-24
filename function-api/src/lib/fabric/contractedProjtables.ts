@@ -1,6 +1,7 @@
 import { runGraphqlQuery } from './client';
 import { env } from '../env';
 import { readThroughJsonCache, CacheStatus } from '../cache/cacheAside';
+import { parsePositiveInt } from './utils';
 
 const CONTRACTED_PROJTABLES_QUERY = `
 query ContractedProjtables($topId: String!) {
@@ -38,12 +39,6 @@ export type ContractedVessel = {
 export type ContractedVesselsLookupResult = {
   items: ContractedVessel[];
   cacheStatus: CacheStatus;
-};
-
-const parsePositiveInt = (raw: string, fallback: number): number => {
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.floor(parsed);
 };
 
 const groupContractedVesselRows = (rows: ProjtableRow[] | null | undefined): ContractedVessel[] => {

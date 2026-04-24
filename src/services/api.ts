@@ -1,5 +1,5 @@
 
-import { KPI, Order, Shipment, Invoice, Vessel, VesselPosition, VesselRoute, VesselOperation, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport, BootstrapCredentials, UserCreateResponse, AppNotification, ContractedVessel } from '../types';
+import { KPI, Order, Shipment, Invoice, Vessel, VesselPosition, VesselRoute, VesselOperation, LogEntry, User, Company, Permission, SupportTicket, GuestRFQ, SuggestedItem, UserRole, AnalysisReport, BootstrapCredentials, UserCreateResponse, AppNotification, ContractedVessel, FleetMandayReport } from '../types';
 import { getDefaultPermissionsForRole } from '../utils/rbac';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
@@ -1397,6 +1397,21 @@ export const api = {
       ensureMockAllowed('Contracted vessels');
       await delay(120);
       return [];
+    },
+    getFleetMandayReport: async (params: { year: number; month: number }): Promise<FleetMandayReport> => {
+      if (shouldUseFunctionApi()) {
+        const qs = new URLSearchParams({ year: String(params.year), month: String(params.month) });
+        return callFunctionApi<FleetMandayReport>(`api/customer/fleet-manday-report?${qs.toString()}`);
+      }
+      ensureMockAllowed('Fleet manday report');
+      await delay(120);
+      return {
+        year: params.year,
+        month: params.month,
+        kpis: { totalSpendMtd: 0, totalBudget: 0, avgCostPerManday: 0, targetCostPerManday: null, vesselsExceeded: 0, vesselsTotal: 0 },
+        exceptions: [],
+        vessels: [],
+      };
     },
     getShipments: async (companyId?: string): Promise<Shipment[]> => {
       ensureMockAllowed('Shipments');
