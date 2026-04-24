@@ -68,8 +68,8 @@ export async function customerFleetMandayReport(
     for (const row of filtered) {
       const existing = agg.get(row.imo);
       if (existing) {
-        existing.budget += row.budgetPpd * 30;
-        existing.actual += row.manday * 30;
+        existing.budget += row.budgetPpd ;
+        existing.actual += row.manday ;
         existing.rawManday += row.manday;
       } else {
         const name =
@@ -79,8 +79,8 @@ export async function customerFleetMandayReport(
         agg.set(row.imo, {
           imo: row.imo,
           vesselName: name,
-          budget: row.budgetPpd * 30,
-          actual: row.manday * 30,
+          budget: row.budgetPpd ,
+          actual: row.manday ,
           rawManday: row.manday,
         });
       }
