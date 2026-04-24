@@ -218,15 +218,18 @@ export const FleetMandayReportWidget: React.FC = () => {
   }, [dashboardCompanyId, user?.companyId, year, month]);
 
   const totalBudget = report?.kpis.totalBudget ?? 0;
-  const totalActual = report?.kpis.totalSpendMtd ?? 0;
+  // Invoice-based → KPI card only
+  const totalSpendMtd = report?.kpis.totalSpendMtd ?? 0;
   const totalYtd = report?.kpis.totalSpendYtd ?? 0;
+  // Manday-based → progress bars, donut, table
+  const mandayActual = report?.vessels.reduce((s, v) => s + v.actual, 0) ?? 0;
   const avgCost = report?.kpis.avgCostPerManday ?? 0;
   const vesselsExceeded = report?.kpis.vesselsExceeded ?? 0;
   const vesselsTotal = report?.kpis.vesselsTotal ?? 0;
-  const maxVal = Math.max(totalBudget, totalActual, 1);
+  const maxVal = Math.max(totalBudget, mandayActual, 1);
   const budgetPct = Math.min((totalBudget / maxVal) * 100, 100);
-  const actualPct = Math.min((totalActual / maxVal) * 100, 100);
-  const diff = totalBudget - totalActual;
+  const actualPct = Math.min((mandayActual / maxVal) * 100, 100);
+  const diff = totalBudget - mandayActual;
 
   const pieEntries = report && report.vessels.length > 0 ? buildPieData(report.vessels) : [];
   const hasVessels = report && report.vessels.length > 0;
@@ -271,7 +274,7 @@ export const FleetMandayReportWidget: React.FC = () => {
 
       {/* ── KPI row ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MiniKpi icon={<IconCurrency />} label="Total Spend MTD" value={fmt(totalActual)} sub={`YTD: ${fmt(totalYtd)}`} />
+        <MiniKpi icon={<IconCurrency />} label="Total Spend MTD" value={fmt(totalSpendMtd)} sub={`YTD: ${fmt(totalYtd)}`} />
         <MiniKpi icon={<IconRate />} label="Avg Cost / Manday" value={fmt(avgCost)} sub="fleet daily avg" />
         <MiniKpi
           icon={<IconShipExceeded />}
@@ -327,7 +330,7 @@ export const FleetMandayReportWidget: React.FC = () => {
                     <div className="flex-1 h-5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
                       <div className={`h-full rounded-full transition-all duration-500 ${totalActual > totalBudget ? 'bg-red-400' : 'bg-cyan-500'}`} style={{ width: `${actualPct}%` }} />
                     </div>
-                    <span className="w-32 text-right text-sm font-medium tabular-nums">{fmt(totalActual)}</span>
+                    <span className="w-32 text-right text-sm font-medium tabular-nums">{fmt(mandayActual)}</span>
                   </div>
                   <div className="text-right text-sm font-medium">
                     <span className={diff >= 0 ? 'text-emerald-500' : 'text-red-500'}>
@@ -412,7 +415,7 @@ export const FleetMandayReportWidget: React.FC = () => {
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <span className="text-xs text-gray-400 dark:text-gray-500 mb-1">Total</span>
-                    <span className="text-xl font-bold tabular-nums text-gray-900 dark:text-gray-100">{fmt(totalActual)}</span>
+                    <span className="text-xl font-bold tabular-nums text-gray-900 dark:text-gray-100">{fmt(mandayActual)}</span>
                   </div>
                 </div>
 
