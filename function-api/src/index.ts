@@ -28,6 +28,7 @@ import './functions/authUpdateProfile';
 import './functions/authUpdateProfilePassword';
 import './functions/companyChains';
 import './functions/customerContractedVessels';
+import './functions/customerFleetMandayReport';
 import './functions/groupProjtablesLookup';
 import './functions/notificationsDelete';
 import './functions/notificationsList';
