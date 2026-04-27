@@ -49,3 +49,32 @@ app.http('company-template-assign', {
   route: 'identity/companies/{companyId}/template',
   handler: companyTemplateAssign,
 });
+
+export async function companyTemplateGet(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const actor = await authenticateRequest(request);
+    if (actor.role !== 'supadmin') return errorResponse(403, 'Only supadmin can view company templates.');
+
+    const companyId = request.params.companyId;
+    if (!companyId) return errorResponse(400, 'companyId required.');
+
+    const res = await runQuery<{ templateId: string }>(
+      `SELECT template_id AS templateId FROM dbo.company_template_assignment WHERE company_id = @companyId`,
+      { companyId }
+    );
+    const templateId = res.recordset[0]?.templateId ?? null;
+    return ok({ templateId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    context.error('company/template-get failed', message);
+    const status = message.includes('Missing bearer token') || message.includes('No access record') ? 401 : 500;
+    return errorResponse(status, message);
+  }
+}
+
+app.http('company-template-get', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'identity/companies/{companyId}/template',
+  handler: companyTemplateGet,
+});

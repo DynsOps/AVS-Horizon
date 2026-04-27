@@ -1337,6 +1337,10 @@ export const api = {
     deleteTemplate: async (id: string): Promise<void> => {
       await callFunctionApi<{ success: boolean }>(`api/identity/templates/${id}`, { method: 'DELETE' });
     },
+    getCompanyTemplateId: async (companyId: string): Promise<string | null> => {
+      const payload = await callFunctionApi<{ templateId: string | null }>(`api/identity/companies/${companyId}/template`);
+      return payload.templateId;
+    },
     assignCompanyTemplate: async (companyId: string, templateId: string): Promise<void> => {
       await callFunctionApi<{ success: boolean }>(`api/identity/companies/${companyId}/template`, {
         method: 'PUT',
