@@ -140,12 +140,7 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
       return errorResponse(400, 'Company is required for admin and non-guest user roles.');
     }
 
-    const currentPermissionsResult = await runScopedQuery<{ permission: string }>(
-      { role: actor.role, companyId: actor.companyId, userId: actor.id },
-      'SELECT permission FROM dbo.user_permissions WHERE user_id = @userId',
-      { userId }
-    );
-    const currentPermissions = currentPermissionsResult.recordset.map((p) => p.permission);
+    const currentPermissions: string[] = [];
     const requestedPermissions = body.permissions !== undefined
       ? body.permissions
       : (body.role ? getDefaultPermissionsForRole(normalizedRole) : currentPermissions);
@@ -217,19 +212,6 @@ export async function updateAdminUser(request: HttpRequest, context: InvocationC
         accessState: nextAccessState,
       }
     );
-
-    await runScopedQuery(
-      { role: actor.role, companyId: actor.companyId, userId: actor.id },
-      'DELETE FROM dbo.user_permissions WHERE user_id = @userId',
-      { userId }
-    );
-    for (const permission of effectivePermissions) {
-      await runScopedQuery(
-        { role: actor.role, companyId: actor.companyId, userId: actor.id },
-        'INSERT INTO dbo.user_permissions (user_id, permission) VALUES (@userId, @permission)',
-        { userId, permission }
-      );
-    }
 
     return ok({ success: true });
   } catch (error) {

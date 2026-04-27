@@ -221,13 +221,6 @@ export async function createAdminUser(request: HttpRequest, context: InvocationC
         }
       );
 
-      for (const permission of effectivePermissions) {
-        await runScopedQuery(
-          { role: actor.role, companyId: actor.companyId, userId: actor.id },
-          'INSERT INTO dbo.user_permissions (user_id, permission) VALUES (@userId, @permission)',
-          { userId, permission }
-        );
-      }
     } catch (error) {
       if (entraObjectId) {
         try {
