@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { User, Permission, UserRole, Company, AnalysisReport, ProvisioningSource, BootstrapCredentials } from '../../types';
 import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
@@ -758,6 +758,16 @@ const UserForm = ({
                 </div>
                 )}
 
+                {isCompanyAdminActor && user?.id && (
+                  <UserTemplateSelector userId={user.id} />
+                )}
+                {isCompanyAdminActor && !user?.id && (
+                  <div className="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    Template can be assigned after the user is created.
+                  </div>
+                )}
+
+                {!isCompanyAdminActor && (<>
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">General Permissions</label>
                     {isSupAdminActor && (
@@ -853,6 +863,7 @@ const UserForm = ({
                         )}
                     </div>
                 </div>
+                </>)}
             </div>
 
             <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-800">
@@ -898,4 +909,58 @@ const UserForm = ({
 
         </>
     );
+};
+
+const UserTemplateSelector: React.FC<{ userId: string }> = ({ userId }) => {
+  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
+  const [assignedId, setAssignedId] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
+  const { addToast } = useUIStore();
+
+  const load = useCallback(async () => {
+    try {
+      const [tpls, currentId] = await Promise.all([
+        api.admin.getTemplates(),
+        api.admin.getUserTemplateId(userId),
+      ]);
+      setTemplates(tpls);
+      if (currentId) setAssignedId(currentId);
+    } catch { /* non-critical */ }
+  }, [userId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const assign = async (templateId: string) => {
+    setIsSaving(true);
+    try {
+      await api.admin.assignUserTemplate(userId, templateId);
+      setAssignedId(templateId);
+      addToast({ title: 'Template Assigned', message: 'User template updated.', type: 'success' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to assign template.';
+      addToast({ title: 'Error', message, type: 'error' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+      <label className="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-2">Permission Template</label>
+      <select
+        value={assignedId}
+        onChange={(e) => { void assign(e.target.value); }}
+        disabled={isSaving || !templates.length}
+        className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 disabled:opacity-60"
+      >
+        <option value="">— No template assigned —</option>
+        {templates.map((t) => (
+          <option key={t.id} value={t.id}>{t.name}</option>
+        ))}
+      </select>
+      {!templates.length && (
+        <p className="mt-1 text-xs text-slate-500">No user templates available. Create one in User Templates.</p>
+      )}
+    </div>
+  );
 };

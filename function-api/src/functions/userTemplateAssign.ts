@@ -75,3 +75,32 @@ app.http('user-template-assign', {
   route: 'identity/users/{userId}/template',
   handler: userTemplateAssign,
 });
+
+export async function userTemplateGet(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    const actor = await authenticateRequest(request);
+    if (actor.role !== 'supadmin' && actor.role !== 'admin') return errorResponse(403, 'Access denied.');
+
+    const userId = request.params.userId;
+    if (!userId) return errorResponse(400, 'userId required.');
+
+    const res = await runQuery<{ templateId: string }>(
+      `SELECT template_id AS templateId FROM dbo.user_template_assignment WHERE user_id = @userId`,
+      { userId }
+    );
+    const templateId = res.recordset[0]?.templateId ?? null;
+    return ok({ templateId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    context.error('user/template-get failed', message);
+    const status = message.includes('Missing bearer token') || message.includes('No access record') ? 401 : 500;
+    return errorResponse(status, message);
+  }
+}
+
+app.http('user-template-get', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'identity/users/{userId}/template',
+  handler: userTemplateGet,
+});

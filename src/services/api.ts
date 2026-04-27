@@ -1337,6 +1337,16 @@ export const api = {
     deleteTemplate: async (id: string): Promise<void> => {
       await callFunctionApi<{ success: boolean }>(`api/identity/templates/${id}`, { method: 'DELETE' });
     },
+    getUserTemplateId: async (userId: string): Promise<string | null> => {
+      const payload = await callFunctionApi<{ templateId: string | null }>(`api/identity/users/${userId}/template`);
+      return payload.templateId;
+    },
+    assignUserTemplate: async (userId: string, templateId: string): Promise<void> => {
+      await callFunctionApi<{ success: boolean }>(`api/identity/users/${userId}/template`, {
+        method: 'PUT',
+        body: JSON.stringify({ templateId }),
+      });
+    },
     getCompanyTemplateId: async (companyId: string): Promise<string | null> => {
       const payload = await callFunctionApi<{ templateId: string | null }>(`api/identity/companies/${companyId}/template`);
       return payload.templateId;
