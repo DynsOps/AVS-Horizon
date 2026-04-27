@@ -19,6 +19,9 @@ const lines = [
   '// AUTO-GENERATED FILE. DO NOT EDIT.',
   '// Run `npm run build` (or `npm run prebuild`) to regenerate imports.',
   '',
+  "import { syncPermissions } from './lib/permissionSync';",
+  "void syncPermissions().catch((e) => console.error('[startup] syncPermissions failed:', e));",
+  '',
 ];
 
 for (const moduleName of modules) {
