@@ -54,6 +54,17 @@ const getUserTemplatePermissions = async (userId: string): Promise<string[]> => 
   }
 };
 
+const getUserReportPermissions = async (userId: string): Promise<string[]> => {
+  const res = await runQuery<{ permissionKey: string }>(
+    `SELECT ar.permission_key AS permissionKey
+     FROM dbo.user_report_access ura
+     JOIN dbo.analysis_reports ar ON ar.id = ura.report_id
+     WHERE ura.user_id = @userId AND ar.is_active = 1`,
+    { userId }
+  );
+  return res.recordset.map((r) => r.permissionKey);
+};
+
 export const resolveEffectivePermissions = async (
   userId: string,
   role: 'supadmin' | 'admin' | 'user',
@@ -66,10 +77,13 @@ export const resolveEffectivePermissions = async (
   let perms: string[];
   if (role === 'supadmin') {
     perms = await getAllActivePermissionKeys();
-  } else if (role === 'admin') {
-    perms = await getUserTemplatePermissions(userId);
   } else {
-    perms = await getUserTemplatePermissions(userId);
+    const [templatePerms, reportPerms] = await Promise.all([
+      getUserTemplatePermissions(userId),
+      getUserReportPermissions(userId),
+    ]);
+    const merged = new Set([...templatePerms, ...reportPerms]);
+    perms = Array.from(merged);
   }
 
   cache.set(cacheKey, { perms, expiresAt: Date.now() + CACHE_TTL_MS });

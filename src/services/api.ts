@@ -1357,6 +1357,16 @@ export const api = {
         body: JSON.stringify({ templateId }),
       });
     },
+    getUserReports: async (userId: string): Promise<string[]> => {
+      const payload = await callFunctionApi<{ reportIds: string[] }>(`api/identity/users/${userId}/reports`);
+      return payload.reportIds;
+    },
+    setUserReports: async (userId: string, reportIds: string[]): Promise<void> => {
+      await callFunctionApi<{ success: boolean }>(`api/identity/users/${userId}/reports`, {
+        method: 'PUT',
+        body: JSON.stringify({ reportIds }),
+      });
+    },
     getSystemHealth: async (): Promise<SystemHealthPayload> => {
       if (shouldUseFunctionApi()) {
         return callFunctionApi<SystemHealthPayload>('api/system-health');

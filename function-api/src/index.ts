@@ -1,6 +1,9 @@
 // AUTO-GENERATED FILE. DO NOT EDIT.
 // Run `npm run build` (or `npm run prebuild`) to regenerate imports.
 
+import { syncPermissions } from './lib/permissionSync';
+void syncPermissions().catch((e) => console.error('[startup] syncPermissions failed:', e));
+
 import './functions/adminCompaniesCreate';
 import './functions/adminCompaniesDelete';
 import './functions/adminCompaniesList';
@@ -44,4 +47,5 @@ import './functions/templatesCreate';
 import './functions/templatesDelete';
 import './functions/templatesList';
 import './functions/templatesUpdate';
+import './functions/userReportAccess';
 import './functions/userTemplateAssign';
