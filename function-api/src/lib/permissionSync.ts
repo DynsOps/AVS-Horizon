@@ -10,6 +10,7 @@ export const syncPermissions = async (): Promise<void> => {
        WHEN MATCHED THEN
          UPDATE SET label = source.label,
                     group_name = source.group_name,
+                    kind = source.kind,
                     updated_at = SYSUTCDATETIME(),
                     is_active = 1
        WHEN NOT MATCHED THEN
