@@ -29,7 +29,25 @@ export async function adminReportsDelete(request: HttpRequest, context: Invocati
     const target = targetResult.recordset[0];
     if (!target) return errorResponse(404, 'Report not found.');
 
-    await runQuery('DELETE FROM dbo.user_permissions WHERE permission = @permission', { permission: target.permissionKey });
+    // Remove from permissions catalog
+    await runQuery('DELETE FROM dbo.permissions WHERE [key] = @key AND is_dynamic = 1', { key: target.permissionKey });
+
+    // Clean up this permission key from all template JSONs
+    const templates = await runQuery<{ id: string; permissions: string }>(
+      `SELECT id, permissions FROM dbo.entitlement_templates WHERE permissions LIKE @likeKey`,
+      { likeKey: `%${target.permissionKey}%` }
+    );
+    for (const tpl of templates.recordset) {
+      try {
+        const perms: string[] = JSON.parse(tpl.permissions);
+        const cleaned = perms.filter((p) => p !== target.permissionKey);
+        await runQuery(
+          `UPDATE dbo.entitlement_templates SET permissions = @permissions, updated_at = SYSUTCDATETIME() WHERE id = @id`,
+          { id: tpl.id, permissions: JSON.stringify(cleaned) }
+        );
+      } catch { /* skip malformed */ }
+    }
+
     await runQuery('DELETE FROM dbo.analysis_reports WHERE id = @id', { id });
 
     return ok({ success: true });

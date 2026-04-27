@@ -94,6 +94,16 @@ export async function adminReportsCreate(request: HttpRequest, context: Invocati
       }
     );
 
+    // Sync to permissions catalog
+    await runQuery(
+      `MERGE dbo.permissions AS target
+       USING (SELECT @key AS [key]) AS source ON target.[key] = source.[key]
+       WHEN NOT MATCHED THEN
+         INSERT ([key], label, group_name, kind, is_dynamic, is_active)
+         VALUES (@key, @label, N'Raporlar', 'report', 1, 1);`,
+      { key: permissionKey, label: name }
+    );
+
     return created({
       report: {
         id,
