@@ -73,17 +73,6 @@ export async function listAdminUsers(request: HttpRequest, context: InvocationCo
       );
     }
 
-    const permissionsResult = await runScopedQuery<{ userId: string; permission: string }>(
-      { role: actor.role, companyId: actor.companyId, userId: actor.id },
-      'SELECT user_id AS userId, permission FROM dbo.user_permissions'
-    );
-    const permissionMap = new Map<string, string[]>();
-    for (const row of permissionsResult.recordset) {
-      const next = permissionMap.get(row.userId) || [];
-      next.push(row.permission);
-      permissionMap.set(row.userId, next);
-    }
-
     return ok({
       users: usersResult.recordset.map((user) => ({
         ...user,
@@ -91,7 +80,7 @@ export async function listAdminUsers(request: HttpRequest, context: InvocationCo
         identityTenantId: user.identityTenantId || '',
         powerBiWorkspaceId: user.powerBiWorkspaceId || '',
         powerBiReportId: user.powerBiReportId || '',
-        permissions: permissionMap.get(user.id) || [],
+        permissions: [],
       })),
     });
   } catch (error) {
