@@ -1,4 +1,4 @@
-export type PermissionKind = 'screen' | 'action' | 'report' | 'system';
+export type PermissionKind = 'screen' | 'action' | 'report' | 'system' | 'supadmin';
 
 export type PermissionEntry = {
   key: string;
@@ -31,10 +31,10 @@ export const STATIC_PERMISSIONS: PermissionEntry[] = [
   { key: 'create:support-ticket',  label: 'Destek Talebi Oluştur', group: 'Talepler',  kind: 'action' },
   // Yönetim
   { key: 'manage:users',           label: 'Kullanıcı Yönetimi',    group: 'Yönetim',   kind: 'screen' },
-  { key: 'manage:companies',       label: 'Şirket Yönetimi',       group: 'Yönetim',   kind: 'screen' },
-  { key: 'manage:reports',         label: 'Rapor Yönetimi',        group: 'Yönetim',   kind: 'screen' },
-  { key: 'manage:vessels',         label: 'Gemi Yönetimi',         group: 'Yönetim',   kind: 'screen' },
   { key: 'manage:templates',       label: 'Template Yönetimi',     group: 'Yönetim',   kind: 'screen' },
+  { key: 'manage:companies',       label: 'Şirket Yönetimi',       group: 'Yönetim',   kind: 'supadmin' },
+  { key: 'manage:reports',         label: 'Rapor Yönetimi',        group: 'Yönetim',   kind: 'supadmin' },
+  { key: 'manage:vessels',         label: 'Gemi Yönetimi',         group: 'Yönetim',   kind: 'supadmin' },
   // Sistem
   { key: 'system:settings',        label: 'Sistem Ayarları',       group: 'Sistem',    kind: 'system' },
 ];
