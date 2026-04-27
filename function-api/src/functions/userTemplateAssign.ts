@@ -26,8 +26,12 @@ export async function userTemplateAssign(request: HttpRequest, context: Invocati
     if (targetRole !== 'user' && targetRole !== 'admin') return errorResponse(400, 'Can only assign templates to user or admin roles.');
     if (targetRole === 'admin' && actor.role !== 'supadmin') return errorResponse(403, 'Only supadmin can assign templates to admin users.');
 
-    if (actor.role === 'admin' && targetUser.recordset[0].company_id !== actor.activeCompanyId) {
-      return errorResponse(403, 'Admin can only manage users in their active company.');
+    if (actor.role === 'admin') {
+      const targetCompanyId = targetUser.recordset[0].company_id;
+      const adminCompanies = actor.companyIds.length ? actor.companyIds : (actor.companyId ? [actor.companyId] : []);
+      if (!targetCompanyId || !adminCompanies.includes(targetCompanyId)) {
+        return errorResponse(403, 'Admin can only manage users in their own company.');
+      }
     }
 
     const tpl = await runQuery<{ id: string; scope: string; company_id: string | null; permissions: string }>(
