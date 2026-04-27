@@ -47,6 +47,14 @@ export async function createAdminCompany(request: HttpRequest, context: Invocati
       { id, name, type, dataAreaId, projId, status }
     );
 
+    // Assign TPL-DEFAULT so admins of this company can log in immediately
+    await runQuery(
+      `IF EXISTS (SELECT 1 FROM dbo.entitlement_templates WHERE id = 'TPL-DEFAULT')
+       INSERT INTO dbo.company_template_assignment (company_id, template_id)
+       VALUES (@id, 'TPL-DEFAULT')`,
+      { id }
+    );
+
     return created({
       company: {
         id,
