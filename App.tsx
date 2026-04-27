@@ -40,6 +40,7 @@ import { VesselManagement } from './src/pages/admin/VesselManagement';
 import { MaritimeMap } from './src/pages/admin/MaritimeMap';
 import { MaritimeOperationDetail } from './src/pages/admin/MaritimeOperationDetail';
 import { SupportTicketManagement } from './src/pages/admin/SupportTicketManagement';
+import { TemplateManagement } from './src/pages/admin/TemplateManagement';
 import { Permission, UserRole } from './src/types';
 import { getDefaultRouteForUser, hasPermissions, hasRoleAccess, isPendingAccessUser } from './src/utils/rbac';
 import { MsalAuthBridge } from './src/auth/MsalAuthBridge';
@@ -141,6 +142,7 @@ const App: React.FC = () => {
             <Route path="maritime-map/operations/:vesselId" element={<ProtectedRoute allowedRoles={['supadmin']} requiredPermissions={['view:maritime-map']}><MaritimeOperationDetail /></ProtectedRoute>} />
             <Route path="reports" element={<ProtectedRoute allowedRoles={['supadmin']}><ReportManagement /></ProtectedRoute>} />
             <Route path="support-tickets" element={<ProtectedRoute allowedRoles={['supadmin']}><SupportTicketManagement /></ProtectedRoute>} />
+            <Route path="templates" element={<ProtectedRoute allowedRoles={['supadmin']} requiredPermissions={['manage:templates']}><TemplateManagement /></ProtectedRoute>} />
             <Route path="feature-flags" element={<ProtectedRoute allowedRoles={['supadmin']} requiredPermissions={['system:settings']}><div className="p-6">Feature Flags Management</div></ProtectedRoute>} />
           </Route>
 

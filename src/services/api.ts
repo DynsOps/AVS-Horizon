@@ -1308,6 +1308,41 @@ export const api = {
       }));
       persistLocalDb();
     },
+    getPermissionsCatalog: async (): Promise<Record<string, { key: string; label: string; kind: string }[]>> => {
+      const payload = await callFunctionApi<{ groups: Record<string, { key: string; label: string; kind: string }[]> }>('api/identity/permissions/catalog');
+      return payload.groups;
+    },
+    getTemplates: async (scope?: 'global' | 'company', companyId?: string): Promise<{ id: string; name: string; description: string | null; scope: string; companyId: string | null; permissions: string[]; isActive: boolean }[]> => {
+      const params = new URLSearchParams();
+      if (scope) params.set('scope', scope);
+      if (companyId) params.set('company_id', companyId);
+      const qs = params.toString();
+      const payload = await callFunctionApi<{ templates: { id: string; name: string; description: string | null; scope: string; companyId: string | null; permissions: string[]; isActive: boolean }[] }>(`api/identity/templates${qs ? `?${qs}` : ''}`);
+      return payload.templates;
+    },
+    createTemplate: async (body: { name: string; description?: string; scope: 'global' | 'company'; companyId?: string; permissions: string[] }): Promise<{ id: string; name: string; description: string | null; scope: string; companyId: string | null; permissions: string[]; isActive: boolean }> => {
+      const payload = await callFunctionApi<{ template: { id: string; name: string; description: string | null; scope: string; companyId: string | null; permissions: string[]; isActive: boolean } }>('api/identity/templates', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return payload.template;
+    },
+    updateTemplate: async (id: string, body: { name?: string; description?: string; permissions?: string[] }): Promise<{ id: string; name: string; description: string | null; scope: string; companyId: string | null; permissions: string[]; isActive: boolean }> => {
+      const payload = await callFunctionApi<{ template: { id: string; name: string; description: string | null; scope: string; companyId: string | null; permissions: string[]; isActive: boolean } }>(`api/identity/templates/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+      return payload.template;
+    },
+    deleteTemplate: async (id: string): Promise<void> => {
+      await callFunctionApi<{ success: boolean }>(`api/identity/templates/${id}`, { method: 'DELETE' });
+    },
+    assignCompanyTemplate: async (companyId: string, templateId: string): Promise<void> => {
+      await callFunctionApi<{ success: boolean }>(`api/identity/companies/${companyId}/template`, {
+        method: 'PUT',
+        body: JSON.stringify({ templateId }),
+      });
+    },
     getSystemHealth: async (): Promise<SystemHealthPayload> => {
       if (shouldUseFunctionApi()) {
         return callFunctionApi<SystemHealthPayload>('api/system-health');

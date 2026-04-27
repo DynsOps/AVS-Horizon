@@ -12,7 +12,7 @@ import { performSignOut } from './signOut';
 import { api } from '../services/api';
 import {
   LayoutDashboard, Ship, Package, ClipboardList, ReceiptText, Landmark,
-  Truck, ShieldAlert, Activity, Settings, LogOut, Users, UserCircle, FilePlus2, BarChart3, Building2, ChevronDown, MapPin, Anchor, LifeBuoy
+  Truck, ShieldAlert, Activity, Settings, LogOut, Users, UserCircle, FilePlus2, BarChart3, Building2, ChevronDown, MapPin, Anchor, LifeBuoy, Layers
 } from 'lucide-react';
 
 const NavItem = ({ to, icon: Icon, label, badge }: { to: string, icon: any, label: string, badge?: number }) => (
@@ -182,6 +182,7 @@ export const Sidebar: React.FC = () => {
             {hasPermission('manage:vessels') && <NavItem to="/admin/vessels" icon={Anchor} label="Vessel Management" />}
             {hasPermission('view:maritime-map') && <NavItem to="/admin/maritime-map" icon={MapPin} label="Maritime Map" />}
             <NavItem to="/admin/reports" icon={BarChart3} label="Report Management" />
+            {hasPermission('manage:templates') && <NavItem to="/admin/templates" icon={Layers} label="Templates" />}
             <NavItem to="/admin/support-tickets" icon={LifeBuoy} label="Support Tickets" badge={openTicketsCount} />
             {hasPermission('system:settings') && <NavItem to="/admin/security" icon={ShieldAlert} label="Security Logs" />}
             {hasPermission('system:settings') && <NavItem to="/admin/feature-flags" icon={Settings} label="Feature Flags" />}
