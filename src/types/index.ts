@@ -31,6 +31,7 @@ export type Permission =
   | 'system:settings'
   | 'manage:reports'
   | 'manage:vessels'
+  | 'manage:templates'
   | 'view:maritime-map'
   | `view:analysis-report:${string}`;
 
