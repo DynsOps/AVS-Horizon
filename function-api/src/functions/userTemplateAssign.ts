@@ -21,7 +21,10 @@ export async function userTemplateAssign(request: HttpRequest, context: Invocati
       { userId }
     );
     if (!targetUser.recordset[0]) return errorResponse(404, 'User not found.');
-    if (targetUser.recordset[0].role !== 'user') return errorResponse(400, 'Can only assign templates to role=user.');
+
+    const targetRole = targetUser.recordset[0].role;
+    if (targetRole !== 'user' && targetRole !== 'admin') return errorResponse(400, 'Can only assign templates to user or admin roles.');
+    if (targetRole === 'admin' && actor.role !== 'supadmin') return errorResponse(403, 'Only supadmin can assign templates to admin users.');
 
     if (actor.role === 'admin' && targetUser.recordset[0].company_id !== actor.activeCompanyId) {
       return errorResponse(403, 'Admin can only manage users in their active company.');
@@ -32,18 +35,23 @@ export async function userTemplateAssign(request: HttpRequest, context: Invocati
       { templateId }
     );
     if (!tpl.recordset[0]) return errorResponse(404, 'Template not found.');
-    if (tpl.recordset[0].scope !== 'company') return errorResponse(400, 'User must be assigned a company-scope template.');
 
-    const targetCompany = actor.role === 'admin' ? actor.activeCompanyId : targetUser.recordset[0].company_id;
-    if (tpl.recordset[0].company_id !== targetCompany) {
-      return errorResponse(403, 'Template does not belong to the target company.');
-    }
-
-    if (actor.role === 'admin') {
-      const tplPerms: string[] = (() => { try { return JSON.parse(tpl.recordset[0].permissions); } catch { return []; } })();
-      const actorPerms = new Set(actor.permissions);
-      const invalid = tplPerms.filter((p) => !actorPerms.has(p));
-      if (invalid.length > 0) return errorResponse(403, `Template contains permissions beyond your own: ${invalid.join(', ')}`);
+    if (targetRole === 'admin') {
+      // Admin users get global templates assigned by supadmin
+      if (tpl.recordset[0].scope !== 'global') return errorResponse(400, 'Admin users must be assigned a global-scope template.');
+    } else {
+      // Regular users get company-scope templates
+      if (tpl.recordset[0].scope !== 'company') return errorResponse(400, 'Users must be assigned a company-scope template.');
+      const targetCompany = actor.role === 'admin' ? actor.activeCompanyId : targetUser.recordset[0].company_id;
+      if (tpl.recordset[0].company_id !== targetCompany) {
+        return errorResponse(403, 'Template does not belong to the target company.');
+      }
+      if (actor.role === 'admin') {
+        const tplPerms: string[] = (() => { try { return JSON.parse(tpl.recordset[0].permissions); } catch { return []; } })();
+        const actorPerms = new Set(actor.permissions);
+        const invalid = tplPerms.filter((p) => !actorPerms.has(p));
+        if (invalid.length > 0) return errorResponse(403, `Template contains permissions beyond your own: ${invalid.join(', ')}`);
+      }
     }
 
     await runQuery(
