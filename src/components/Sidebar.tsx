@@ -167,6 +167,7 @@ export const Sidebar: React.FC = () => {
             <div className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 mt-6">Administration</div>
             {hasPermission('system:settings') && <NavItem to="/admin/system-health" icon={Activity} label="System Health" />}
             {hasPermission('manage:users') && <NavItem to="/admin/users" icon={Users} label="User Management" />}
+            {hasPermission('manage:templates') && <NavItem to="/company/user-templates" icon={Layers} label="User Templates" />}
             {hasPermission('system:settings') && <NavItem to="/admin/security" icon={ShieldAlert} label="Security Logs" />}
             {hasPermission('manage:companies') && <NavItem to="/admin/entities" icon={Building2} label="Entity Management" />}
             {hasPermission('system:settings') && <NavItem to="/admin/feature-flags" icon={Settings} label="Feature Flags" />}

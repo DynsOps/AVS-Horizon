@@ -41,6 +41,7 @@ import { MaritimeMap } from './src/pages/admin/MaritimeMap';
 import { MaritimeOperationDetail } from './src/pages/admin/MaritimeOperationDetail';
 import { SupportTicketManagement } from './src/pages/admin/SupportTicketManagement';
 import { TemplateManagement } from './src/pages/admin/TemplateManagement';
+import { UserTemplateManagement } from './src/pages/customer/UserTemplateManagement';
 import { Permission, UserRole } from './src/types';
 import { getDefaultRouteForUser, hasPermissions, hasRoleAccess, isPendingAccessUser } from './src/utils/rbac';
 import { MsalAuthBridge } from './src/auth/MsalAuthBridge';
@@ -130,6 +131,9 @@ const App: React.FC = () => {
             <Route path="logistics" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:supplier']}><SupplierLogistics /></ProtectedRoute>} />
             <Route path="performance" element={<ProtectedRoute allowedRoles={['user', 'admin', 'supadmin']} requiredPermissions={['view:supplier']}><div className="p-6">Performance Scorecards</div></ProtectedRoute>} />
           </Route>
+
+          {/* Admin-only customer routes */}
+          <Route path="/company/user-templates" element={<ProtectedRoute allowedRoles={['admin']} requiredPermissions={['manage:templates']}><UserTemplateManagement /></ProtectedRoute>} />
 
           {/* Admin Routes */}
           <Route path="/admin">
