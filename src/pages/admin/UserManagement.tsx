@@ -758,10 +758,10 @@ const UserForm = ({
                 </div>
                 )}
 
-                {isCompanyAdminActor && user?.id && (
-                  <UserTemplateSelector userId={user.id} />
+                {(isCompanyAdminActor || (isSupAdminActor && formData.role !== 'supadmin')) && user?.id && (
+                  <UserTemplateSelector userId={user.id} scope={isSupAdminActor ? 'global' : undefined} />
                 )}
-                {isCompanyAdminActor && !user?.id && (
+                {(isCompanyAdminActor || (isSupAdminActor && formData.role !== 'supadmin')) && !user?.id && (
                   <div className="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
                     Template can be assigned after the user is created.
                   </div>
@@ -911,7 +911,7 @@ const UserForm = ({
     );
 };
 
-const UserTemplateSelector: React.FC<{ userId: string }> = ({ userId }) => {
+const UserTemplateSelector: React.FC<{ userId: string; scope?: string }> = ({ userId, scope }) => {
   const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
   const [assignedId, setAssignedId] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
@@ -920,13 +920,13 @@ const UserTemplateSelector: React.FC<{ userId: string }> = ({ userId }) => {
   const load = useCallback(async () => {
     try {
       const [tpls, currentId] = await Promise.all([
-        api.admin.getTemplates(),
+        api.admin.getTemplates(scope),
         api.admin.getUserTemplateId(userId),
       ]);
       setTemplates(tpls);
       if (currentId) setAssignedId(currentId);
     } catch { /* non-critical */ }
-  }, [userId]);
+  }, [userId, scope]);
 
   useEffect(() => { void load(); }, [load]);
 
