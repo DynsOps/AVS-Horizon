@@ -5,7 +5,8 @@ export const getDefaultRouteForRole = (role: UserRole): string => {
   return '/admin/system-health';
 };
 
-export const isPendingAccessUser = (user: Pick<User, 'accessState' | 'permissions'>): boolean => {
+export const isPendingAccessUser = (user: Pick<User, 'role' | 'accessState' | 'permissions'>): boolean => {
+  if (user.role === 'supadmin') return false;
   if (user.accessState && user.accessState !== 'active') return true;
   return user.permissions.length === 0;
 };
