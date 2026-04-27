@@ -26,7 +26,7 @@ export async function permissionsCatalogList(request: HttpRequest, context: Invo
     const res = await runQuery<PermissionRow>(
       `SELECT [key], label, group_name, kind
        FROM dbo.permissions
-       WHERE is_active = 1
+       WHERE is_active = 1 AND kind <> 'system'
        ORDER BY group_name, kind DESC, label`,
       {}
     );

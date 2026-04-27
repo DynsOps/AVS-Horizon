@@ -67,7 +67,7 @@ export const resolveEffectivePermissions = async (
   if (role === 'supadmin') {
     perms = await getAllActivePermissionKeys();
   } else if (role === 'admin') {
-    perms = activeCompanyId ? await getCompanyTemplatePermissions(activeCompanyId) : [];
+    perms = await getUserTemplatePermissions(userId);
   } else {
     perms = await getUserTemplatePermissions(userId);
   }
