@@ -1,12 +1,10 @@
 -- sql/018_assignment_seed.sql
 
 -- ─── Assign all existing companies to TPL-DEFAULT ─────────────────────────────
-INSERT INTO dbo.company_template_assignment (company_id, template_id, assigned_at, updated_at)
+INSERT INTO dbo.company_template_assignment (company_id, template_id)
 SELECT
   c.id,
-  'TPL-DEFAULT',
-  SYSUTCDATETIME(),
-  SYSUTCDATETIME()
+  'TPL-DEFAULT'
 FROM dbo.companies c
 WHERE NOT EXISTS (
   SELECT 1 FROM dbo.company_template_assignment cta WHERE cta.company_id = c.id
@@ -44,12 +42,10 @@ BEGIN
   END
 
   -- Assign any unassigned users of this company
-  INSERT INTO dbo.user_template_assignment (user_id, template_id, assigned_at, updated_at)
+  INSERT INTO dbo.user_template_assignment (user_id, template_id)
   SELECT
     u.id,
-    @tplId,
-    SYSUTCDATETIME(),
-    SYSUTCDATETIME()
+    @tplId
   FROM dbo.users u
   WHERE u.company_id = @compId
     AND u.role = 'user'

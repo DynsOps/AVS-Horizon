@@ -25,6 +25,26 @@ IF COL_LENGTH('dbo.company_template_assignment', 'override_add') IS NOT NULL
 
 IF COL_LENGTH('dbo.company_template_assignment', 'override_remove') IS NOT NULL
   ALTER TABLE dbo.company_template_assignment DROP COLUMN override_remove;
+
+-- Add missing columns to existing company_template_assignment
+IF COL_LENGTH('dbo.company_template_assignment', 'assigned_at') IS NULL
+  ALTER TABLE dbo.company_template_assignment ADD assigned_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME();
+
+IF COL_LENGTH('dbo.company_template_assignment', 'updated_at') IS NULL
+  ALTER TABLE dbo.company_template_assignment ADD updated_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME();
+
+IF COL_LENGTH('dbo.company_template_assignment', 'assigned_by_user_id') IS NULL
+  ALTER TABLE dbo.company_template_assignment ADD assigned_by_user_id VARCHAR(64) NULL;
+
+-- Add missing columns to existing user_template_assignment
+IF COL_LENGTH('dbo.user_template_assignment', 'assigned_at') IS NULL
+  ALTER TABLE dbo.user_template_assignment ADD assigned_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME();
+
+IF COL_LENGTH('dbo.user_template_assignment', 'updated_at') IS NULL
+  ALTER TABLE dbo.user_template_assignment ADD updated_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME();
+
+IF COL_LENGTH('dbo.user_template_assignment', 'assigned_by_user_id') IS NULL
+  ALTER TABLE dbo.user_template_assignment ADD assigned_by_user_id VARCHAR(64) NULL;
 GO
 
 -- Ensure company_template_assignment exists without override columns
