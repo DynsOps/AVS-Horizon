@@ -1,7 +1,8 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../lib/auth';
-import { fetchContractedVesselsWithCache } from '../lib/fabricGraphql';
+import { fetchContractedVesselsWithCache, FabricGraphqlError } from '../lib/fabricGraphql';
 import { fetchVesselOperationsFromFabric } from '../lib/maritime/operations';
+import { MaritimeApiError } from '../lib/maritime/client';
 import { errorResponse, ok } from '../lib/http';
 
 export async function customerMaritimeOperations(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
@@ -24,6 +25,12 @@ export async function customerMaritimeOperations(request: HttpRequest, context: 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     context.error('customer/maritime/operations failed', message);
+    if (error instanceof FabricGraphqlError) {
+      return errorResponse(error.status, message);
+    }
+    if (error instanceof MaritimeApiError) {
+      return errorResponse(error.status, message);
+    }
     const status = message.includes('Missing bearer token') || message.includes('No access record') ? 401 : 500;
     return errorResponse(status, message);
   }

@@ -1,6 +1,6 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { authenticateRequest } from '../lib/auth';
-import { fetchContractedVesselsWithCache } from '../lib/fabricGraphql';
+import { fetchContractedVesselsWithCache, FabricGraphqlError } from '../lib/fabricGraphql';
 import { fetchVesselPositionsCached } from '../lib/maritime/positions';
 import { MaritimeApiError } from '../lib/maritime/client';
 import { errorResponse, ok } from '../lib/http';
@@ -11,7 +11,7 @@ export async function customerMaritimePositions(request: HttpRequest, context: I
     if (!actor.permissions.includes('view:maritime-map')) {
       return errorResponse(403, 'Missing permission: view:maritime-map');
     }
-    if (!actor.activeProjId || !actor.activeDataAreaId) {
+    if (!actor.activeProjId || !actor.activeDataAreaId || !actor.activeCompanyId) {
       return errorResponse(400, 'Active company has no projId/dataAreaId configured.');
     }
     const topProjectIdDataAreaId = `${actor.activeProjId},${actor.activeDataAreaId}`;
@@ -21,12 +21,15 @@ export async function customerMaritimePositions(request: HttpRequest, context: I
     const imos = contractedResult.items.map((v: any) => v.imo).filter(Boolean);
 
     // Fetch positions with 3-level cache
-    const result = await fetchVesselPositionsCached(topProjectIdDataAreaId, actor.activeCompanyId ?? '', imos);
+    const result = await fetchVesselPositionsCached(topProjectIdDataAreaId, actor.activeCompanyId, imos);
 
     return ok(result.payload, { 'x-cache': result.cacheStatus });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     context.error('customer/maritime/positions failed', message);
+    if (error instanceof FabricGraphqlError) {
+      return errorResponse(error.status, message);
+    }
     if (error instanceof MaritimeApiError) {
       return errorResponse(error.status, message);
     }
