@@ -37,7 +37,7 @@ export interface MappedRoute {
   vessel_id: string;
   departure_port: string;
   arrival_port: string;
-  departure_date: Date;
+  departure_date: Date | null;
   arrival_date: Date | null;
   status: string;
 }
@@ -57,10 +57,11 @@ export interface MaritimePositionsResult {
 // Mapper: DatadockedResult → internal types
 // ---------------------------------------------------------------------------
 
-function safeFloat(raw: string): number | null {
+const safeFloat = (raw: string | undefined | null): number | null => {
+  if (raw === undefined || raw === null || raw === '') return null;
   const n = parseFloat(raw);
-  return Number.isNaN(n) ? null : n;
-}
+  return isNaN(n) ? null : n;
+};
 
 function mapResult(result: DatadockedResult, companyId: string): {
   vessel: MappedVessel;
@@ -75,7 +76,7 @@ function mapResult(result: DatadockedResult, companyId: string): {
     name: result.name,
     imo: result.imo,
     type: result.typeSpecific,
-    flag_country: result.callsign,
+    flag_country: '',
     vessel_status: 'Active',
   };
 
@@ -99,7 +100,7 @@ function mapResult(result: DatadockedResult, companyId: string): {
     vessel_id: vesselId,
     departure_port: result.lastPort,
     arrival_port: result.destination,
-    departure_date: result.atdUtc ? new Date(result.atdUtc) : new Date(),
+    departure_date: result.atdUtc ? new Date(result.atdUtc) : null,
     arrival_date: result.etaUtc ? new Date(result.etaUtc) : null,
     status: 'In Progress',
   };
@@ -148,9 +149,13 @@ WHERE v.company_id = @companyId
   AND p.fetched_at > DATEADD(hour, -1, SYSUTCDATETIME())
 `;
 
-async function readFreshFromDb(companyId: string): Promise<DbPositionRow[]> {
+async function readFreshFromDb(companyId: string, imos: string[]): Promise<{ payload: MaritimeMapPayload; cacheStatus: 'db-hit' } | null> {
   const result = await runQuery<DbPositionRow>(READ_POSITIONS_SQL, { companyId });
-  return result.recordset;
+  const rows = result.recordset;
+  const dbImos = new Set(rows.map((r) => r.imo));
+  const allCovered = imos.every((imo) => dbImos.has(imo));
+  if (!allCovered) return null;
+  return { payload: dbRowsToPayload(rows), cacheStatus: 'db-hit' };
 }
 
 function dbRowsToPayload(rows: DbPositionRow[]): MaritimeMapPayload {
@@ -188,7 +193,7 @@ function dbRowsToPayload(rows: DbPositionRow[]): MaritimeMapPayload {
         vessel_id: row.vessel_id,
         departure_port: row.departure_port ?? '',
         arrival_port: row.arrival_port ?? '',
-        departure_date: row.departure_date ?? new Date(),
+        departure_date: row.departure_date ?? null,
         arrival_date: row.arrival_date ?? null,
         status: row.route_status ?? 'In Progress',
       });
@@ -287,9 +292,8 @@ async function persistToDb(payload: MaritimeMapPayload): Promise<void> {
   for (let i = 0; i < payload.vessels.length; i++) {
     await upsertVessel(payload.vessels[i]);
     await upsertPosition(payload.positions[i]);
-    if (payload.routes[i]) {
-      await upsertRoute(payload.routes[i]);
-    }
+    const route = payload.routes.find(r => r.vessel_id === payload.vessels[i].id);
+    if (route) await upsertRoute(route);
   }
 }
 
@@ -302,6 +306,10 @@ export async function fetchVesselPositionsCached(
   companyId: string,
   imos: string[]
 ): Promise<MaritimePositionsResult> {
+  if (imos.length === 0) {
+    return { payload: { vessels: [], positions: [], routes: [] }, cacheStatus: 'miss' };
+  }
+
   const cacheKey = `maritime:positions:top:${topProjectIdDataAreaId}`;
   const ttl = parsePositiveInt(env.maritimeCachePositionsTtlSecondsRaw, 3600);
 
@@ -312,14 +320,15 @@ export async function fetchVesselPositionsCached(
   }
 
   // Step 2 — DB freshness check
-  const dbRows = await readFreshFromDb(companyId);
-  const dbImos = new Set(dbRows.map((r) => r.imo));
-  const allCovered = imos.length > 0 && imos.every((imo) => dbImos.has(imo));
-
-  if (allCovered) {
-    const payload = dbRowsToPayload(dbRows);
-    await writeJsonCache(cacheKey, payload, ttl);
-    return { payload, cacheStatus: 'db-hit' };
+  let dbResult: { payload: MaritimeMapPayload; cacheStatus: 'db-hit' } | null = null;
+  try {
+    dbResult = await readFreshFromDb(companyId, imos);
+  } catch (dbErr) {
+    console.warn('[maritime] DB freshness check failed, falling through to Datadocked:', dbErr instanceof Error ? dbErr.message : String(dbErr));
+  }
+  if (dbResult) {
+    await writeJsonCache(cacheKey, dbResult.payload, ttl);
+    return { payload: dbResult.payload, cacheStatus: 'db-hit' };
   }
 
   // Step 3 — Datadocked fetch
@@ -339,8 +348,11 @@ export async function fetchVesselPositionsCached(
   const payload: MaritimeMapPayload = { vessels, positions, routes };
 
   // Persist to DB then write Redis
-  await persistToDb(payload);
+  try {
+    await persistToDb(payload);
+  } catch (persistErr) {
+    console.warn('[maritime] DB persist failed (cache will still be populated):', persistErr instanceof Error ? persistErr.message : String(persistErr));
+  }
   await writeJsonCache(cacheKey, payload, ttl);
-
   return { payload, cacheStatus: 'miss' };
 }
