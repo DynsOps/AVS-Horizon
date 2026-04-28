@@ -57,6 +57,7 @@ export const assertEnv = (): void => {
   if (env.externalIdIssuers.length === 0) throw new Error('Missing EXTERNAL_ID_ISSUERS');
   if (!env.sqlServer) throw new Error('Missing SQL_SERVER');
   if (!env.sqlDatabase) throw new Error('Missing SQL_DATABASE');
+  if (!env.datadockedApiKey) throw new Error('DATADOCKED_API_KEY is required but not set.');
 };
 
 export const assertExternalIdEnv = (): void => {

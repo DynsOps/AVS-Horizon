@@ -80,6 +80,10 @@ async function fetchBatch(imos: string[]): Promise<DatadockedResult[]> {
       throw new MaritimeApiError('Invalid response from Datadocked', 502);
     }
 
+    if (payload.failed > 0) {
+      console.warn(`[maritime] Datadocked: ${payload.failed} of ${payload.total_requested} vessels not found`);
+    }
+
     return payload.results ?? [];
   } catch (error) {
     if (error instanceof MaritimeApiError) throw error;
@@ -94,7 +98,17 @@ async function fetchBatch(imos: string[]): Promise<DatadockedResult[]> {
 }
 
 export async function fetchDatadockedPositions(imos: string[]): Promise<DatadockedResult[]> {
+  if (imos.length === 0) return [];
   const batches = chunk(imos, 50);
-  const results = await Promise.all(batches.map((batch) => fetchBatch(batch)));
-  return results.flat();
+  const settled = await Promise.allSettled(batches.map((batch) => fetchBatch(batch)));
+  const results: DatadockedResult[] = [];
+  for (const outcome of settled) {
+    if (outcome.status === 'fulfilled') {
+      results.push(...outcome.value);
+    } else {
+      // Log failed batch but continue with available results
+      console.warn('[maritime] Datadocked batch failed:', outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason));
+    }
+  }
+  return results;
 }
