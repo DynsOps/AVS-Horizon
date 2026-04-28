@@ -22,11 +22,11 @@ export interface MappedVessel {
 export interface MappedPosition {
   id: string;
   vessel_id: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   speed: number | null;
-  course: number;
-  heading: number;
+  course: number | null;
+  heading: number | null;
   nav_status: string;
   destination: string;
   eta: Date | null;
@@ -84,11 +84,11 @@ function mapResult(result: DatadockedResult, companyId: string): {
   const position: MappedPosition = {
     id: `pos-${result.imo}`,
     vessel_id: vesselId,
-    lat: parseFloat(result.latitude),
-    lng: parseFloat(result.longitude),
+    lat: safeFloat(result.latitude),
+    lng: safeFloat(result.longitude),
     speed: speed,
-    course: parseFloat(result.course),
-    heading: parseFloat(result.heading),
+    course: safeFloat(result.course),
+    heading: safeFloat(result.heading),
     nav_status: result.navigationalStatus,
     destination: result.destination,
     eta: result.etaUtc ? new Date(result.etaUtc) : null,
@@ -114,11 +114,11 @@ function mapResult(result: DatadockedResult, companyId: string): {
 interface DbPositionRow {
   vessel_id: string;
   fetched_at: Date;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   speed: number | null;
-  course: number;
-  heading: number;
+  course: number | null;
+  heading: number | null;
   nav_status: string;
   destination: string;
   eta: Date | null;
@@ -128,6 +128,7 @@ interface DbPositionRow {
   type: string;
   flag_country: string;
   vessel_status: string;
+  company_id: string;
   departure_port: string | null;
   arrival_port: string | null;
   departure_date: Date | null;
@@ -138,7 +139,7 @@ interface DbPositionRow {
 const READ_POSITIONS_SQL = `
 SELECT p.vessel_id, p.fetched_at, p.lat, p.lng, p.speed, p.course, p.heading,
        p.nav_status, p.destination, p.eta,
-       v.id, v.name, v.imo, v.type, v.flag_country, v.vessel_status,
+       v.id, v.name, v.imo, v.type, v.flag_country, v.vessel_status, v.company_id,
        vr.departure_port, vr.arrival_port, vr.departure_date, vr.arrival_date, vr.status AS route_status
 FROM dbo.vessel_positions p
 JOIN dbo.vessels v ON v.id = p.vessel_id
@@ -160,7 +161,7 @@ function dbRowsToPayload(rows: DbPositionRow[]): MaritimeMapPayload {
   for (const row of rows) {
     vessels.push({
       id: row.id,
-      company_id: '', // company_id not selected in query — placeholder; caller knows it
+      company_id: row.company_id,
       name: row.name,
       imo: row.imo,
       type: row.type,
