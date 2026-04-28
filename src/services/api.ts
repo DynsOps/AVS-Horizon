@@ -1742,68 +1742,53 @@ export const api = {
     },
   },
   maritime: {
-    getVessels: async (companyId?: string): Promise<Vessel[]> => {
-      ensureMockAllowed('Maritime vessels');
-      await delay(300);
-      if (companyId) return byCompanyScope(mockVessels, companyId);
-      return [...mockVessels];
+    // Single request returns vessels + positions + routes (from Datadocked via 3-level cache)
+    getMapPayload: (): Promise<{ vessels: Vessel[]; positions: VesselPosition[]; routes: VesselRoute[] }> =>
+      callFunctionApi('api/customer/maritime/positions'),
+
+    // Fleet-wide operations (from Fabric, currently stub returning [])
+    getOperations: (): Promise<VesselOperation[]> =>
+      callFunctionApi<{ operations: VesselOperation[] }>('api/customer/maritime/operations')
+        .then(r => r.operations),
+
+    // --- Granular helpers used by MapWidget, MaritimeMap, VesselDrawer, MaritimeOperationDetail ---
+    // These delegate to getMapPayload so all data comes from the same real endpoint.
+    getVessels: async (): Promise<Vessel[]> => {
+      const { vessels } = await callFunctionApi<{ vessels: Vessel[]; positions: VesselPosition[]; routes: VesselRoute[] }>('api/customer/maritime/positions');
+      return vessels;
     },
-    getVessel: async (id: string): Promise<Vessel> => {
-      ensureMockAllowed('Maritime vessel');
-      await delay(200);
-      const vessel = mockVessels.find((v) => v.id === id);
-      if (!vessel) throw new Error('Vessel not found');
-      return { ...vessel };
-    },
-    createVessel: async (vessel: Omit<Vessel, 'id'>): Promise<Vessel> => {
-      ensureMockAllowed('Create vessel');
-      await delay(400);
-      const newVessel: Vessel = { ...vessel, id: `V-${Date.now().toString().slice(-4)}` };
-      mockVessels.push(newVessel);
-      persistLocalDb();
-      return newVessel;
-    },
-    updateVessel: async (id: string, updates: Partial<Vessel>): Promise<Vessel> => {
-      ensureMockAllowed('Update vessel');
-      await delay(300);
-      const index = mockVessels.findIndex((v) => v.id === id);
-      if (index === -1) throw new Error('Vessel not found');
-      mockVessels[index] = { ...mockVessels[index], ...updates };
-      persistLocalDb();
-      return mockVessels[index];
-    },
-    deleteVessel: async (id: string): Promise<void> => {
-      ensureMockAllowed('Delete vessel');
-      await delay(300);
-      mockVessels = mockVessels.filter((v) => v.id !== id);
-      mockVesselPositions = mockVesselPositions.filter((p) => p.vesselId !== id);
-      mockVesselRoutes = mockVesselRoutes.filter((r) => r.vesselId !== id);
-      mockVesselOperations = mockVesselOperations.filter((o) => o.vesselId !== id);
-      persistLocalDb();
-    },
-    getVesselPositions: async (companyId?: string): Promise<VesselPosition[]> => {
-      ensureMockAllowed('Vessel positions');
-      await delay(250);
-      if (companyId) {
-        const companyVesselIds = new Set(mockVessels.filter((v) => v.companyId === companyId).map((v) => v.id));
-        return mockVesselPositions.filter((p) => companyVesselIds.has(p.vesselId));
-      }
-      return [...mockVesselPositions];
-    },
-    getVesselPosition: async (vesselId: string): Promise<VesselPosition | null> => {
-      ensureMockAllowed('Vessel position');
-      await delay(150);
-      return mockVesselPositions.find((p) => p.vesselId === vesselId) || null;
+    getVesselPositions: async (): Promise<VesselPosition[]> => {
+      const { positions } = await callFunctionApi<{ vessels: Vessel[]; positions: VesselPosition[]; routes: VesselRoute[] }>('api/customer/maritime/positions');
+      return positions;
     },
     getVesselRoutes: async (vesselId: string): Promise<VesselRoute[]> => {
-      ensureMockAllowed('Vessel routes');
-      await delay(250);
-      return mockVesselRoutes.filter((r) => r.vesselId === vesselId).sort((a, b) => b.departureDate.localeCompare(a.departureDate));
+      const { routes } = await callFunctionApi<{ vessels: Vessel[]; positions: VesselPosition[]; routes: VesselRoute[] }>('api/customer/maritime/positions');
+      return routes.filter(r => r.vesselId === vesselId).sort((a, b) => b.departureDate.localeCompare(a.departureDate));
     },
     getVesselOperations: async (vesselId: string): Promise<VesselOperation[]> => {
-      ensureMockAllowed('Vessel operations');
-      await delay(300);
-      return mockVesselOperations.filter((o) => o.vesselId === vesselId).sort((a, b) => b.operationDate.localeCompare(a.operationDate));
+      const ops = await callFunctionApi<{ operations: VesselOperation[] }>('api/customer/maritime/operations').then(r => r.operations);
+      return ops.filter(o => o.vesselId === vesselId).sort((a, b) => b.operationDate.localeCompare(a.operationDate));
+    },
+    getVesselPosition: async (vesselId: string): Promise<VesselPosition | null> => {
+      const { positions } = await callFunctionApi<{ vessels: Vessel[]; positions: VesselPosition[]; routes: VesselRoute[] }>('api/customer/maritime/positions');
+      return positions.find(p => p.vesselId === vesselId) ?? null;
+    },
+    getVessel: async (id: string): Promise<Vessel> => {
+      const { vessels } = await callFunctionApi<{ vessels: Vessel[]; positions: VesselPosition[]; routes: VesselRoute[] }>('api/customer/maritime/positions');
+      const vessel = vessels.find(v => v.id === id);
+      if (!vessel) throw new Error(`Vessel not found: ${id}`);
+      return vessel;
+    },
+
+    // --- Admin CRUD — used by VesselManagement.tsx; real endpoints not yet built ---
+    createVessel: (_vessel: Omit<Vessel, 'id'>): Promise<Vessel> => {
+      throw new Error('api.maritime.createVessel: admin endpoint not yet implemented');
+    },
+    updateVessel: (_id: string, _updates: Partial<Vessel>): Promise<Vessel> => {
+      throw new Error('api.maritime.updateVessel: admin endpoint not yet implemented');
+    },
+    deleteVessel: (_id: string): Promise<void> => {
+      throw new Error('api.maritime.deleteVessel: admin endpoint not yet implemented');
     },
   },
   powerbi: {
