@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { User, Permission, UserRole, Company, AnalysisReport, ProvisioningSource, BootstrapCredentials } from '../../types';
 import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
@@ -758,6 +758,16 @@ const UserForm = ({
                 </div>
                 )}
 
+                {(isCompanyAdminActor || (isSupAdminActor && formData.role !== 'supadmin')) && user?.id && (
+                  <UserTemplateSelector userId={user.id} scope={isSupAdminActor ? 'global' : undefined} />
+                )}
+                {(isCompanyAdminActor || (isSupAdminActor && formData.role !== 'supadmin')) && !user?.id && (
+                  <div className="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    Template can be assigned after the user is created.
+                  </div>
+                )}
+
+                {!isCompanyAdminActor && (<>
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">General Permissions</label>
                     {isSupAdminActor && (
@@ -819,40 +829,14 @@ const UserForm = ({
                     </div>
                 </div>
 
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">BI Reports Access</label>
-                    <div className="grid grid-cols-1 gap-2">
-                        {biReportEntries.map((entry) => {
-                            const isLocked = isPermissionLocked(entry.permission);
-                            const selected = (formData.permissions || []).includes(entry.permission);
-                            return (
-                                <label
-                                    key={entry.id}
-                                    className={`flex items-center justify-between rounded border px-3 py-2 text-xs ${
-                                        selected
-                                            ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
-                                            : 'border-gray-200 bg-gray-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
-                                    } ${isLocked ? 'opacity-60' : ''}`}
-                                    title={isLocked ? 'This BI report permission is locked for current actor.' : entry.permission}
-                                >
-                                    <span className="mr-3">
-                                        <span className="block font-semibold">{entry.name}</span>
-                                        <span className="text-[10px] opacity-80">{entry.permission}</span>
-                                    </span>
-                                    <input
-                                        type="checkbox"
-                                        checked={selected}
-                                        disabled={isLocked}
-                                        onChange={() => !isLocked && togglePermission(entry.permission)}
-                                    />
-                                </label>
-                            );
-                        })}
-                        {biReportEntries.length === 0 && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400">No BI reports configured yet.</p>
-                        )}
-                    </div>
-                </div>
+                </>)}
+                {user?.id && (formData.role === 'user' || formData.role === 'admin') && (
+                  <ReportAccessSelector
+                    userId={user.id}
+                    actorPermissions={actorPermissions}
+                    isSupAdmin={isSupAdminActor}
+                  />
+                )}
             </div>
 
             <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-800">
@@ -898,4 +882,138 @@ const UserForm = ({
 
         </>
     );
+};
+
+const ReportAccessSelector: React.FC<{ userId: string; actorPermissions: string[]; isSupAdmin: boolean }> = ({ userId, actorPermissions, isSupAdmin }) => {
+  const [reports, setReports] = useState<{ id: string; name: string; permissionKey: string }[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState<string | null>(null);
+  const { addToast } = useUIStore();
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [allReports, currentIds] = await Promise.all([
+          api.admin.getAnalysisReports(),
+          api.admin.getUserReports(userId),
+        ]);
+        const visible = isSupAdmin
+          ? allReports
+          : allReports.filter((r) => actorPermissions.includes(r.permissionKey));
+        setReports(visible);
+        setSelectedIds(new Set(currentIds));
+      } catch { /* non-critical */ }
+    })();
+  }, [userId, isSupAdmin, actorPermissions]);
+
+  const toggle = async (reportId: string, permissionKey: string) => {
+    if (!isSupAdmin && !actorPermissions.includes(permissionKey)) return;
+    const next = new Set(selectedIds);
+    if (next.has(reportId)) next.delete(reportId);
+    else next.add(reportId);
+    setSelectedIds(next);
+    setSaving(reportId);
+    try {
+      await api.admin.setUserReports(userId, Array.from(next));
+    } catch (error) {
+      setSelectedIds(selectedIds);
+      addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to update report access.', type: 'error' });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  if (reports.length === 0) return (
+    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+      <label className="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-2">BI Reports Access</label>
+      <p className="text-xs text-slate-500 dark:text-slate-400">No BI reports configured yet.</p>
+    </div>
+  );
+
+  return (
+    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+      <label className="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-2">BI Reports Access</label>
+      <div className="space-y-2">
+        {reports.map((report) => {
+          const canToggle = isSupAdmin || actorPermissions.includes(report.permissionKey);
+          const checked = selectedIds.has(report.id);
+          const isSaving = saving === report.id;
+          return (
+            <label
+              key={report.id}
+              className={`flex items-center justify-between rounded border px-3 py-2 text-xs transition-colors ${
+                checked
+                  ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
+                  : 'border-gray-200 bg-gray-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+              } ${!canToggle ? 'opacity-50' : 'cursor-pointer'}`}
+              title={canToggle ? report.permissionKey : 'You do not have access to this report.'}
+            >
+              <span>
+                <span className="block font-semibold">{report.name}</span>
+                <span className="text-[10px] opacity-70">{report.permissionKey}</span>
+              </span>
+              {isSaving
+                ? <span className="text-[10px] text-slate-400">saving…</span>
+                : <input type="checkbox" checked={checked} disabled={!canToggle} onChange={() => void toggle(report.id, report.permissionKey)} />
+              }
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const UserTemplateSelector: React.FC<{ userId: string; scope?: string }> = ({ userId, scope }) => {
+  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
+  const [assignedId, setAssignedId] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
+  const { addToast } = useUIStore();
+
+  const load = useCallback(async () => {
+    try {
+      const [tpls, currentId] = await Promise.all([
+        api.admin.getTemplates(scope),
+        api.admin.getUserTemplateId(userId),
+      ]);
+      setTemplates(tpls);
+      if (currentId) setAssignedId(currentId);
+    } catch { /* non-critical */ }
+  }, [userId, scope]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const assign = async (templateId: string) => {
+    setIsSaving(true);
+    try {
+      await api.admin.assignUserTemplate(userId, templateId);
+      setAssignedId(templateId);
+      addToast({ title: 'Template Assigned', message: 'User template updated.', type: 'success' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to assign template.';
+      addToast({ title: 'Error', message, type: 'error' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+      <label className="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-2">Permission Template</label>
+      <select
+        value={assignedId}
+        onChange={(e) => { void assign(e.target.value); }}
+        disabled={isSaving || !templates.length}
+        className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 disabled:opacity-60"
+      >
+        <option value="">— No template assigned —</option>
+        {templates.map((t) => (
+          <option key={t.id} value={t.id}>{t.name}</option>
+        ))}
+      </select>
+      {!templates.length && (
+        <p className="mt-1 text-xs text-slate-500">No user templates available. Create one in User Templates.</p>
+      )}
+    </div>
+  );
 };

@@ -1,6 +1,9 @@
 // AUTO-GENERATED FILE. DO NOT EDIT.
 // Run `npm run build` (or `npm run prebuild`) to regenerate imports.
 
+import { syncPermissions } from './lib/permissionSync';
+void syncPermissions().catch((e) => console.error('[startup] syncPermissions failed:', e));
+
 import './functions/adminCompaniesCreate';
 import './functions/adminCompaniesDelete';
 import './functions/adminCompaniesList';
@@ -27,14 +30,22 @@ import './functions/authMe';
 import './functions/authUpdateProfile';
 import './functions/authUpdateProfilePassword';
 import './functions/companyChains';
+import './functions/companyTemplateAssign';
 import './functions/customerContractedVessels';
 import './functions/customerFleetMandayReport';
 import './functions/groupProjtablesLookup';
 import './functions/notificationsDelete';
 import './functions/notificationsList';
 import './functions/notificationsMarkRead';
+import './functions/permissionsCatalog';
 import './functions/powerbiEmbedConfig';
 import './functions/supportTicketsCreate';
 import './functions/supportTicketsMyList';
 import './functions/supportTicketsReplyCreate';
 import './functions/systemHealthGet';
+import './functions/templatesCreate';
+import './functions/templatesDelete';
+import './functions/templatesList';
+import './functions/templatesUpdate';
+import './functions/userReportAccess';
+import './functions/userTemplateAssign';

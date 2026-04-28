@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
 import { api } from '../../services/api';
@@ -289,6 +289,60 @@ export const EntityManagement: React.FC = () => {
   );
 };
 
+const CompanyTemplateSection: React.FC<{ companyId: string }> = ({ companyId }) => {
+  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
+  const [assignedId, setAssignedId] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
+  const { addToast } = useUIStore();
+
+  const load = useCallback(async () => {
+    try {
+      const [tpls, currentId] = await Promise.all([
+        api.admin.getTemplates('global'),
+        api.admin.getCompanyTemplateId(companyId),
+      ]);
+      setTemplates(tpls);
+      if (currentId) setAssignedId(currentId);
+    } catch { /* non-critical */ }
+  }, [companyId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const assign = async (templateId: string) => {
+    setIsSaving(true);
+    try {
+      await api.admin.assignCompanyTemplate(companyId, templateId);
+      setAssignedId(templateId);
+      addToast({ title: 'Template Assigned', message: 'Company template updated.', type: 'success' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to assign template.';
+      addToast({ title: 'Error', message, type: 'error' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Permission Template</p>
+      <select
+        value={assignedId}
+        onChange={(e) => { void assign(e.target.value); }}
+        disabled={isSaving || !templates.length}
+        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 disabled:opacity-60"
+      >
+        <option value="">— No template assigned —</option>
+        {templates.map((t) => (
+          <option key={t.id} value={t.id}>{t.name}</option>
+        ))}
+      </select>
+      {!templates.length && (
+        <p className="mt-1 text-xs text-slate-500">No global templates available. Create one in Template Management.</p>
+      )}
+    </div>
+  );
+};
+
 type EntityFormProps = {
   company?: Company;
   onSave: (data: Partial<Company> | CreateEntityPayload) => Promise<void>;
@@ -518,6 +572,8 @@ const EntityForm: React.FC<EntityFormProps> = ({ company, onSave, onCancel }) =>
             </select>
           </label>
         </div>
+
+        {company && <CompanyTemplateSection companyId={company.id} />}
 
         {!company && (
           <div className="rounded-xl border border-blue-200/70 bg-blue-50/70 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">

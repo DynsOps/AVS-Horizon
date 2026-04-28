@@ -12,6 +12,7 @@ import {
   ProvisioningSource,
   SessionContext,
 } from './identity';
+import { resolveEffectivePermissions } from './resolvePermissions';
 
 type DbUserRow = {
   id: string;
@@ -252,15 +253,7 @@ const getTokenClaims = async (token: string): Promise<TokenValidationResult> => 
 
   throw lastError || new Error('Token verification failed.');
 };
-const getPermissionsForUser = async (userId: string): Promise<string[]> => {
-  const permissionsResult = await runScopedQuery<{ permission: string }>(
-    AUTH_INTERNAL_CONTEXT,
-    'SELECT permission FROM dbo.user_permissions WHERE user_id = @userId',
-    { userId }
-  );
-
-  return permissionsResult.recordset.map((p) => p.permission);
-};
+// Permissions are now resolved from templates — see resolvePermissions.ts
 
 const getCompanyIdsForAdmin = async (userId: string): Promise<string[]> => {
   const result = await runScopedQuery<{ company_id: string }>(
@@ -284,8 +277,9 @@ const getCompanyContext = async (companyId: string): Promise<CompanyContext | nu
 
 const hydrateUser = async (row?: DbUserRow | null): Promise<AuthUser | null> => {
   if (!row || row.status !== 'Active') return null;
+  // Resolve permissions with null activeCompanyId — will be re-resolved with active company in authenticateRequest
   const [permissions, companyIds] = await Promise.all([
-    getPermissionsForUser(row.id),
+    resolveEffectivePermissions(row.id, row.role, null),
     (row.role === 'admin' || row.role === 'user') ? getCompanyIdsForAdmin(row.id).then((ids) => ids.length ? ids : (row.companyId ? [row.companyId] : [])) : Promise.resolve([]),
   ]);
   return {
@@ -465,5 +459,7 @@ export const authenticateRequest = async (request: HttpRequest): Promise<AuthUse
   }
 
   const active = await resolveActiveCompany(user, activeCompanyHeader);
-  return { ...user, ...active };
+  // Re-resolve permissions with the correct active company (critical for multi-company admins)
+  const permissions = await resolveEffectivePermissions(user.id, user.role, active.activeCompanyId ?? null);
+  return { ...user, ...active, permissions };
 };

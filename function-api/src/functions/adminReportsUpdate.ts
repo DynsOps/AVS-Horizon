@@ -112,17 +112,38 @@ export async function adminReportsUpdate(request: HttpRequest, context: Invocati
       }
     );
 
+    // Sync permission key change in permissions catalog
     if (target.permissionKey !== nextPermissionKey) {
+      // Remove old key, insert new key
+      await runQuery(`DELETE FROM dbo.permissions WHERE [key] = @key AND is_dynamic = 1`, { key: target.permissionKey });
       await runQuery(
-        `
-        UPDATE dbo.user_permissions
-        SET permission = @nextPermission
-        WHERE permission = @previousPermission
-        `,
-        {
-          previousPermission: target.permissionKey,
-          nextPermission: nextPermissionKey,
-        }
+        `MERGE dbo.permissions AS target
+         USING (SELECT @key AS [key]) AS source ON target.[key] = source.[key]
+         WHEN NOT MATCHED THEN
+           INSERT ([key], label, group_name, kind, is_dynamic, is_active)
+           VALUES (@key, @label, N'Raporlar', 'report', 1, 1);`,
+        { key: nextPermissionKey, label: name }
+      );
+      // Update template JSONs that reference the old key
+      const templates = await runQuery<{ id: string; permissions: string }>(
+        `SELECT id, permissions FROM dbo.entitlement_templates WHERE permissions LIKE @likeKey`,
+        { likeKey: `%${target.permissionKey}%` }
+      );
+      for (const tpl of templates.recordset) {
+        try {
+          const perms: string[] = JSON.parse(tpl.permissions);
+          const updated = perms.map((p) => p === target.permissionKey ? nextPermissionKey : p);
+          await runQuery(
+            `UPDATE dbo.entitlement_templates SET permissions = @permissions, updated_at = SYSUTCDATETIME() WHERE id = @id`,
+            { id: tpl.id, permissions: JSON.stringify(updated) }
+          );
+        } catch { /* skip malformed */ }
+      }
+    } else {
+      // Same key — just sync the label
+      await runQuery(
+        `UPDATE dbo.permissions SET label = @label, updated_at = SYSUTCDATETIME() WHERE [key] = @key AND is_dynamic = 1`,
+        { key: nextPermissionKey, label: name }
       );
     }
 

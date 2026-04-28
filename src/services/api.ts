@@ -1308,6 +1308,65 @@ export const api = {
       }));
       persistLocalDb();
     },
+    getPermissionsCatalog: async (): Promise<Record<string, { key: string; label: string; kind: string }[]>> => {
+      const payload = await callFunctionApi<{ groups: Record<string, { key: string; label: string; kind: string }[]> }>('api/identity/permissions/catalog');
+      return payload.groups;
+    },
+    getTemplates: async (scope?: 'global' | 'company', companyId?: string): Promise<{ id: string; name: string; description: string | null; scope: string; companyId: string | null; permissions: string[]; isActive: boolean }[]> => {
+      const params = new URLSearchParams();
+      if (scope) params.set('scope', scope);
+      if (companyId) params.set('company_id', companyId);
+      const qs = params.toString();
+      const payload = await callFunctionApi<{ templates: { id: string; name: string; description: string | null; scope: string; companyId: string | null; permissions: string[]; isActive: boolean }[] }>(`api/identity/templates${qs ? `?${qs}` : ''}`);
+      return payload.templates;
+    },
+    createTemplate: async (body: { name: string; description?: string; scope: 'global' | 'company'; companyId?: string; permissions: string[] }): Promise<{ id: string; name: string; description: string | null; scope: string; companyId: string | null; permissions: string[]; isActive: boolean }> => {
+      const payload = await callFunctionApi<{ template: { id: string; name: string; description: string | null; scope: string; companyId: string | null; permissions: string[]; isActive: boolean } }>('api/identity/templates', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return payload.template;
+    },
+    updateTemplate: async (id: string, body: { name?: string; description?: string; permissions?: string[] }): Promise<{ id: string; name: string; description: string | null; scope: string; companyId: string | null; permissions: string[]; isActive: boolean }> => {
+      const payload = await callFunctionApi<{ template: { id: string; name: string; description: string | null; scope: string; companyId: string | null; permissions: string[]; isActive: boolean } }>(`api/identity/templates/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+      return payload.template;
+    },
+    deleteTemplate: async (id: string): Promise<void> => {
+      await callFunctionApi<{ success: boolean }>(`api/identity/templates/${id}`, { method: 'DELETE' });
+    },
+    getUserTemplateId: async (userId: string): Promise<string | null> => {
+      const payload = await callFunctionApi<{ templateId: string | null }>(`api/identity/users/${userId}/template`);
+      return payload.templateId;
+    },
+    assignUserTemplate: async (userId: string, templateId: string): Promise<void> => {
+      await callFunctionApi<{ success: boolean }>(`api/identity/users/${userId}/template`, {
+        method: 'PUT',
+        body: JSON.stringify({ templateId }),
+      });
+    },
+    getCompanyTemplateId: async (companyId: string): Promise<string | null> => {
+      const payload = await callFunctionApi<{ templateId: string | null }>(`api/identity/companies/${companyId}/template`);
+      return payload.templateId;
+    },
+    assignCompanyTemplate: async (companyId: string, templateId: string): Promise<void> => {
+      await callFunctionApi<{ success: boolean }>(`api/identity/companies/${companyId}/template`, {
+        method: 'PUT',
+        body: JSON.stringify({ templateId }),
+      });
+    },
+    getUserReports: async (userId: string): Promise<string[]> => {
+      const payload = await callFunctionApi<{ reportIds: string[] }>(`api/identity/users/${userId}/reports`);
+      return payload.reportIds;
+    },
+    setUserReports: async (userId: string, reportIds: string[]): Promise<void> => {
+      await callFunctionApi<{ success: boolean }>(`api/identity/users/${userId}/reports`, {
+        method: 'PUT',
+        body: JSON.stringify({ reportIds }),
+      });
+    },
     getSystemHealth: async (): Promise<SystemHealthPayload> => {
       if (shouldUseFunctionApi()) {
         return callFunctionApi<SystemHealthPayload>('api/system-health');
