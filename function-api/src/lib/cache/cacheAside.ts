@@ -1,5 +1,7 @@
 import { readJsonCache, writeJsonCache } from './redis';
 
+// 'db-hit' is produced by the maritime positions orchestrator when Redis misses
+// but the DB has fresh data. It cannot be returned by readThroughJsonCache.
 export type CacheStatus = 'hit' | 'miss' | 'bypass' | 'db-hit';
 
 type CacheAsideOptions<T> = {
