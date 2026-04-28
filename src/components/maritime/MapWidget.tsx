@@ -93,7 +93,7 @@ export const MapWidget: React.FC = () => {
           </div>
         </div>
         <button
-          onClick={() => navigate('/admin/maritime-map')}
+          onClick={() => navigate('/customer/maritime-map')}
           className="inline-flex items-center gap-1 rounded-lg border border-blue-500/40 bg-blue-500/10 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-500/20 dark:text-blue-300"
         >
           Open Full Map

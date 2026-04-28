@@ -183,7 +183,7 @@ export const VesselDrawer: React.FC<Props> = ({ vesselId }) => {
       {/* View All Operations */}
       {operations.length > 0 && (
         <button
-          onClick={() => navigate(`/admin/maritime-map/operations/${vesselId}`)}
+          onClick={() => navigate(`/customer/maritime-map/operations/${vesselId}`)}
           className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
         >
           View All Operations ({operations.length})

@@ -110,7 +110,7 @@ export const MaritimeOperationDetail: React.FC = () => {
       {/* Back + Header */}
       <div>
         <button
-          onClick={() => navigate('/admin/maritime-map')}
+          onClick={() => navigate('/customer/maritime-map')}
           className="mb-3 flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
         >
           <ArrowLeft size={14} /> Back to Maritime Map
