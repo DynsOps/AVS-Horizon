@@ -4,9 +4,9 @@
 IF OBJECT_ID('dbo.user_report_access', 'U') IS NULL
 BEGIN
   CREATE TABLE dbo.user_report_access (
-    user_id             NVARCHAR(128) NOT NULL,
+    user_id             NVARCHAR(64)  NOT NULL,
     report_id           NVARCHAR(32)  NOT NULL,
-    assigned_by_user_id NVARCHAR(128) NOT NULL,
+    assigned_by_user_id NVARCHAR(64)  NOT NULL,
     assigned_at         DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_user_report_access PRIMARY KEY (user_id, report_id),
     CONSTRAINT FK_ura_user   FOREIGN KEY (user_id)   REFERENCES dbo.users(id),
