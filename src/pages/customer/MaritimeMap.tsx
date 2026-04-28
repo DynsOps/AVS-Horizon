@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, useMap, CircleMarker, Popup, Tooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, CircleMarker, Marker, Popup, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { api } from '../../services/api';
 import { Vessel, VesselPosition, VesselRoute, VesselOperation } from '../../types';
@@ -218,14 +218,18 @@ export const MaritimeMap: React.FC = () => {
 
   useEffect(() => {
     const load = async () => {
-      const [mapPayload, ops] = await Promise.all([
-        api.maritime.getMapPayload(),
-        api.maritime.getOperations(),
-      ]);
-      setVessels(mapPayload.vessels);
-      setPositions(mapPayload.positions);
-      setRoutes(mapPayload.routes);
-      setOperations(ops);
+      try {
+        const [mapPayload, ops] = await Promise.all([
+          api.maritime.getMapPayload(),
+          api.maritime.getOperations(),
+        ]);
+        setVessels(mapPayload.vessels);
+        setPositions(mapPayload.positions);
+        setRoutes(mapPayload.routes);
+        setOperations(ops);
+      } catch (err) {
+        console.error('[MaritimeMap] Failed to load maritime data:', err instanceof Error ? err.message : String(err));
+      }
     };
     void load();
   }, []);
@@ -280,16 +284,11 @@ export const MaritimeMap: React.FC = () => {
   const filteredVesselIds = useMemo(() => new Set(filteredVessels.map((v) => v.id)), [filteredVessels]);
 
   const singleFilteredVesselId = useMemo(() => {
-    if (selectedVesselIds && selectedVesselIds.size === 1) {
-      return [...selectedVesselIds][0];
+    if (filteredVesselIds.size === 1) {
+      return [...filteredVesselIds][0];
     }
     return null;
-  }, [selectedVesselIds]);
-
-  const numberedOperations = useMemo(() => {
-    if (!singleFilteredVesselId) return null;
-    return numberOperationsForVessel(operations, singleFilteredVesselId);
-  }, [singleFilteredVesselId, operations]);
+  }, [filteredVesselIds]);
 
   const vesselById = useMemo(() => new Map(vessels.map((v) => [v.id, v])), [vessels]);
 
@@ -355,6 +354,11 @@ export const MaritimeMap: React.FC = () => {
     () => operations.filter((op) => filteredVesselIds.has(op.vesselId)),
     [operations, filteredVesselIds],
   );
+
+  const numberedOperations = useMemo(() => {
+    if (!singleFilteredVesselId) return null;
+    return numberOperationsForVessel(filteredOperations, singleFilteredVesselId);
+  }, [singleFilteredVesselId, filteredOperations]);
 
   const operationPortMarkers = useMemo(
     () => getOperationPorts(filteredOperations, vesselById),
@@ -642,83 +646,91 @@ export const MaritimeMap: React.FC = () => {
             })}
 
           {showOperations &&
-            Array.from(operationPortMarkers.values()).map((portInfo) => (
-              <CircleMarker
-                key={portInfo.port}
-                center={portInfo.coords}
-                radius={8}
-                pathOptions={{ color: '#6366f1', fillColor: '#818cf8', fillOpacity: 0.6, weight: 2 }}
-              >
-                <Tooltip direction="top" offset={[0, -10]}>
-                  <div className="text-xs">
-                    <p className="font-semibold">{portInfo.port}</p>
-                    {singleFilteredVesselId && numberedOperations ? (
-                      <>
-                        {numberedOperations
-                          .filter((op) => op.port === portInfo.port)
-                          .map((op) => (
-                            <p key={op.id}>
-                              {op.sequence}. {op.operationType} — {new Date(op.operationDate).toLocaleDateString()}
-                            </p>
-                          ))}
-                      </>
-                    ) : (
-                      <p>{portInfo.count} operation{portInfo.count > 1 ? 's' : ''}</p>
-                    )}
-                  </div>
-                </Tooltip>
-                {singleFilteredVesselId && numberedOperations && (() => {
-                  const opsAtPort = numberedOperations.filter((op) => op.port === portInfo.port);
-                  if (opsAtPort.length === 0) return null;
-                  const label = opsAtPort.length === 1
-                    ? `${opsAtPort[0].sequence}`
-                    : `${opsAtPort[0].sequence}+`;
-                  return (
-                    <Tooltip permanent direction="center" className="!bg-transparent !border-0 !shadow-none !p-0">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">
-                        {label}
-                      </span>
+            Array.from(operationPortMarkers.values()).map((portInfo) => {
+              const opsAtPort = numberedOperations
+                ? numberedOperations.filter((op) => op.port === portInfo.port)
+                : [];
+              const badgeLabel = opsAtPort.length === 1
+                ? `${opsAtPort[0].sequence}`
+                : opsAtPort.length > 1
+                ? `${opsAtPort[0].sequence}+`
+                : null;
+
+              return (
+                <React.Fragment key={portInfo.port}>
+                  <CircleMarker
+                    center={portInfo.coords}
+                    radius={8}
+                    pathOptions={{ color: '#6366f1', fillColor: '#818cf8', fillOpacity: 0.6, weight: 2 }}
+                  >
+                    <Tooltip direction="top" offset={[0, -10]}>
+                      <div className="text-xs">
+                        <p className="font-semibold">{portInfo.port}</p>
+                        {singleFilteredVesselId && numberedOperations ? (
+                          <>
+                            {opsAtPort.map((op) => (
+                              <p key={op.id}>
+                                {op.sequence}. {op.operationType} — {new Date(op.operationDate).toLocaleDateString()}
+                              </p>
+                            ))}
+                          </>
+                        ) : (
+                          <p>{portInfo.count} operation{portInfo.count > 1 ? 's' : ''}</p>
+                        )}
+                      </div>
                     </Tooltip>
-                  );
-                })()}
-                <Popup maxWidth={360}>
-                  <div className="space-y-2 text-xs">
-                    <p className="text-sm font-semibold">{portInfo.port}</p>
-                    <p className="text-slate-500">
-                      {portInfo.count} operation{portInfo.count > 1 ? 's' : ''}
-                    </p>
-                    <div className="max-h-52 space-y-2 overflow-y-auto pr-1">
-                      {portInfo.operations.map(({ vesselName, operation }) => (
-                        <div key={operation.id} className="rounded border border-slate-200 p-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="font-semibold text-slate-800">{operation.operationType}</p>
-                            <p className="font-semibold text-slate-700">
-                              {formatAmount(operation.totalAmount, operation.currency)}
-                            </p>
-                          </div>
-                          <p className="text-slate-600">
-                            {vesselName} · {new Date(operation.operationDate).toLocaleDateString()}
-                          </p>
-                          {operation.items.length > 0 && (
-                            <div className="mt-1 space-y-0.5">
-                              {operation.items.slice(0, 4).map((item, idx) => (
-                                <p key={`${operation.id}-${item.name}-${idx}`} className="text-slate-500">
-                                  {item.name}: {item.quantity} {item.unit}
+                    <Popup maxWidth={360}>
+                      <div className="space-y-2 text-xs">
+                        <p className="text-sm font-semibold">{portInfo.port}</p>
+                        <p className="text-slate-500">
+                          {portInfo.count} operation{portInfo.count > 1 ? 's' : ''}
+                        </p>
+                        <div className="max-h-52 space-y-2 overflow-y-auto pr-1">
+                          {portInfo.operations.map(({ vesselName, operation }) => (
+                            <div key={operation.id} className="rounded border border-slate-200 p-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="font-semibold text-slate-800">{operation.operationType}</p>
+                                <p className="font-semibold text-slate-700">
+                                  {formatAmount(operation.totalAmount, operation.currency)}
                                 </p>
-                              ))}
-                              {operation.items.length > 4 && (
-                                <p className="text-slate-400">+{operation.items.length - 4} more item(s)</p>
+                              </div>
+                              <p className="text-slate-600">
+                                {vesselName} · {new Date(operation.operationDate).toLocaleDateString()}
+                              </p>
+                              {operation.items.length > 0 && (
+                                <div className="mt-1 space-y-0.5">
+                                  {operation.items.slice(0, 4).map((item, idx) => (
+                                    <p key={`${operation.id}-${item.name}-${idx}`} className="text-slate-500">
+                                      {item.name}: {item.quantity} {item.unit}
+                                    </p>
+                                  ))}
+                                  {operation.items.length > 4 && (
+                                    <p className="text-slate-400">+{operation.items.length - 4} more item(s)</p>
+                                  )}
+                                </div>
                               )}
+                              {operation.notes && <p className="mt-1 text-slate-500">Note: {operation.notes}</p>}
                             </div>
-                          )}
-                          {operation.notes && <p className="mt-1 text-slate-500">Note: {operation.notes}</p>}
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                </Popup>
-              </CircleMarker>
-            ))}
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                  {badgeLabel && (
+                    <Marker
+                      position={portInfo.coords}
+                      interactive={false}
+                      icon={L.divIcon({
+                        html: `<span style="display:flex;width:20px;height:20px;align-items:center;justify-content:center;border-radius:50%;background:#4f46e5;color:white;font-size:10px;font-weight:700">${badgeLabel}</span>`,
+                        className: '',
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10],
+                      })}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
         </MapContainer>
 
         {/* Loading overlay until header resolves the active company */}
