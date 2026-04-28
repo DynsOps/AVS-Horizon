@@ -33,6 +33,8 @@ import './functions/companyChains';
 import './functions/companyTemplateAssign';
 import './functions/customerContractedVessels';
 import './functions/customerFleetMandayReport';
+import './functions/customerMaritimeOperations';
+import './functions/customerMaritimePositions';
 import './functions/groupProjtablesLookup';
 import './functions/notificationsDelete';
 import './functions/notificationsList';
