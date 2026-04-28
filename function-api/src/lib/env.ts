@@ -1,3 +1,5 @@
+import { parsePositiveInt } from './fabric/utils';
+
 export const env = {
   externalIdTenantId: process.env.EXTERNAL_ID_TENANT_ID || '',
   externalIdClientId: process.env.EXTERNAL_ID_CLIENT_ID || '',
@@ -42,6 +44,11 @@ export const env = {
   fabricCacheContractedVesselsTtlSecondsRaw: process.env.FABRIC_CACHE_CONTRACTED_VESSELS_TTL_SECONDS || '86400',
   fabricCacheMergedMandaysTtlSecondsRaw: process.env.FABRIC_CACHE_MERGED_MANDAYS_TTL_SECONDS || '86400',
   fabricCacheProjInvoiceItemsTtlSecondsRaw: process.env.FABRIC_CACHE_PROJ_INVOICE_ITEMS_TTL_SECONDS || '3600',
+  datadockedApiKey: process.env.DATADOCKED_API_KEY ?? '',
+  datadockedBaseUrl: process.env.DATADOCKED_BASE_URL ?? 'https://api.datadocked.com',
+  datadockedTimeoutMs: parsePositiveInt(process.env.DATADOCKED_TIMEOUT_MS, 10_000),
+  maritimeCachePositionsTtlSeconds: parsePositiveInt(process.env.MARITIME_CACHE_POSITIONS_TTL_SECONDS, 3_600),
+  fabricCacheVesselOperationsTtlSeconds: parsePositiveInt(process.env.FABRIC_CACHE_VESSEL_OPERATIONS_TTL_SECONDS, 86_400),
 };
 
 export const assertEnv = (): void => {

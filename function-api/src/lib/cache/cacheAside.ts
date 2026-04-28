@@ -1,6 +1,6 @@
 import { readJsonCache, writeJsonCache } from './redis';
 
-export type CacheStatus = 'hit' | 'miss' | 'bypass';
+export type CacheStatus = 'hit' | 'miss' | 'bypass' | 'db-hit';
 
 type CacheAsideOptions<T> = {
   key: string;
