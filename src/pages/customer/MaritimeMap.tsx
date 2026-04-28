@@ -141,6 +141,16 @@ const getOperationPorts = (
   return map;
 };
 
+const numberOperationsForVessel = (
+  operations: VesselOperation[],
+  vesselId: string,
+): Array<VesselOperation & { sequence: number }> => {
+  return operations
+    .filter((op) => op.vesselId === vesselId)
+    .sort((a, b) => new Date(a.operationDate).getTime() - new Date(b.operationDate).getTime())
+    .map((op, index) => ({ ...op, sequence: index + 1 }));
+};
+
 const FitBoundsControl: React.FC<{ positions: [number, number][] }> = ({ positions }) => {
   const map = useMap();
   const fitted = useRef(false);
@@ -208,27 +218,14 @@ export const MaritimeMap: React.FC = () => {
 
   useEffect(() => {
     const load = async () => {
-      const [v, p] = await Promise.all([
-        api.maritime.getVessels(),
-        api.maritime.getVesselPositions(),
+      const [mapPayload, ops] = await Promise.all([
+        api.maritime.getMapPayload(),
+        api.maritime.getOperations(),
       ]);
-      setVessels(v);
-      setPositions(p);
-
-      const allRoutes: VesselRoute[] = [];
-      const allOps: VesselOperation[] = [];
-      await Promise.all(
-        v.map(async (vessel) => {
-          const [vesselRoutes, vesselOps] = await Promise.all([
-            api.maritime.getVesselRoutes(vessel.id),
-            api.maritime.getVesselOperations(vessel.id),
-          ]);
-          allRoutes.push(...vesselRoutes);
-          allOps.push(...vesselOps);
-        }),
-      );
-      setRoutes(allRoutes);
-      setOperations(allOps);
+      setVessels(mapPayload.vessels);
+      setPositions(mapPayload.positions);
+      setRoutes(mapPayload.routes);
+      setOperations(ops);
     };
     void load();
   }, []);
@@ -281,6 +278,19 @@ export const MaritimeMap: React.FC = () => {
   const clearVessels = () => setSelectedVesselIds(new Set());
 
   const filteredVesselIds = useMemo(() => new Set(filteredVessels.map((v) => v.id)), [filteredVessels]);
+
+  const singleFilteredVesselId = useMemo(() => {
+    if (selectedVesselIds && selectedVesselIds.size === 1) {
+      return [...selectedVesselIds][0];
+    }
+    return null;
+  }, [selectedVesselIds]);
+
+  const numberedOperations = useMemo(() => {
+    if (!singleFilteredVesselId) return null;
+    return numberOperationsForVessel(operations, singleFilteredVesselId);
+  }, [singleFilteredVesselId, operations]);
+
   const vesselById = useMemo(() => new Map(vessels.map((v) => [v.id, v])), [vessels]);
 
   const positionMap = useMemo(() => {
@@ -642,9 +652,35 @@ export const MaritimeMap: React.FC = () => {
                 <Tooltip direction="top" offset={[0, -10]}>
                   <div className="text-xs">
                     <p className="font-semibold">{portInfo.port}</p>
-                    <p>{portInfo.count} operation{portInfo.count > 1 ? 's' : ''}</p>
+                    {singleFilteredVesselId && numberedOperations ? (
+                      <>
+                        {numberedOperations
+                          .filter((op) => op.port === portInfo.port)
+                          .map((op) => (
+                            <p key={op.id}>
+                              {op.sequence}. {op.operationType} — {new Date(op.operationDate).toLocaleDateString()}
+                            </p>
+                          ))}
+                      </>
+                    ) : (
+                      <p>{portInfo.count} operation{portInfo.count > 1 ? 's' : ''}</p>
+                    )}
                   </div>
                 </Tooltip>
+                {singleFilteredVesselId && numberedOperations && (() => {
+                  const opsAtPort = numberedOperations.filter((op) => op.port === portInfo.port);
+                  if (opsAtPort.length === 0) return null;
+                  const label = opsAtPort.length === 1
+                    ? `${opsAtPort[0].sequence}`
+                    : `${opsAtPort[0].sequence}+`;
+                  return (
+                    <Tooltip permanent direction="center" className="!bg-transparent !border-0 !shadow-none !p-0">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">
+                        {label}
+                      </span>
+                    </Tooltip>
+                  );
+                })()}
                 <Popup maxWidth={360}>
                   <div className="space-y-2 text-xs">
                     <p className="text-sm font-semibold">{portInfo.port}</p>
