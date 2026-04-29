@@ -4,12 +4,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { externalMsalInstance } from './src/auth/msalInstance';
 import { useAuthStore } from './src/store/authStore';
+import { ApiError } from './src/lib/apiClient';
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 60 * 60 * 1000,
-      retry: 1,
+      retry: (failureCount, error) => {
+        if (error instanceof ApiError && error.status === 401) return false;
+        return failureCount < 1;
+      },
     },
   },
 });

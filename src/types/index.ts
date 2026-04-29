@@ -301,3 +301,26 @@ export interface RFQAttachment {
   mimeType: string;
   sizeKb: number;
 }
+
+export type HostedIdentityTokenRecord = {
+  userEmail: string;
+  bearerToken: string;
+  scope: string;
+  expiresAt?: string;
+  updatedAt: string;
+  provider?: 'external_local';
+};
+
+export interface SystemHealthService {
+  key: string;
+  label: string;
+  status: 'ok' | 'warn' | 'error';
+  details?: string;
+  latencyMs?: number | null;
+}
+
+export interface SystemHealthPayload {
+  generatedAt: string;
+  services: SystemHealthService[];
+  logs: LogEntry[];
+}
