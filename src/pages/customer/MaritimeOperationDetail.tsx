@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api } from '../../services/api';
-import { Company, Vessel, VesselRoute, VesselOperation } from '../../types';
+import { VesselRoute, VesselOperation } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { ArrowLeft, ArrowRight, Ship, Fuel, Package, Wrench, Landmark, Users, ChevronDown } from 'lucide-react';
+import { useVessel, useVesselRoutes, useVesselOperations } from '../../hooks/queries/useMaritime';
+import { useCompanies } from '../../hooks/queries/useCompanies';
 
 const opTypeIcons: Record<string, React.ElementType> = {
   Bunkering: Fuel,
@@ -35,35 +36,16 @@ const formatAmount = (amount: number, currency: string) => {
 export const MaritimeOperationDetail: React.FC = () => {
   const { vesselId } = useParams<{ vesselId: string }>();
   const navigate = useNavigate();
-  const [vessel, setVessel] = useState<Vessel | null>(null);
-  const [company, setCompany] = useState<Company | null>(null);
-  const [routes, setRoutes] = useState<VesselRoute[]>([]);
-  const [operations, setOperations] = useState<VesselOperation[]>([]);
   const [collapsedRoutes, setCollapsedRoutes] = useState<Set<string>>(new Set());
   const [filterPort, setFilterPort] = useState('');
   const [filterType, setFilterType] = useState('');
 
-  useEffect(() => {
-    if (!vesselId) return;
-    const load = async () => {
-      const [v, r, ops] = await Promise.all([
-        api.maritime.getVessel(vesselId),
-        api.maritime.getVesselRoutes(vesselId),
-        api.maritime.getVesselOperations(vesselId),
-      ]);
-      setVessel(v);
-      setRoutes(r);
-      setOperations(ops);
+  const { data: vessel, isLoading: vesselLoading } = useVessel(vesselId ?? '');
+  const { data: routes = [] } = useVesselRoutes(vesselId ?? '');
+  const { data: operations = [] } = useVesselOperations(vesselId ?? '');
+  const { data: companies = [] } = useCompanies();
 
-      if (v.companyId) {
-        try {
-          const companies = await api.admin.getCompanies();
-          setCompany(companies.find((c) => c.id === v.companyId) || null);
-        } catch { /* ignore */ }
-      }
-    };
-    void load();
-  }, [vesselId]);
+  const company = vessel?.companyId ? companies.find((c) => c.id === vessel.companyId) ?? null : null;
 
   const filteredOperations = useMemo(() => {
     return operations.filter((op) => {
@@ -101,8 +83,12 @@ export const MaritimeOperationDetail: React.FC = () => {
     return filteredOperations.reduce((sum, op) => sum + op.totalAmount, 0);
   }, [filteredOperations]);
 
-  if (!vessel) {
+  if (vesselLoading) {
     return <div className="p-6 text-sm text-slate-500">Loading...</div>;
+  }
+
+  if (!vessel) {
+    return <div className="p-6 text-sm text-slate-500">Vessel not found.</div>;
   }
 
   return (

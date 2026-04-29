@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, useMap, CircleMarker, Marker, Popup, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { api } from '../../services/api';
 import { Vessel, VesselPosition, VesselRoute, VesselOperation } from '../../types';
 import { VesselMarker } from '../../components/maritime/VesselMarker';
 import { useUIStore } from '../../store/uiStore';
 import { useThemeStore } from '../../store/themeStore';
 import { VesselDrawer } from '../../components/maritime/VesselDrawer';
-import { useMaritimeMapPayload } from '../../hooks/useMaritimeMapPayload';
+import { useMaritimeMapPayload, useMaritimeOperations } from '../../hooks/queries/useMaritime';
 import {
   ChevronLeft,
   ChevronRight,
@@ -212,10 +211,10 @@ const Section: React.FC<SectionProps> = ({ title, icon, children }) => (
 
 export const MaritimeMap: React.FC = () => {
   const { data: mapData, isLoading: isMapLoading } = useMaritimeMapPayload();
+  const { data: operations = [], isLoading: operationsLoading } = useMaritimeOperations();
   const vessels = mapData?.vessels ?? [];
   const positions = mapData?.positions ?? [];
   const routes = mapData?.routes ?? [];
-  const [operations, setOperations] = useState<VesselOperation[]>([]);
   const [selectedVesselId, setSelectedVesselId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState('');
   const [selectedVesselIds, setSelectedVesselIds] = useState<Set<string> | null>(null);
@@ -233,18 +232,6 @@ export const MaritimeMap: React.FC = () => {
   const [portCoords, setPortCoords] = useState<Record<string, [number, number]>>({});
   const { openDrawer, dashboardCompanyId } = useUIStore();
   const mapRef = useRef<L.Map | null>(null);
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const ops = await api.maritime.getOperations();
-        setOperations(ops);
-      } catch (err) {
-        console.error('[MaritimeMap] Failed to load operations:', err instanceof Error ? err.message : String(err));
-      }
-    };
-    void load();
-  }, []);
 
   useEffect(() => {
     const portNames = new Set<string>();
@@ -690,7 +677,7 @@ export const MaritimeMap: React.FC = () => {
         </MapContainer>
 
         {/* Loading overlay until header resolves the active company */}
-        {(isMapLoading || !isCompanyReady) && (
+        {(isMapLoading || operationsLoading || !isCompanyReady) && (
           <div className="pointer-events-auto absolute inset-0 z-[1000] flex items-center justify-center bg-slate-100/60 backdrop-blur-sm dark:bg-slate-950/60">
             <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-5 py-3 text-sm font-medium text-slate-700 shadow-lg dark:border-white/10 dark:bg-slate-900/95 dark:text-slate-100">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />

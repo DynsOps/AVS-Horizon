@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../services/api';
-import { Company, Vessel, VesselPosition, VesselRoute, VesselOperation } from '../../types';
 import { Ship, MapPin, Navigation, Anchor, ArrowRight, Fuel, Package, Wrench, Landmark, Users } from 'lucide-react';
+import { useVessel, useVesselPosition, useVesselRoutes, useVesselOperations } from '../../hooks/queries/useMaritime';
+import { useCompanies } from '../../hooks/queries/useCompanies';
 
 type Props = {
   vesselId: string;
@@ -26,42 +26,24 @@ const opTypeColors: Record<string, string> = {
 
 export const VesselDrawer: React.FC<Props> = ({ vesselId }) => {
   const navigate = useNavigate();
-  const [vessel, setVessel] = useState<Vessel | null>(null);
-  const [position, setPosition] = useState<VesselPosition | null>(null);
-  const [routes, setRoutes] = useState<VesselRoute[]>([]);
-  const [operations, setOperations] = useState<VesselOperation[]>([]);
-  const [company, setCompany] = useState<Company | null>(null);
 
-  useEffect(() => {
-    const load = async () => {
-      const [v, pos, r, ops] = await Promise.all([
-        api.maritime.getVessel(vesselId),
-        api.maritime.getVesselPosition(vesselId),
-        api.maritime.getVesselRoutes(vesselId),
-        api.maritime.getVesselOperations(vesselId),
-      ]);
-      setVessel(v);
-      setPosition(pos);
-      setRoutes(r);
-      setOperations(ops);
+  const { data: vessel, isLoading: vesselLoading } = useVessel(vesselId ?? '');
+  const { data: position } = useVesselPosition(vesselId ?? '');
+  const { data: routes = [] } = useVesselRoutes(vesselId ?? '');
+  const { data: operations = [] } = useVesselOperations(vesselId ?? '');
+  const { data: companies = [] } = useCompanies();
 
-      if (v.companyId) {
-        try {
-          const companies = await api.admin.getCompanies();
-          setCompany(companies.find((c) => c.id === v.companyId) || null);
-        } catch { /* ignore */ }
-      }
-    };
-    void load();
-  }, [vesselId]);
-
-  if (!vessel) {
+  if (vesselLoading) {
     return <div className="p-4 text-sm text-slate-500">Loading vessel data...</div>;
   }
 
+  if (!vessel) {
+    return <div className="p-4 text-sm text-slate-500">Vessel not found.</div>;
+  }
+
+  const company = vessel.companyId ? companies.find((c) => c.id === vessel.companyId) ?? null : null;
   const activeRoute = routes.find((r) => r.status === 'In Progress');
   const recentOps = operations.slice(0, 5);
-
 
   const formatAmount = (amount: number, currency: string) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
