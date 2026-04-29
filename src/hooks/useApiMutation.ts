@@ -21,10 +21,10 @@ export function useApiMutation<TVariables = void, TData = unknown>(
     mutationFn,
     onSuccess: (data, variables) => {
       if (opts.successToast) addToast({ title: 'Success', message: opts.successToast, type: 'success' });
+      opts.onSuccess?.(data, variables);
       if (opts.invalidates?.length) {
         opts.invalidates.forEach((key) => queryClient.invalidateQueries({ queryKey: key as unknown[] }));
       }
-      opts.onSuccess?.(data, variables);
     },
     onError: (error, variables) => {
       const message = error instanceof Error ? error.message : opts.errorToastFallback ?? 'An error occurred';

@@ -108,10 +108,13 @@ export async function request<T = unknown>(
   });
 
   let payload: unknown = null;
-  try {
-    payload = await response.json();
-  } catch {
-    payload = null;
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    try {
+      payload = await response.json();
+    } catch {
+      if (response.ok) throw new ApiError(response.status, 'Response was not valid JSON');
+    }
   }
 
   if (!response.ok) {
@@ -121,7 +124,8 @@ export async function request<T = unknown>(
       (payloadObj?.message as string) ||
       `Request failed (${response.status})`;
 
-    if (allowAuthRetry && response.status === 401) {
+    const method = (init?.method ?? 'GET').toUpperCase();
+    if (allowAuthRetry && response.status === 401 && method === 'GET') {
       const refreshedToken = await refreshHostedTokenSilently();
       if (refreshedToken) {
         return request<T>(path, init, false);
@@ -155,10 +159,13 @@ export async function requestPublic<T = unknown>(
   });
 
   let payload: unknown = null;
-  try {
-    payload = await response.json();
-  } catch {
-    payload = null;
+  const contentTypePublic = response.headers.get('content-type') ?? '';
+  if (contentTypePublic.includes('application/json')) {
+    try {
+      payload = await response.json();
+    } catch {
+      if (response.ok) throw new ApiError(response.status, 'Response was not valid JSON');
+    }
   }
 
   if (!response.ok) {

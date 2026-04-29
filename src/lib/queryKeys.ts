@@ -14,7 +14,7 @@ export const qk = {
   },
   analysisReports: {
     adminList: () => ['analysisReports', 'admin'] as const,
-    customerList: (companyId?: string | null) => ['analysisReports', 'customer', companyId] as const,
+    customerList: (companyId?: string | null) => ['analysisReports', 'customer', companyId ?? null] as const,
   },
   templates: {
     list: (scope: string) => ['templates', scope] as const,
@@ -24,22 +24,22 @@ export const qk = {
   systemLogs: { all: () => ['systemLogs'] as const },
   // Customer
   orders: {
-    list: (companyId?: string | null) => ['orders', companyId] as const,
-    history: (companyId?: string | null) => ['orders', 'history', companyId] as const,
+    list: (companyId?: string | null) => ['orders', companyId ?? null] as const,
+    history: (companyId?: string | null) => ['orders', 'history', companyId ?? null] as const,
   },
-  shipments: { list: (companyId?: string | null) => ['shipments', companyId] as const },
-  invoices: { list: (companyId?: string | null) => ['invoices', companyId] as const },
-  portFees: { list: (companyId?: string | null) => ['portFees', companyId] as const },
+  shipments: { list: (companyId?: string | null) => ['shipments', companyId ?? null] as const },
+  invoices: { list: (companyId?: string | null) => ['invoices', companyId ?? null] as const },
+  portFees: { list: (companyId?: string | null) => ['portFees', companyId ?? null] as const },
   fleet: {
-    list: (companyId?: string | null) => ['fleet', companyId] as const,
-    contractedVessels: (companyId?: string | null) => ['fleet', 'contracted', companyId] as const,
+    list: (companyId?: string | null) => ['fleet', companyId ?? null] as const,
+    contractedVessels: (companyId?: string | null) => ['fleet', 'contracted', companyId ?? null] as const,
     mandayReport: (year: number, month: number, companyId?: string | null) =>
-      ['fleet', 'mandayReport', year, month, companyId] as const,
+      ['fleet', 'mandayReport', year, month, companyId ?? null] as const,
   },
   contractedReports: {
     analysis: (companyId?: string | null, reportId?: string | null) =>
-      ['contractedReports', 'analysis', companyId, reportId] as const,
-    consumption: (companyId?: string | null) => ['contractedReports', 'consumption', companyId] as const,
+      ['contractedReports', 'analysis', companyId ?? null, reportId ?? null] as const,
+    consumption: (companyId?: string | null) => ['contractedReports', 'consumption', companyId ?? null] as const,
   },
   // Support
   support: {
@@ -51,8 +51,8 @@ export const qk = {
   notifications: { list: () => ['notifications'] as const },
   // Maritime
   maritime: {
-    mapPayload: (companyId?: string | null) => ['maritime', 'mapPayload', companyId] as const,
-    operations: (companyId?: string | null) => ['maritime', 'operations', companyId] as const,
+    mapPayload: (companyId?: string | null) => ['maritime', 'mapPayload', companyId ?? null] as const,
+    operations: (companyId?: string | null) => ['maritime', 'operations', companyId ?? null] as const,
     vessels: () => ['maritime', 'vessels'] as const,
     vessel: (id: string) => ['maritime', 'vessel', id] as const,
     vesselPosition: (id: string) => ['maritime', 'vesselPosition', id] as const,
@@ -60,9 +60,9 @@ export const qk = {
     vesselOperations: (id: string) => ['maritime', 'vesselOperations', id] as const,
   },
   // Guest
-  rfq: { list: (userId?: string | null) => ['rfq', userId] as const },
+  rfq: { list: (userId?: string | null) => ['rfq', userId ?? null] as const },
   // Supplier
   supplier: { kpis: () => ['supplier', 'kpis'] as const },
   // PowerBI
-  powerbi: { embed: (reportId?: string | null) => ['powerbi', 'embed', reportId] as const },
+  powerbi: { embed: (reportId?: string | null) => ['powerbi', 'embed', reportId ?? null] as const },
 } as const;
