@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { externalMsalInstance } from '../auth/msalInstance';
 import { AsyncActionButton } from './ui/AsyncActionButton';
@@ -8,9 +8,9 @@ import { useUIStore } from '../store/uiStore';
 import { isPendingAccessUser } from '../utils/rbac';
 import avsLogo from '../assets/avslogo.png';
 import { performSignOut } from './signOut';
-import { api } from '../services/api';
 import { LogOut, UserCircle, ChevronDown } from 'lucide-react';
 import { SCREEN_REGISTRY, type ScreenGroup } from '../screenRegistry';
+import { useOpenTicketsCount } from '../hooks/queries/useSupportTickets';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const NavItem = ({ to, icon: Icon, label, badge }: { to: string, icon: any, label: string, badge?: number }) => (
@@ -64,12 +64,8 @@ export const Sidebar: React.FC = () => {
   const hasHostedSession = externalMsalInstance.getAllAccounts().length > 0;
   const [collapsedGroups, setCollapsedGroups] = useState<Set<ScreenGroup>>(new Set());
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [openTicketsCount, setOpenTicketsCount] = useState(0);
 
-  useEffect(() => {
-    if (role !== 'supadmin') return;
-    api.support.getOpenTicketsCount().then(setOpenTicketsCount).catch(() => undefined);
-  }, [role]);
+  const { data: openTicketsCount = 0 } = useOpenTicketsCount();
 
   const toggleGroup = (group: ScreenGroup) => {
     setCollapsedGroups((prev) => {

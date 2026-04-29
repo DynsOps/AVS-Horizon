@@ -4,14 +4,17 @@ import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../store/uiStore';
-import { api } from '../services/api';
 import { externalMsalInstance } from '../auth/msalInstance';
-import { Company } from '../types';
 import { performSignOut } from './signOut';
+import { useCompanies } from '../hooks/queries/useCompanies';
+import { useNotifications, useMarkNotificationRead, useDeleteNotification } from '../hooks/queries/useNotifications';
 
 const NotificationsDrawerContent: React.FC = () => {
-  const { notifications, markNotificationRead, deleteNotification, closeDrawer } = useUIStore();
+  const { closeDrawer } = useUIStore();
   const navigate = useNavigate();
+  const { data: notifications = [] } = useNotifications();
+  const markRead = useMarkNotificationRead();
+  const deleteNotification = useDeleteNotification();
 
   if (!notifications.length) {
     return (
@@ -37,8 +40,7 @@ const NotificationsDrawerContent: React.FC = () => {
               type="button"
               aria-label={notification.title}
               onClick={() => {
-                markNotificationRead(notification.id);
-                void api.notifications.markNotificationRead(notification.id).catch(() => undefined);
+                markRead.mutate(notification.id);
                 closeDrawer();
                 navigate(notification.targetRoute);
               }}
@@ -57,10 +59,7 @@ const NotificationsDrawerContent: React.FC = () => {
             <button
               type="button"
               aria-label="Delete notification"
-              onClick={() => {
-                deleteNotification(notification.id);
-                void api.notifications.deleteNotification(notification.id).catch(() => undefined);
-              }}
+              onClick={() => deleteNotification.mutate(notification.id)}
               className="mt-0.5 shrink-0 rounded-lg p-1 text-slate-400 transition-colors hover:bg-rose-100 hover:text-rose-500 dark:hover:bg-rose-900/30 dark:hover:text-rose-400"
             >
               <Trash2 size={14} strokeWidth={1.5} />
@@ -79,12 +78,9 @@ export const Header: React.FC = () => {
     addToast,
     dashboardCompanyId,
     setDashboardCompanyId,
-    notifications,
-    setNotifications,
     openDrawer,
   } = useUIStore();
   const navigate = useNavigate();
-  const [companyOptions, setCompanyOptions] = useState<Company[]>([]);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const isSupadmin = user?.role === 'supadmin';
@@ -93,41 +89,19 @@ export const Header: React.FC = () => {
   const isMultiCompanyUser = (user?.role === 'admin' || user?.role === 'user') && effectiveCompanyIds.length > 1;
   const hasHostedSession = externalMsalInstance.getAllAccounts().length > 0;
 
-  useEffect(() => {
-    let mounted = true;
-    const loadCompanyOptions = async () => {
-      if (!user) {
-        if (mounted) setCompanyOptions([]);
-        return;
-      }
-      if (user.role === 'user' || user.role === 'admin') {
-        const ids = effectiveCompanyIds;
-        if (ids.length === 0) {
-          if (mounted) setCompanyOptions([]);
-          return;
-        }
-        try {
-          const allCompanies = await api.admin.getCompanies();
-          const scopedCompanies = allCompanies.filter((c) => ids.includes(c.id));
-          if (mounted) setCompanyOptions(scopedCompanies.length ? scopedCompanies : ids.map((id) => ({ id, name: id, type: 'Customer' as const, status: 'Active' as const })));
-        } catch {
-          if (mounted) setCompanyOptions(ids.map((id) => ({ id, name: id, type: 'Customer' as const, status: 'Active' as const })));
-        }
-        return;
-      }
-      try {
-        const rows = await api.admin.getCompanies();
-        if (mounted) setCompanyOptions(rows);
-      } catch {
-        if (mounted) setCompanyOptions([]);
-      }
-    };
+  const { data: allCompanies = [] } = useCompanies();
+  const { data: notifications = [] } = useNotifications();
 
-    void loadCompanyOptions();
-    return () => {
-      mounted = false;
-    };
-  }, [user?.id, user?.role, user?.companyId, user?.companyIds]);
+  const companyOptions = useMemo(() => {
+    if (!user) return [];
+    if (user.role === 'user' || user.role === 'admin') {
+      const ids = effectiveCompanyIds;
+      if (ids.length === 0) return [];
+      const scoped = allCompanies.filter((c) => ids.includes(c.id));
+      return scoped.length ? scoped : ids.map((id) => ({ id, name: id, type: 'Customer' as const, status: 'Active' as const }));
+    }
+    return allCompanies;
+  }, [user, allCompanies, effectiveCompanyIds]);
 
   const resolvedCompanyId = useMemo(() => {
     if (!companyOptions.length) return '';
@@ -142,27 +116,6 @@ export const Header: React.FC = () => {
       setDashboardCompanyId(resolvedCompanyId);
     }
   }, [resolvedCompanyId, dashboardCompanyId, setDashboardCompanyId]);
-
-  useEffect(() => {
-    let mounted = true;
-    const loadNotifications = async () => {
-      if (!user?.id) {
-        if (mounted) setNotifications([]);
-        return;
-      }
-      try {
-        const rows = await api.notifications.getNotifications();
-        if (mounted) setNotifications(rows);
-      } catch {
-        if (mounted) setNotifications([]);
-      }
-    };
-
-    void loadNotifications();
-    return () => {
-      mounted = false;
-    };
-  }, [user?.id, setNotifications]);
 
   useEffect(() => {
     if (!isProfileMenuOpen) return;

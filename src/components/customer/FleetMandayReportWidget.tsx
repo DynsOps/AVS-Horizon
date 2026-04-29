@@ -1,11 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { api } from '../../services/api';
-import { FleetMandayReport, FleetMandayReportVessel } from '../../types';
+import { FleetMandayReportVessel } from '../../types';
 import { Card } from '../ui/Card';
-import { useAuthStore } from '../../store/authStore';
-import { useUIStore } from '../../store/uiStore';
+import { useFleetMandayReport } from '../../hooks/queries/useFleet';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -193,29 +191,8 @@ export const FleetMandayReportWidget: React.FC = () => {
     d.setMonth(d.getMonth() - 1);
     return d.getMonth() + 1;
   });
-  const [report, setReport] = useState<FleetMandayReport | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const { user } = useAuthStore();
-  const { addToast, dashboardCompanyId } = useUIStore();
-
-  useEffect(() => {
-    let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-    api.customer.getFleetMandayReport({ year, month })
-      .then((data) => { if (!cancelled) { setReport(data); setIsLoading(false); } })
-      .catch((err) => {
-        if (!cancelled) {
-          const msg = err instanceof Error ? err.message : String(err);
-          setError(msg);
-          setIsLoading(false);
-          addToast({ title: 'Failed to load fleet report', message: msg, type: 'error' });
-        }
-      });
-    return () => { cancelled = true; };
-  }, [dashboardCompanyId, user?.companyId, year, month]);
+  const { data: report = null, isFetching, isError } = useFleetMandayReport(year, month);
 
   const totalBudget = report?.kpis.totalBudget ?? 0;
   // Invoice-based → KPI card only
@@ -242,7 +219,7 @@ export const FleetMandayReportWidget: React.FC = () => {
     : [];
 
   const loadingEl = <p className="text-sm text-gray-500 dark:text-gray-400">Loading...</p>;
-  const errorEl = error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null;
+  const errorEl = isError ? <p className="text-sm text-red-600 dark:text-red-400">Failed to load fleet report.</p> : null;
 
   return (
     <div className="space-y-4">
@@ -288,7 +265,7 @@ export const FleetMandayReportWidget: React.FC = () => {
 
       {/* ── Exception Alerts ── */}
       <Card title={<span className="flex items-center gap-2"><IconAlert />Exception Alerts</span>}>
-        {isLoading ? loadingEl : errorEl ?? (
+        {isFetching ? loadingEl : errorEl ?? (
           !report || report.exceptions.length === 0
             ? <p className="text-sm text-gray-500 dark:text-gray-400">No exceptions this month.</p>
             : (
@@ -311,7 +288,7 @@ export const FleetMandayReportWidget: React.FC = () => {
 
       {/* ── Fleet Spend vs Budget ── */}
       <Card title={<span className="flex items-center gap-2"><IconTable />Fleet Spend vs Budget</span>}>
-        {isLoading ? loadingEl : errorEl ?? (
+        {isFetching ? loadingEl : errorEl ?? (
           !hasVessels
             ? <p className="text-sm text-gray-500 dark:text-gray-400">No manday data for selected month.</p>
             : (
@@ -391,7 +368,7 @@ export const FleetMandayReportWidget: React.FC = () => {
 
       {/* ── Spend by Vessel ── */}
       <Card title={<span className="flex items-center gap-2"><IconPieChart />Spend by Vessel</span>}>
-        {isLoading ? loadingEl : errorEl ?? (
+        {isFetching ? loadingEl : errorEl ?? (
           !hasVessels
             ? <p className="text-sm text-gray-500 dark:text-gray-400">No data for selected month.</p>
             : (
