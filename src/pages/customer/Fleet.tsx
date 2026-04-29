@@ -1,10 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { api } from '../../services/api';
 import { ContractedVessel, FleetMandayReportVessel } from '../../types';
+import { useContractedVessels, useFleetMandayReport } from '../../hooks/queries/useFleet';
 import { Card } from '../../components/ui/Card';
 import { Anchor, ChevronRight, DollarSign, TrendingUp, TrendingDown, BarChart2, MapPin, Package } from 'lucide-react';
-import { useUIStore } from '../../store/uiStore';
 
 // DUMMY — replace with real operation data when available
 const DUMMY_PORT_CALLS = [
@@ -259,7 +257,6 @@ const VesselDetailPanel: React.FC<VesselDetailPanelProps> = ({
 // ── Fleet page ────────────────────────────────────────────────────────────────
 
 export const Fleet: React.FC = () => {
-  const { dashboardCompanyId } = useUIStore();
   const [selectedImo, setSelectedImo] = useState<string | null>(null);
   const [{ year: initYear, month: initMonth }] = useState(() => {
     const d = new Date();
@@ -270,18 +267,9 @@ export const Fleet: React.FC = () => {
   const [month, setMonth] = useState(initMonth);
   const years = useMemo(currentYearsList, []);
 
-  const { data: vessels = [], isLoading: vesselsLoading, isError: vesselsError } = useQuery({
-    queryKey: ['contracted-vessels', dashboardCompanyId],
-    queryFn: () => api.customer.getContractedVessels(),
-    enabled: !!dashboardCompanyId,
-  });
+  const { data: vessels = [], isLoading: vesselsLoading, isError: vesselsError } = useContractedVessels();
 
-  const { data: report, isFetching: reportLoading } = useQuery({
-    queryKey: ['fleet-manday-report', year, month, dashboardCompanyId],
-    queryFn: () => api.customer.getFleetMandayReport({ year, month }),
-    enabled: !!selectedImo && !!dashboardCompanyId,
-    placeholderData: keepPreviousData,
-  });
+  const { data: report, isFetching: reportLoading } = useFleetMandayReport(year, month);
 
   const selectedVessel = vessels.find(v => v.imo === selectedImo) ?? null;
   const vesselReport = report?.vessels.find(v => v.imo === selectedImo) ?? null;

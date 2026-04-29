@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
-import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
-import { api } from '../../services/api';
 import { SupportTicket } from '../../types';
 import { LifeBuoy, Send } from 'lucide-react';
+import { useMyTickets, useCreateTicket } from '../../hooks/queries/useSupportTickets';
 
 const PAGE_SIZE = 6;
 type TicketFilter = 'All' | SupportTicket['status'];
@@ -16,26 +15,16 @@ const statusClasses: Record<SupportTicket['status'], string> = {
 };
 
 export const SupportTickets: React.FC = () => {
-  const { user } = useAuthStore();
   const { addToast } = useUIStore();
-  const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState('');
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<SupportTicket['category']>('General');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeFilter, setActiveFilter] = useState<TicketFilter>('All');
   const [page, setPage] = useState(1);
 
-  const loadTickets = async () => {
-    if (!user?.id) return;
-    const data = await api.support.getMyTickets();
-    setTickets(data);
-  };
-
-  useEffect(() => {
-    void loadTickets();
-  }, [user?.id]);
+  const { data: tickets = [] } = useMyTickets();
+  const createTicket = useCreateTicket();
 
   const filteredTickets = useMemo(() => {
     if (activeFilter === 'All') return tickets;
@@ -70,15 +59,13 @@ export const SupportTickets: React.FC = () => {
   const selectedTicket = filteredTickets.find((ticket) => ticket.id === selectedTicketId) || null;
 
   const submitTicket = async () => {
-    if (!user?.id) return;
     if (!subject.trim() || !description.trim()) {
       addToast({ title: 'Validation Error', message: 'Subject and description are required.', type: 'error' });
       return;
     }
 
-    setIsSubmitting(true);
     try {
-      await api.support.createTicket({
+      await createTicket.mutateAsync({
         subject: subject.trim(),
         description: description.trim(),
         category,
@@ -88,13 +75,9 @@ export const SupportTickets: React.FC = () => {
       setCategory('General');
       setActiveFilter('All');
       setPage(1);
-      await loadTickets();
       addToast({ title: 'Ticket Created', message: 'Support ticket created successfully.', type: 'success' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create support ticket.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setIsSubmitting(false);
+    } catch {
+      // errors handled by useApiMutation
     }
   };
 
@@ -142,7 +125,7 @@ export const SupportTickets: React.FC = () => {
 
           <AsyncActionButton
             onClick={() => void submitTicket()}
-            isPending={isSubmitting}
+            isPending={createTicket.isPending}
             className="inline-flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-70"
           >
             <Send size={14} />

@@ -1,18 +1,17 @@
 
 import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { AsyncActionButton } from '../components/ui/AsyncActionButton';
 import { useUIStore } from '../store/uiStore';
 import { User as UserIcon, Mail, Shield, Building, Save } from 'lucide-react';
+import { useUpdateProfile } from '../hooks/queries/useAuth';
 
 export const Profile: React.FC = () => {
     const { user, login } = useAuthStore();
     const { addToast } = useUIStore();
     const [isEditing, setIsEditing] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
-    
+
     // Form state
     const [formData, setFormData] = useState({
         name: user?.name || '',
@@ -20,23 +19,20 @@ export const Profile: React.FC = () => {
     });
     const hasProfileChanges = formData.name.trim() !== (user?.name || '');
 
+    const updateProfile = useUpdateProfile();
+
     const handleSave = async () => {
         if (!user) return;
         if (!formData.name.trim()) {
             addToast({ title: 'Validation Error', message: 'Full name is required.', type: 'error' });
             return;
         }
-        setIsLoading(true);
         try {
-            const updatedUser = await api.auth.updateProfile(user.id, { name: formData.name.trim() });
+            const updatedUser = await updateProfile.mutateAsync({ userId: user.id, data: { name: formData.name.trim() } });
             login(updatedUser); // Update local store
-            addToast({ title: 'Success', message: 'Profile updated successfully', type: 'success' });
             setIsEditing(false);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to update profile.';
-            addToast({ title: 'Error', message, type: 'error' });
-        } finally {
-            setIsLoading(false);
+        } catch {
+            // errors handled by useApiMutation (successToast already set in hook)
         }
     };
 
@@ -71,8 +67,8 @@ export const Profile: React.FC = () => {
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <UserIcon size={16} className="text-slate-400" />
                                     </div>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         disabled={!isEditing}
                                         value={formData.name}
                                         onChange={(e) => setFormData({...formData, name: e.target.value})}
@@ -80,15 +76,15 @@ export const Profile: React.FC = () => {
                                     />
                                 </div>
                             </div>
-                            
+
                             <div>
                                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Email Address</label>
                                 <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                         <Mail size={16} className="text-slate-400" />
                                     </div>
-                                    <input 
-                                        type="email" 
+                                    <input
+                                        type="email"
                                         disabled
                                         value={formData.email}
                                         className="pl-10 w-full px-4 py-2 bg-gray-50 dark:bg-slate-950/50 border border-gray-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white disabled:opacity-60 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
@@ -120,15 +116,15 @@ export const Profile: React.FC = () => {
                         <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-slate-800">
                             {isEditing ? (
                                 <div className="flex space-x-3">
-                                    <button 
+                                    <button
                                         onClick={() => { setIsEditing(false); setFormData({ name: user.name, email: user.email }); }}
                                         className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
                                     >
                                         Cancel
                                     </button>
-                                    <AsyncActionButton 
+                                    <AsyncActionButton
                                         onClick={handleSave}
-                                        isPending={isLoading}
+                                        isPending={updateProfile.isPending}
                                         disabled={!hasProfileChanges}
                                         className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-blue-500/20 transition-all disabled:cursor-not-allowed"
                                     >
@@ -137,7 +133,7 @@ export const Profile: React.FC = () => {
                                     </AsyncActionButton>
                                 </div>
                             ) : (
-                                <button 
+                                <button
                                     onClick={() => setIsEditing(true)}
                                     className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
                                 >

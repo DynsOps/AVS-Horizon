@@ -1,65 +1,51 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
-import { api } from '../../services/api';
-import { GuestRFQ, RFQAttachment, SuggestedItem } from '../../types';
+import { RFQAttachment, SuggestedItem } from '../../types';
 import { FilePlus2, Sparkles, Trash2, Plus, Paperclip } from 'lucide-react';
+import { useMyRFQs, useSubmitRFQ, useGenerateSuggestedProducts } from '../../hooks/queries/useGuestRFQ';
 
 export const GuestRFQPage: React.FC = () => {
   const { user } = useAuthStore();
   const { addToast } = useUIStore();
-  const [rfqs, setRfqs] = useState<GuestRFQ[]>([]);
   const [vesselName, setVesselName] = useState('');
   const [port, setPort] = useState('');
   const [details, setDetails] = useState('');
   const [suggestedItems, setSuggestedItems] = useState<SuggestedItem[]>([]);
   const [attachments, setAttachments] = useState<RFQAttachment[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const loadRfqs = async () => {
-    if (!user?.id) return;
-    const data = await api.guest.getMyRFQs(user.id);
-    setRfqs(data);
-  };
-
-  useEffect(() => {
-    void loadRfqs();
-  }, [user?.id]);
+  const { data: rfqs = [] } = useMyRFQs();
+  const submitRFQ = useSubmitRFQ();
+  const generateSuggestedProducts = useGenerateSuggestedProducts();
 
   const generateSuggestions = async () => {
     if (!vesselName.trim() || !port.trim() || !details.trim()) {
       addToast({ title: 'Validation Error', message: 'Fill vessel, port and details before generating suggestions.', type: 'error' });
       return;
     }
-    setIsGenerating(true);
     try {
-      const items = await api.guest.generateSuggestedProducts({
+      const items = await generateSuggestedProducts.mutateAsync({
         vesselName: vesselName.trim(),
         port: port.trim(),
         details: details.trim(),
       });
       setSuggestedItems(items);
       addToast({ title: 'Suggestions Ready', message: `${items.length} suggested items generated.`, type: 'success' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Suggestion generation failed.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setIsGenerating(false);
+    } catch {
+      // errors handled by useApiMutation
     }
   };
 
-  const submitRFQ = async () => {
+  const handleSubmitRFQ = async () => {
     if (!user?.id) return;
     if (!vesselName.trim() || !port.trim() || !details.trim()) {
       addToast({ title: 'Validation Error', message: 'All fields are required.', type: 'error' });
       return;
     }
-    setIsSubmitting(true);
     try {
-      await api.guest.submitRFQ({
+      await submitRFQ.mutateAsync({
         createdByUserId: user.id,
         createdByEmail: user.email,
         vesselName: vesselName.trim(),
@@ -73,13 +59,9 @@ export const GuestRFQPage: React.FC = () => {
       setDetails('');
       setSuggestedItems([]);
       setAttachments([]);
-      await loadRfqs();
       addToast({ title: 'RFQ Submitted', message: 'Guest RFQ has been submitted.', type: 'success' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'RFQ submit failed.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setIsSubmitting(false);
+    } catch {
+      // errors handled by useApiMutation
     }
   };
 
@@ -113,7 +95,7 @@ export const GuestRFQPage: React.FC = () => {
           />
           <AsyncActionButton
             onClick={() => void generateSuggestions()}
-            isPending={isGenerating}
+            isPending={generateSuggestedProducts.isPending}
             className="inline-flex items-center gap-2 rounded border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-sm font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 disabled:opacity-70"
           >
             <Sparkles size={14} />
@@ -204,8 +186,8 @@ export const GuestRFQPage: React.FC = () => {
           </div>
 
           <AsyncActionButton
-            onClick={() => void submitRFQ()}
-            isPending={isSubmitting}
+            onClick={() => void handleSubmitRFQ()}
+            isPending={submitRFQ.isPending}
             className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-70"
           >
             Submit RFQ

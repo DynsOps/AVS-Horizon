@@ -1,24 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
-import { api } from '../../services/api';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { useUIStore } from '../../store/uiStore';
-import { AnalysisReport } from '../../types';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { factories, models, service } from 'powerbi-client';
-
-type AnalysisRow = { category: string; value: number };
+import { useContractedAnalysisReport, useCustomerAnalysisReports } from '../../hooks/queries/useContractedReports';
+import { usePowerBiEmbed } from '../../hooks/queries/usePowerBiEmbed';
 
 const COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626'];
 
 export const ContractedAnalysisReport: React.FC = () => {
   const { user } = useAuthStore();
   const { dashboardCompanyId } = useUIStore();
-  const [data, setData] = useState<AnalysisRow[]>([]);
-  const [reports, setReports] = useState<AnalysisReport[]>([]);
   const [activeReportId, setActiveReportId] = useState<string>('');
   const [embedError, setEmbedError] = useState('');
-  const [isEmbedding, setIsEmbedding] = useState(false);
   const embedContainerRef = useRef<HTMLDivElement | null>(null);
   const powerBiServiceRef = useRef<service.Service | null>(null);
   const effectiveCompanyId = dashboardCompanyId || user?.companyId;
@@ -31,22 +26,17 @@ export const ContractedAnalysisReport: React.FC = () => {
     );
   }, []);
 
-  useEffect(() => {
-    api.customer.getContractedAnalysisReport(effectiveCompanyId).then(setData);
-  }, [effectiveCompanyId]);
-
-  useEffect(() => {
-    api.customer.getAnalysisReports().then(setReports);
-  }, []);
+  const { data: reportsData = [] } = useCustomerAnalysisReports();
+  const { data: contractedData = [] } = useContractedAnalysisReport(activeReportId || null);
 
   const visibleReports = useMemo(() => {
     const permissions = user?.permissions || [];
     const canSeeAllReports = user?.role === 'supadmin';
     if (canSeeAllReports) {
-      return reports;
+      return reportsData;
     }
-    return reports.filter((report) => permissions.includes(report.permissionKey));
-  }, [reports, user?.permissions, user?.role]);
+    return reportsData.filter((report) => permissions.includes(report.permissionKey));
+  }, [reportsData, user?.permissions, user?.role]);
 
   useEffect(() => {
     if (!visibleReports.length) {
@@ -61,53 +51,55 @@ export const ContractedAnalysisReport: React.FC = () => {
   const activeReport = visibleReports.find((report) => report.id === activeReportId);
   const activeIsContracted = activeReport?.permissionKey === 'view:analysis-report:contracted';
 
+  // Only fetch embed config for non-contracted (Power BI) reports
+  const embedReportId = activeReport && !activeIsContracted ? activeReport.id : null;
+  const { data: embedPayload, isFetching: isEmbedding } = usePowerBiEmbed(embedReportId);
+
   useEffect(() => {
-    let cancelled = false;
-    const embedReport = async () => {
-      if (!powerBiServiceRef.current || !embedContainerRef.current) return;
-      powerBiServiceRef.current.reset(embedContainerRef.current);
-      setEmbedError('');
-      setIsEmbedding(false);
+    if (!powerBiServiceRef.current || !embedContainerRef.current) return;
+    powerBiServiceRef.current.reset(embedContainerRef.current);
+    setEmbedError('');
 
-      if (!activeReport || activeIsContracted) return;
+    if (!embedPayload || !embedContainerRef.current || !powerBiServiceRef.current) return;
 
-      try {
-        setIsEmbedding(true);
-        const payload = await api.powerbi.getEmbedConfig(activeReport.id);
-        if (cancelled || !embedContainerRef.current || !powerBiServiceRef.current) return;
-
-        powerBiServiceRef.current.embed(embedContainerRef.current, {
-          type: 'report',
-          id: payload.embedConfig.reportId,
-          embedUrl: payload.embedConfig.embedUrl,
-          accessToken: payload.embedConfig.accessToken,
-          tokenType: models.TokenType.Embed,
-          settings: {
-            panes: {
-              filters: { visible: false },
-              pageNavigation: { visible: true },
-            },
-            navContentPaneEnabled: true,
+    try {
+      powerBiServiceRef.current.embed(embedContainerRef.current, {
+        type: 'report',
+        id: embedPayload.embedConfig.reportId,
+        embedUrl: embedPayload.embedConfig.embedUrl,
+        accessToken: embedPayload.embedConfig.accessToken,
+        tokenType: models.TokenType.Embed,
+        settings: {
+          panes: {
+            filters: { visible: false },
+            pageNavigation: { visible: true },
           },
-        });
-      } catch (error) {
-        if (!cancelled) {
-          const message = error instanceof Error ? error.message : 'Power BI embed failed.';
-          setEmbedError(message);
-        }
-      } finally {
-        if (!cancelled) setIsEmbedding(false);
-      }
-    };
+          navContentPaneEnabled: true,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Power BI embed failed.';
+      setEmbedError(message);
+    }
 
-    void embedReport();
     return () => {
-      cancelled = true;
       if (powerBiServiceRef.current && embedContainerRef.current) {
         powerBiServiceRef.current.reset(embedContainerRef.current);
       }
     };
-  }, [activeReportId, activeIsContracted, activeReport, effectiveCompanyId]);
+  }, [embedPayload]);
+
+  // Reset embed state when switching to a contracted report or no active report
+  useEffect(() => {
+    if (!activeReport || activeIsContracted) {
+      if (powerBiServiceRef.current && embedContainerRef.current) {
+        powerBiServiceRef.current.reset(embedContainerRef.current);
+      }
+      setEmbedError('');
+    }
+  }, [activeReport, activeIsContracted]);
+
+  const data = contractedData as Array<{ category: string; value: number }>;
 
   return (
     <div className="space-y-6">

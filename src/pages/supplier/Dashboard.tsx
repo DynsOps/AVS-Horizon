@@ -1,15 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { api } from '../../services/api';
-import { KPI } from '../../types';
+import React from 'react';
 import { KPICard, Card } from '../../components/ui/Card';
 import { AlertCircle, Calendar, ArrowRight } from 'lucide-react';
+import { useSupplierKPIs } from '../../hooks/queries/useSupplierKPIs';
 
 export const SupplierDashboard: React.FC = () => {
-    const [kpis, setKpis] = useState<KPI[]>([]);
-
-    useEffect(() => {
-        api.supplier.getKPIs().then(setKpis);
-    }, []);
+    const { data: kpis = [] } = useSupplierKPIs();
 
     return (
         <div className="space-y-6">
