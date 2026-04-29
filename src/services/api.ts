@@ -408,11 +408,11 @@ let mockInvoices: Invoice[] = [
 ];
 
 let mockVessels: Vessel[] = [
-  { id: 'V-001', companyId: 'C-001', name: 'Avs Titan', imo: '9876543', type: 'Container', flagCountry: 'Singapore', builtYear: 2018, dwt: 65000, vesselStatus: 'Active' },
-  { id: 'V-002', companyId: 'C-001', name: 'Avs Neptune', imo: '1234567', type: 'Bulker', flagCountry: 'Panama', builtYear: 2015, dwt: 82000, vesselStatus: 'Active' },
-  { id: 'V-003', companyId: 'C-002', name: 'Avs Apollo', imo: '5544332', type: 'Tanker', flagCountry: 'Liberia', builtYear: 2020, dwt: 110000, vesselStatus: 'Active' },
-  { id: 'V-004', companyId: 'C-003', name: 'Nordic Aurora', imo: '4499112', type: 'Container', flagCountry: 'Germany', builtYear: 2019, dwt: 58000, vesselStatus: 'Active' },
-  { id: 'V-005', companyId: 'C-003', name: 'Nordic Breeze', imo: '4499113', type: 'Bulker', flagCountry: 'Norway', builtYear: 2017, dwt: 75000, vesselStatus: 'Under Repair' },
+  { id: 'V-001', companyId: 'C-001', name: 'Avs Titan', imo: '9876543', type: 'Container', flagCountry: 'Singapore', builtYear: 2018, dwt: 65000 },
+  { id: 'V-002', companyId: 'C-001', name: 'Avs Neptune', imo: '1234567', type: 'Bulker', flagCountry: 'Panama', builtYear: 2015, dwt: 82000 },
+  { id: 'V-003', companyId: 'C-002', name: 'Avs Apollo', imo: '5544332', type: 'Tanker', flagCountry: 'Liberia', builtYear: 2020, dwt: 110000 },
+  { id: 'V-004', companyId: 'C-003', name: 'Nordic Aurora', imo: '4499112', type: 'Container', flagCountry: 'Germany', builtYear: 2019, dwt: 58000 },
+  { id: 'V-005', companyId: 'C-003', name: 'Nordic Breeze', imo: '4499113', type: 'Bulker', flagCountry: 'Norway', builtYear: 2017, dwt: 75000 },
 ];
 
 let mockVesselPositions: VesselPosition[] = [

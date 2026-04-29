@@ -10,15 +10,8 @@ type Props = {
   onClick: () => void;
 };
 
-const statusColors: Record<string, string> = {
-  Active: '#10b981',
-  'Under Repair': '#f59e0b',
-  'Laid Up': '#94a3b8',
-  Scrapped: '#ef4444',
-};
-
-const createShipIcon = (heading: number, status: string | undefined, isSelected: boolean) => {
-  const color = statusColors[status || 'Active'] || '#10b981';
+const createShipIcon = (heading: number, isSelected: boolean) => {
+  const color = '#10b981';
   const size = isSelected ? 34 : 28;
   const ringSize = isSelected ? 44 : 36;
 
@@ -40,7 +33,7 @@ const createShipIcon = (heading: number, status: string | undefined, isSelected:
 };
 
 export const VesselMarker: React.FC<Props> = ({ vessel, position, isSelected, onClick }) => {
-  const icon = createShipIcon(position.heading, vessel.vesselStatus, isSelected);
+  const icon = createShipIcon(position.heading, isSelected);
 
   return (
     <Marker

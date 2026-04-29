@@ -95,15 +95,6 @@ export const VesselManagement: React.FC = () => {
     );
   };
 
-  const statusColor = (status?: string) => {
-    switch (status) {
-      case 'Active': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
-      case 'Under Repair': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
-      case 'Laid Up': return 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200';
-      case 'Scrapped': return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300';
-      default: return 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200';
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -132,7 +123,6 @@ export const VesselManagement: React.FC = () => {
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Type</th>
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Company</th>
               <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Flag</th>
-              <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th>
               <th className="px-6 py-3" />
             </tr>
           </thead>
@@ -147,11 +137,6 @@ export const VesselManagement: React.FC = () => {
                 <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{vessel.type}</td>
                 <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{getCompanyName(vessel.companyId)}</td>
                 <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{vessel.flagCountry || '—'}</td>
-                <td className="px-6 py-4">
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${statusColor(vessel.vesselStatus)}`}>
-                    {vessel.vesselStatus || 'Active'}
-                  </span>
-                </td>
                 <td className="px-6 py-4 text-right space-x-2">
                   <button onClick={() => openVesselDrawer(vessel)} className="text-blue-500 hover:text-blue-600">
                     <Edit2 size={15} />
@@ -170,7 +155,7 @@ export const VesselManagement: React.FC = () => {
             ))}
             {!isLoading && vessels.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                <td colSpan={6} className="px-6 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                   No vessels found.
                 </td>
               </tr>
@@ -190,7 +175,6 @@ type VesselFormProps = {
 };
 
 const VESSEL_TYPES = ['Container', 'Bulker', 'Tanker', 'General Cargo', 'RoRo'];
-const VESSEL_STATUSES: NonNullable<Vessel['vesselStatus']>[] = ['Active', 'Laid Up', 'Under Repair', 'Scrapped'];
 
 const VesselForm: React.FC<VesselFormProps> = ({ vessel, companies, onSave, onCancel }) => {
   const [name, setName] = useState(vessel?.name || '');
@@ -200,7 +184,6 @@ const VesselForm: React.FC<VesselFormProps> = ({ vessel, companies, onSave, onCa
   const [flagCountry, setFlagCountry] = useState(vessel?.flagCountry || '');
   const [builtYear, setBuiltYear] = useState(vessel?.builtYear?.toString() || '');
   const [dwt, setDwt] = useState(vessel?.dwt?.toString() || '');
-  const [vesselStatus, setVesselStatus] = useState<NonNullable<Vessel['vesselStatus']>>(vessel?.vesselStatus || 'Active');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { addToast } = useUIStore();
 
@@ -228,7 +211,6 @@ const VesselForm: React.FC<VesselFormProps> = ({ vessel, companies, onSave, onCa
         flagCountry: flagCountry.trim() || undefined,
         builtYear: builtYear ? parseInt(builtYear, 10) : undefined,
         dwt: dwt ? parseFloat(dwt) : undefined,
-        vesselStatus,
       });
     } finally {
       setIsSubmitting(false);
@@ -319,18 +301,6 @@ const VesselForm: React.FC<VesselFormProps> = ({ vessel, companies, onSave, onCa
             </div>
           </label>
 
-          <label className="space-y-1.5">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Status</span>
-            <select
-              value={vesselStatus}
-              onChange={(e) => setVesselStatus(e.target.value as NonNullable<Vessel['vesselStatus']>)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-            >
-              {VESSEL_STATUSES.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </label>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
