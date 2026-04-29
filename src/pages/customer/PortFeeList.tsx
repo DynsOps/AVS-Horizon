@@ -1,26 +1,36 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Card } from '../../components/ui/Card';
-import { useAuthStore } from '../../store/authStore';
-import { useUIStore } from '../../store/uiStore';
-import { api } from '../../services/api';
 import { Ship } from 'lucide-react';
-
-type PortFeeRow = {
-  port: string;
-  vesselCount: number;
-  totalFee: number;
-  currency: string;
-};
+import { usePortFees } from '../../hooks/queries/usePortFees';
 
 export const PortFeeList: React.FC = () => {
-  const { user } = useAuthStore();
-  const { dashboardCompanyId } = useUIStore();
-  const [rows, setRows] = useState<PortFeeRow[]>([]);
-  const effectiveCompanyId = dashboardCompanyId || user?.companyId;
+  const { data: rows = [], isLoading, isError } = usePortFees();
 
-  useEffect(() => {
-    api.customer.getPortFees(effectiveCompanyId).then(setRows);
-  }, [effectiveCompanyId]);
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-2">
+          <Ship size={20} className="text-blue-500" />
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Port Fee List</h1>
+        </div>
+        <Card noPadding className="overflow-hidden">
+          <div className="p-6 space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-10 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" />
+            ))}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6 text-sm text-red-500 dark:text-red-400">
+        Failed to load data. Please refresh and try again.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

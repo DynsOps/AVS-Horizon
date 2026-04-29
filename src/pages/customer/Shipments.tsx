@@ -1,22 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { api } from '../../services/api';
-import { Shipment } from '../../types';
+import React from 'react';
 import { Card } from '../../components/ui/Card';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { useThemeStore } from '../../store/themeStore';
-import { useAuthStore } from '../../store/authStore';
-import { useUIStore } from '../../store/uiStore';
+import { useShipments } from '../../hooks/queries/useShipments';
 
 export const Shipments: React.FC = () => {
-    const [shipments, setShipments] = useState<Shipment[]>([]);
     const { isDarkMode } = useThemeStore();
-    const { user } = useAuthStore();
-    const { dashboardCompanyId } = useUIStore();
-    const effectiveCompanyId = dashboardCompanyId || user?.companyId;
-    
-    useEffect(() => {
-        api.customer.getShipments(effectiveCompanyId).then(setShipments);
-    }, [effectiveCompanyId]);
+    const { data: shipments = [], isLoading, isError } = useShipments();
 
     const scorecardData = [
         { name: 'On Time', value: 85 },
@@ -26,10 +16,33 @@ export const Shipments: React.FC = () => {
 
     const COLORS = ['#22c55e', '#ef4444', '#3b82f6'];
 
+    if (isLoading) {
+        return (
+            <div className="space-y-6">
+                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Shipment Tracking</h1>
+                <Card title="Active Shipments" noPadding>
+                    <div className="p-6 space-y-3">
+                        {[...Array(5)].map((_, i) => (
+                            <div key={i} className="h-10 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                        ))}
+                    </div>
+                </Card>
+            </div>
+        );
+    }
+
+    if (isError) {
+        return (
+            <div className="p-6 text-sm text-red-500 dark:text-red-400">
+                Failed to load data. Please refresh and try again.
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Shipment Tracking</h1>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card title="OTIF Scorecard (Yearly)" className="md:col-span-2">
                      <div className="h-48">
@@ -38,9 +51,9 @@ export const Shipments: React.FC = () => {
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={isDarkMode ? '#1e293b' : '#e2e8f0'} />
                                 <XAxis type="number" hide />
                                 <YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12, fill: isDarkMode ? '#94a3b8' : '#64748b'}} interval={0} />
-                                <Tooltip 
-                                    cursor={{fill: 'transparent'}} 
-                                    contentStyle={{ 
+                                <Tooltip
+                                    cursor={{fill: 'transparent'}}
+                                    contentStyle={{
                                         backgroundColor: isDarkMode ? '#1e293b' : '#fff',
                                         borderColor: isDarkMode ? '#334155' : '#e2e8f0',
                                         color: isDarkMode ? '#f8fafc' : '#0f172a',
@@ -85,7 +98,7 @@ export const Shipments: React.FC = () => {
                                 <td className="px-6 py-3">
                                     <span className={`px-2 py-1 rounded-full text-xs font-medium border ${
                                         s.status === 'On Time' ? 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800' :
-                                        s.status === 'Delayed' ? 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800' : 
+                                        s.status === 'Delayed' ? 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800' :
                                         'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800'
                                     }`}>
                                         {s.status}

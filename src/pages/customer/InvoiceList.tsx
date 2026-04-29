@@ -1,20 +1,38 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Card } from '../../components/ui/Card';
-import { useAuthStore } from '../../store/authStore';
-import { api } from '../../services/api';
-import { Invoice } from '../../types';
-import { FileText } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
+import { FileText } from 'lucide-react';
+import { useInvoices } from '../../hooks/queries/useInvoices';
 
 export const InvoiceList: React.FC = () => {
-  const { user } = useAuthStore();
-  const { addToast, dashboardCompanyId } = useUIStore();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const effectiveCompanyId = dashboardCompanyId || user?.companyId;
+  const { addToast } = useUIStore();
+  const { data: invoices = [], isLoading, isError } = useInvoices();
 
-  useEffect(() => {
-    api.customer.getInvoices(effectiveCompanyId).then(setInvoices);
-  }, [effectiveCompanyId]);
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Invoice List</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Entity-scoped invoice records.</p>
+        </div>
+        <Card noPadding className="overflow-hidden">
+          <div className="p-6 space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-10 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" />
+            ))}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6 text-sm text-red-500 dark:text-red-400">
+        Failed to load data. Please refresh and try again.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -1,20 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { api } from '../../services/api';
 import { Order } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { useUIStore } from '../../store/uiStore';
 import { Filter, Download, MoreVertical, Truck } from 'lucide-react';
-import { useAuthStore } from '../../store/authStore';
+import { useOrders } from '../../hooks/queries/useOrders';
 
 export const CustomerOrders: React.FC = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const { openDrawer, addToast, dashboardCompanyId } = useUIStore();
-  const { user } = useAuthStore();
-  const effectiveCompanyId = dashboardCompanyId || user?.companyId;
-
-  useEffect(() => {
-    api.customer.getOrders(effectiveCompanyId).then(setOrders);
-  }, [effectiveCompanyId]);
+  const { openDrawer, addToast } = useUIStore();
+  const { data: orders = [], isLoading, isError } = useOrders();
 
   const handleRowClick = (order: Order) => {
     openDrawer(
@@ -78,6 +72,31 @@ export const CustomerOrders: React.FC = () => {
     }
   }
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Order Management</h1>
+        </div>
+        <Card noPadding className="overflow-hidden">
+          <div className="p-6 space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-10 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" />
+            ))}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6 text-sm text-red-500 dark:text-red-400">
+        Failed to load data. Please refresh and try again.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -113,8 +132,8 @@ export const CustomerOrders: React.FC = () => {
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-slate-800">
             {orders.map((order) => (
-              <tr 
-                key={order.id} 
+              <tr
+                key={order.id}
                 onClick={() => handleRowClick(order)}
                 className="hover:bg-blue-50/50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors even:bg-slate-50/30 dark:even:bg-slate-900/30"
               >

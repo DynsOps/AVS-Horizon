@@ -1,21 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card } from '../../components/ui/Card';
-import { useAuthStore } from '../../store/authStore';
-import { useUIStore } from '../../store/uiStore';
-import { api } from '../../services/api';
-import { Order } from '../../types';
 import { History, Search } from 'lucide-react';
+import { useHistoricalOrders } from '../../hooks/queries/useOrders';
 
 export const HistoricalOrders: React.FC = () => {
-  const { user } = useAuthStore();
-  const { dashboardCompanyId } = useUIStore();
-  const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState('');
-  const effectiveCompanyId = dashboardCompanyId || user?.companyId;
-
-  useEffect(() => {
-    api.customer.getHistoricalOrders(effectiveCompanyId).then(setOrders);
-  }, [effectiveCompanyId]);
+  const { data: orders = [], isLoading, isError } = useHistoricalOrders();
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -26,6 +16,32 @@ export const HistoricalOrders: React.FC = () => {
       o.port.toLowerCase().includes(q)
     );
   }, [orders, search]);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-2">
+          <History size={20} className="text-blue-500" />
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Historical Orders</h1>
+        </div>
+        <Card noPadding className="overflow-hidden">
+          <div className="p-6 space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-10 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" />
+            ))}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6 text-sm text-red-500 dark:text-red-400">
+        Failed to load data. Please refresh and try again.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

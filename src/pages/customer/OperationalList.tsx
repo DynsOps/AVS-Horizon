@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Card } from '../../components/ui/Card';
-import { useAuthStore } from '../../store/authStore';
-import { useUIStore } from '../../store/uiStore';
-import { api } from '../../services/api';
 import { Order, Shipment } from '../../types';
+import { useOrders } from '../../hooks/queries/useOrders';
+import { useShipments } from '../../hooks/queries/useShipments';
 
 type OperationalRow = {
   id: string;
@@ -15,22 +14,10 @@ type OperationalRow = {
 };
 
 export const OperationalList: React.FC = () => {
-  const { user } = useAuthStore();
-  const { dashboardCompanyId } = useUIStore();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [shipments, setShipments] = useState<Shipment[]>([]);
-  const effectiveCompanyId = dashboardCompanyId || user?.companyId;
-
-  useEffect(() => {
-    if (!effectiveCompanyId) return;
-    Promise.all([
-      api.customer.getOrders(effectiveCompanyId),
-      api.customer.getShipments(effectiveCompanyId),
-    ]).then(([o, s]) => {
-      setOrders(o);
-      setShipments(s);
-    });
-  }, [effectiveCompanyId]);
+  const { data: orders = [], isLoading: ordersLoading } = useOrders();
+  const { data: shipments = [], isLoading: shipmentsLoading } = useShipments();
+  const isLoading = ordersLoading || shipmentsLoading;
+  const isError = false; // individual query errors don't block the whole list
 
   const rows = useMemo<OperationalRow[]>(() => {
     const orderRows = orders.map((o) => ({
@@ -51,6 +38,24 @@ export const OperationalList: React.FC = () => {
     }));
     return [...orderRows, ...shipmentRows];
   }, [orders, shipments]);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Operational List</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Unified view of orders and shipments for your entity.</p>
+        </div>
+        <Card noPadding className="overflow-hidden">
+          <div className="p-6 space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-10 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" />
+            ))}
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
