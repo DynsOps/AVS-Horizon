@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useMemo, useState } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { ContractedVessel, FleetMandayReportVessel } from '../../types';
 import { Card } from '../../components/ui/Card';
@@ -31,7 +31,10 @@ const MONTH_NAMES = [
 
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
 
-const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
+function currentYearsList() {
+  const y = new Date().getFullYear();
+  return Array.from({ length: 5 }, (_, i) => y - i);
+}
 
 // ── KpiCard ───────────────────────────────────────────────────────────────────
 
@@ -92,7 +95,7 @@ const PortCallTimeline: React.FC = () => (
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${PORT_CALL_STATUS_STYLES[call.status] ?? 'bg-slate-100 text-slate-600'}`}>
               {call.status}
             </span>
-            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">${call.cost.toLocaleString()}</p>
+            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">{fmt(call.cost)}</p>
           </div>
         ))}
       </div>
@@ -146,6 +149,7 @@ interface VesselDetailPanelProps {
   reportLoading: boolean;
   year: number;
   month: number;
+  years: number[];
   onYearChange: (y: number) => void;
   onMonthChange: (m: number) => void;
 }
@@ -156,6 +160,7 @@ const VesselDetailPanel: React.FC<VesselDetailPanelProps> = ({
   reportLoading,
   year,
   month,
+  years,
   onYearChange,
   onMonthChange,
 }) => {
@@ -209,6 +214,7 @@ const VesselDetailPanel: React.FC<VesselDetailPanelProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <select
+            aria-label="Month"
             value={month}
             onChange={e => onMonthChange(Number(e.target.value))}
             className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1.5 text-sm text-slate-700 dark:text-slate-200 outline-none"
@@ -218,11 +224,12 @@ const VesselDetailPanel: React.FC<VesselDetailPanelProps> = ({
             ))}
           </select>
           <select
+            aria-label="Year"
             value={year}
             onChange={e => onYearChange(Number(e.target.value))}
             className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1.5 text-sm text-slate-700 dark:text-slate-200 outline-none"
           >
-            {YEARS.map(y => (
+            {years.map(y => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
@@ -254,23 +261,26 @@ const VesselDetailPanel: React.FC<VesselDetailPanelProps> = ({
 export const Fleet: React.FC = () => {
   const { dashboardCompanyId } = useUIStore();
   const [selectedImo, setSelectedImo] = useState<string | null>(null);
-  const [year, setYear] = useState(() => {
-    const d = new Date(); d.setMonth(d.getMonth() - 1); return d.getFullYear();
+  const [{ year: initYear, month: initMonth }] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
   });
-  const [month, setMonth] = useState(() => {
-    const d = new Date(); d.setMonth(d.getMonth() - 1); return d.getMonth() + 1;
-  });
+  const [year, setYear] = useState(initYear);
+  const [month, setMonth] = useState(initMonth);
+  const years = useMemo(currentYearsList, []);
 
-  const { data: vessels = [], isLoading: vesselsLoading } = useQuery({
+  const { data: vessels = [], isLoading: vesselsLoading, isError: vesselsError } = useQuery({
     queryKey: ['contracted-vessels', dashboardCompanyId],
     queryFn: () => api.customer.getContractedVessels(),
     enabled: !!dashboardCompanyId,
   });
 
-  const { data: report, isLoading: reportLoading } = useQuery({
+  const { data: report, isFetching: reportLoading } = useQuery({
     queryKey: ['fleet-manday-report', year, month, dashboardCompanyId],
     queryFn: () => api.customer.getFleetMandayReport({ year, month }),
     enabled: !!selectedImo && !!dashboardCompanyId,
+    placeholderData: keepPreviousData,
   });
 
   const selectedVessel = vessels.find(v => v.imo === selectedImo) ?? null;
@@ -280,12 +290,14 @@ export const Fleet: React.FC = () => {
     <div className="flex h-[calc(100vh-8rem)] space-x-6">
       <div className="w-1/3 flex flex-col space-y-4">
         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Contracted Fleet</h2>
-        <Card className="flex-1 overflow-y-auto p-0" noPadding>
+        <Card className="flex-1 overflow-y-auto" noPadding>
           <div className="p-4 bg-gray-50 dark:bg-slate-800/50 border-b dark:border-slate-800 font-medium text-slate-700 dark:text-slate-200">
             Vessels
           </div>
           {vesselsLoading ? (
             <div className="p-4 text-slate-500 dark:text-slate-400 text-sm">Loading...</div>
+          ) : vesselsError ? (
+            <div className="p-4 text-red-500 dark:text-red-400 text-sm">Failed to load vessels.</div>
           ) : vessels.length === 0 ? (
             <div className="p-4 text-slate-500 dark:text-slate-400 text-sm">No contracted vessels found for this company.</div>
           ) : (
@@ -293,7 +305,10 @@ export const Fleet: React.FC = () => {
               {vessels.map(vessel => (
                 <div
                   key={vessel.imo}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelectedImo(vessel.imo)}
+                  onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setSelectedImo(vessel.imo)}
                   className={`p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${
                     selectedImo === vessel.imo
                       ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500'
@@ -325,6 +340,7 @@ export const Fleet: React.FC = () => {
             reportLoading={reportLoading}
             year={year}
             month={month}
+            years={years}
             onYearChange={setYear}
             onMonthChange={setMonth}
           />
