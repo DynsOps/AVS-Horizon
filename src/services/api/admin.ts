@@ -65,7 +65,6 @@ export const admin = {
     if (actor?.role === 'admin') {
       const { provisioningSource, ...rest } = updates as Partial<User> & { provisioningSource?: string };
       body = {
-        ...updates,
         ...rest,
         role: 'user',
         companyId: actor.companyId || updates.companyId || '',
@@ -75,7 +74,6 @@ export const admin = {
     } else {
       const { provisioningSource, ...rest } = updates as Partial<User> & { provisioningSource?: string };
       body = {
-        ...updates,
         ...rest,
         ...(provisioningSource ? { provisioningMode: provisioningSource } : {}),
       };
