@@ -64,5 +64,5 @@ export const qk = {
   // Supplier
   supplier: { kpis: () => ['supplier', 'kpis'] as const },
   // PowerBI
-  powerbi: { embed: (reportId?: string | null) => ['powerbi', 'embed', reportId ?? null] as const },
+  powerbi: { embed: (reportId?: string | null, companyId?: string | null) => ['powerbi', 'embed', reportId ?? null, companyId ?? null] as const },
 } as const;

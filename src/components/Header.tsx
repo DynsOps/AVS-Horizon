@@ -82,7 +82,9 @@ export const Header: React.FC = () => {
   } = useUIStore();
   const navigate = useNavigate();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isCompanyMenuOpen, setIsCompanyMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const companyMenuRef = useRef<HTMLDivElement | null>(null);
   const isSupadmin = user?.role === 'supadmin';
   // companyIds may be absent on stale sessions — fall back to deriving from companyId
   const effectiveCompanyIds = user?.companyIds ?? (user?.companyId ? [user.companyId] : []);
@@ -118,17 +120,21 @@ export const Header: React.FC = () => {
   }, [resolvedCompanyId, dashboardCompanyId, setDashboardCompanyId]);
 
   useEffect(() => {
-    if (!isProfileMenuOpen) return;
+    if (!isProfileMenuOpen && !isCompanyMenuOpen) return;
 
     const handlePointerDown = (event: MouseEvent) => {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setIsProfileMenuOpen(false);
+      }
+      if (companyMenuRef.current && !companyMenuRef.current.contains(event.target as Node)) {
+        setIsCompanyMenuOpen(false);
       }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsProfileMenuOpen(false);
+        setIsCompanyMenuOpen(false);
       }
     };
 
@@ -139,7 +145,7 @@ export const Header: React.FC = () => {
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isProfileMenuOpen]);
+  }, [isProfileMenuOpen, isCompanyMenuOpen]);
 
   const unreadNotificationCount = useMemo(
     () => notifications.filter((notification) => !notification.isRead).length,
@@ -164,21 +170,64 @@ export const Header: React.FC = () => {
           Ops Command Center
         </div>
         {companyOptions.length > 0 && (
-          <div className="flex items-center gap-2 rounded-xl border border-white/70 bg-white/70 px-3 py-2 dark:border-slate-700/70 dark:bg-slate-950/70">
-            <Building2 size={15} className="text-slate-500 dark:text-slate-300" />
-            <select
-              value={resolvedCompanyId}
-              onChange={(isSupadmin || isMultiCompanyUser) ? (e) => setDashboardCompanyId(e.target.value) : undefined}
+          <div ref={companyMenuRef} className="relative">
+            <button
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded={isCompanyMenuOpen}
+              aria-label="Select company"
+              onClick={() => {
+                if (isSupadmin || isMultiCompanyUser) setIsCompanyMenuOpen((o) => !o);
+              }}
               disabled={!isSupadmin && !isMultiCompanyUser}
-              aria-readonly={!isSupadmin && !isMultiCompanyUser}
-              className="bg-transparent pr-2 text-sm text-slate-700 outline-none disabled:cursor-not-allowed disabled:opacity-80 dark:text-slate-200"
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-sm text-slate-700 transition-colors dark:border-slate-700/70 dark:bg-slate-950/70 dark:text-slate-200 disabled:cursor-default"
             >
-              {companyOptions.map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.name}{company.dataAreaId ? ` · ${company.dataAreaId}` : ''}
-                </option>
-              ))}
-            </select>
+              <Building2 size={15} className="shrink-0 text-slate-500 dark:text-slate-300" />
+              {(() => {
+                const selected = companyOptions.find((c) => c.id === resolvedCompanyId);
+                return (
+                  <>
+                    <span className="max-w-[160px] truncate">{selected?.name ?? resolvedCompanyId}</span>
+                    {selected?.dataAreaId && (
+                      <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">· {selected.dataAreaId}</span>
+                    )}
+                  </>
+                );
+              })()}
+              {(isSupadmin || isMultiCompanyUser) && (
+                <ChevronDown size={13} className={`shrink-0 text-slate-400 transition-transform ${isCompanyMenuOpen ? 'rotate-180' : ''}`} />
+              )}
+            </button>
+
+            {isCompanyMenuOpen && (
+              <ul
+                role="listbox"
+                aria-label="Companies"
+                className="absolute left-0 top-full z-50 mt-1.5 max-h-64 min-w-[220px] overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl shadow-slate-900/10 dark:border-slate-700 dark:bg-slate-900"
+              >
+                {companyOptions.map((company) => (
+                  <li
+                    key={company.id}
+                    role="option"
+                    aria-selected={company.id === resolvedCompanyId}
+                    onClick={() => {
+                      setDashboardCompanyId(company.id);
+                      setIsCompanyMenuOpen(false);
+                    }}
+                    className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                      company.id === resolvedCompanyId
+                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                        : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="flex-1 truncate">{company.name}</span>
+                    {company.dataAreaId && (
+                      <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">{company.dataAreaId}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </div>
