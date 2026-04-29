@@ -4,10 +4,10 @@ import L from 'leaflet';
 import { api } from '../../services/api';
 import { Vessel, VesselPosition, VesselRoute, VesselOperation } from '../../types';
 import { VesselMarker } from '../../components/maritime/VesselMarker';
-import { RoutePolyline } from '../../components/maritime/RoutePolyline';
 import { useUIStore } from '../../store/uiStore';
 import { useThemeStore } from '../../store/themeStore';
 import { VesselDrawer } from '../../components/maritime/VesselDrawer';
+import { useMaritimeMapPayload } from '../../hooks/useMaritimeMapPayload';
 import {
   ChevronLeft,
   ChevronRight,
@@ -20,19 +20,54 @@ import {
   Filter as FilterIcon,
 } from 'lucide-react';
 
-const PORT_COORDS: Record<string, [number, number]> = {
-  'Singapore': [1.29027, 103.851959],
-  'Rotterdam': [51.9225, 4.47917],
-  'Mumbai': [18.9388, 72.8354],
-  'Jebel Ali': [25.0117, 55.0618],
-  'Houston': [29.7604, -95.3698],
-  'Corpus Christi': [27.8006, -97.3964],
-  'Hamburg': [53.5511, 9.9937],
-  'Oslo': [59.9139, 10.7522],
-  'Busan': [35.1796, 129.0756],
-  'Antwerp': [51.2194, 4.4025],
-  'Colombo': [6.9271, 79.8612],
-};
+// Module-level cache — survives re-renders, cleared on page reload
+const portCoordsMemCache = new Map<string, [number, number] | null>();
+
+function parseDMS(dms: string): number | null {
+  const m = dms.match(/(\d+)[°º]\s*(\d+)[''']\s*([\d.]+)[""""]?\s*([NSEW])/i);
+  if (!m) return null;
+  const decimal = parseFloat(m[1]) + parseFloat(m[2]) / 60 + parseFloat(m[3]) / 3600;
+  return m[4].toUpperCase() === 'S' || m[4].toUpperCase() === 'W' ? -decimal : decimal;
+}
+
+async function queryNGA(name: string): Promise<[number, number] | null> {
+  try {
+    const res = await fetch(
+      `https://msi.pub.kubic.nga.mil/api/publications/world-port-index?portName=${encodeURIComponent(name)}&output=json`
+    );
+    const data = await res.json() as { ports?: { latitude: string; longitude: string }[] };
+    const port = data?.ports?.[0];
+    if (port) {
+      const lat = parseDMS(port.latitude);
+      const lng = parseDMS(port.longitude);
+      if (lat != null && lng != null) return [lat, lng];
+    }
+  } catch { /* silently fail */ }
+  return null;
+}
+
+async function fetchPortCoords(portName: string): Promise<[number, number] | null> {
+  if (portCoordsMemCache.has(portName)) return portCoordsMemCache.get(portName) ?? null;
+
+  // Datadocked appends country names: "Mersin Turkey", "Port Elizabeth South Africa"
+  // Try stripping trailing words first (country), fall back to full name
+  const words = portName.trim().split(/\s+/);
+  const candidates: string[] = [];
+  if (words.length > 1) candidates.push(words.slice(0, -1).join(' ')); // strip last word (country)
+  if (words.length > 2) candidates.push(words.slice(0, -2).join(' ')); // strip last 2 words
+  candidates.push(portName); // full name as last resort
+
+  for (const candidate of candidates) {
+    const coords = await queryNGA(candidate);
+    if (coords) {
+      portCoordsMemCache.set(portName, coords);
+      return coords;
+    }
+  }
+
+  portCoordsMemCache.set(portName, null);
+  return null;
+}
 
 type OperationWithVessel = {
   vesselName: string;
@@ -99,24 +134,6 @@ const MAP_STYLES: MapStyle[] = [
   },
 ];
 
-const seedFromText = (value: string) => value.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-
-const getRouteProgress = (vesselId: string, nowMs: number) => {
-  const seed = seedFromText(vesselId);
-  const cycleMs = 90_000 + (seed % 4) * 15_000;
-  return ((nowMs + seed * 977) % cycleMs) / cycleMs;
-};
-
-const lerp = (start: number, end: number, t: number) => start + (end - start) * t;
-
-const calculateBearing = (from: [number, number], to: [number, number]) => {
-  const [lat1, lon1] = from.map((v) => (v * Math.PI) / 180);
-  const [lat2, lon2] = to.map((v) => (v * Math.PI) / 180);
-  const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
-  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
-  const bearing = (Math.atan2(y, x) * 180) / Math.PI;
-  return (bearing + 360) % 360;
-};
 
 const formatAmount = (amount: number, currency: string) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
@@ -124,10 +141,11 @@ const formatAmount = (amount: number, currency: string) =>
 const getOperationPorts = (
   operations: VesselOperation[],
   vesselById: Map<string, Vessel>,
+  portCoords: Record<string, [number, number]>,
 ): Map<string, OperationPortInfo> => {
   const map = new Map<string, OperationPortInfo>();
   operations.forEach((op) => {
-    const coords = PORT_COORDS[op.port];
+    const coords = portCoords[op.port];
     if (!coords) return;
     const vesselName = vesselById.get(op.vesselId)?.name || op.vesselId;
     const existing = map.get(op.port);
@@ -193,15 +211,15 @@ const Section: React.FC<SectionProps> = ({ title, icon, children }) => (
 );
 
 export const MaritimeMap: React.FC = () => {
-  const [vessels, setVessels] = useState<Vessel[]>([]);
-  const [positions, setPositions] = useState<VesselPosition[]>([]);
-  const [routes, setRoutes] = useState<VesselRoute[]>([]);
+  const { data: mapData, isLoading: isMapLoading } = useMaritimeMapPayload();
+  const vessels = mapData?.vessels ?? [];
+  const positions = mapData?.positions ?? [];
+  const routes = mapData?.routes ?? [];
   const [operations, setOperations] = useState<VesselOperation[]>([]);
   const [selectedVesselId, setSelectedVesselId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState('');
   const [selectedVesselIds, setSelectedVesselIds] = useState<Set<string> | null>(null);
   const [vesselSearch, setVesselSearch] = useState('');
-  const [showRoutes, setShowRoutes] = useState(true);
   const [showOperations, setShowOperations] = useState(true);
   const [showSeamarks, setShowSeamarks] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -212,32 +230,35 @@ export const MaritimeMap: React.FC = () => {
     const id = mapStyleId ?? defaultId;
     return MAP_STYLES.find((s) => s.id === id) ?? MAP_STYLES[0];
   }, [isDarkMode, mapStyleId]);
-  const [animationNow, setAnimationNow] = useState(() => Date.now());
+  const [portCoords, setPortCoords] = useState<Record<string, [number, number]>>({});
   const { openDrawer, dashboardCompanyId } = useUIStore();
   const mapRef = useRef<L.Map | null>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [mapPayload, ops] = await Promise.all([
-          api.maritime.getMapPayload(),
-          api.maritime.getOperations(),
-        ]);
-        setVessels(mapPayload.vessels);
-        setPositions(mapPayload.positions);
-        setRoutes(mapPayload.routes);
+        const ops = await api.maritime.getOperations();
         setOperations(ops);
       } catch (err) {
-        console.error('[MaritimeMap] Failed to load maritime data:', err instanceof Error ? err.message : String(err));
+        console.error('[MaritimeMap] Failed to load operations:', err instanceof Error ? err.message : String(err));
       }
     };
     void load();
   }, []);
 
   useEffect(() => {
-    const id = window.setInterval(() => setAnimationNow(Date.now()), 1200);
-    return () => window.clearInterval(id);
-  }, []);
+    const portNames = new Set<string>();
+    routes.forEach(r => { if (r.departurePort) portNames.add(r.departurePort); if (r.arrivalPort) portNames.add(r.arrivalPort); });
+    operations.forEach(op => { if (op.port) portNames.add(op.port); });
+    const missing = Array.from(portNames).filter(n => !portCoordsMemCache.has(n));
+    if (missing.length === 0) return;
+    Promise.all(missing.map(async n => ({ name: n, coords: await fetchPortCoords(n) }))).then(results => {
+      const updates: Record<string, [number, number]> = {};
+      results.forEach(r => { if (r.coords) updates[r.name] = r.coords; });
+      if (Object.keys(updates).length > 0) setPortCoords(prev => ({ ...prev, ...updates }));
+    });
+  }, [routes, operations]);
+
 
   const isCompanyReady = Boolean(dashboardCompanyId);
 
@@ -309,46 +330,18 @@ export const MaritimeMap: React.FC = () => {
     return m;
   }, [activeRoutes]);
 
-  const animatedPositionMap = useMemo(() => {
-    const m = new Map<string, VesselPosition>();
-    filteredVessels.forEach((vessel) => {
-      const basePos = positionMap.get(vessel.id);
-      if (!basePos) return;
-      const activeRoute = activeRouteByVesselId.get(vessel.id);
-      const depCoords = activeRoute ? PORT_COORDS[activeRoute.departurePort] : undefined;
-      const arrCoords = activeRoute ? PORT_COORDS[activeRoute.arrivalPort] : undefined;
-
-      if (!activeRoute || !depCoords || !arrCoords) {
-        m.set(vessel.id, basePos);
-        return;
-      }
-
-      const t = getRouteProgress(vessel.id, animationNow);
-      const heading = calculateBearing(depCoords, arrCoords);
-
-      m.set(vessel.id, {
-        ...basePos,
-        lat: lerp(depCoords[0], arrCoords[0], t),
-        lng: lerp(depCoords[1], arrCoords[1], t),
-        heading,
-        course: heading,
-        destination: activeRoute.arrivalPort,
-        navStatus: 'Under Way (Mock)',
-      });
-    });
-    return m;
-  }, [activeRouteByVesselId, animationNow, filteredVessels, positionMap]);
-
   const allPositionCoords = useMemo(() => {
-    const vesselCoords = Array.from(animatedPositionMap.values()).map((p): [number, number] => [p.lat, p.lng]);
+    const vesselCoords = Array.from(positionMap.values())
+      .filter((p) => p.lat != null && p.lng != null)
+      .map((p): [number, number] => [p.lat as number, p.lng as number]);
     const routeCoords = activeRoutes.flatMap((route) => {
-      const depCoords = PORT_COORDS[route.departurePort];
-      const arrCoords = PORT_COORDS[route.arrivalPort];
+      const depCoords = portCoords[route.departurePort];
+      const arrCoords = portCoords[route.arrivalPort];
       if (!depCoords || !arrCoords) return [];
       return [depCoords, arrCoords];
     });
     return [...vesselCoords, ...routeCoords];
-  }, [activeRoutes, animatedPositionMap]);
+  }, [activeRoutes, positionMap, portCoords]);
 
   const filteredOperations = useMemo(
     () => operations.filter((op) => filteredVesselIds.has(op.vesselId)),
@@ -361,15 +354,15 @@ export const MaritimeMap: React.FC = () => {
   }, [singleFilteredVesselId, filteredOperations]);
 
   const operationPortMarkers = useMemo(
-    () => getOperationPorts(filteredOperations, vesselById),
-    [filteredOperations, vesselById],
+    () => getOperationPorts(filteredOperations, vesselById, portCoords),
+    [filteredOperations, vesselById, portCoords],
   );
 
   const vesselTypes = useMemo(() => [...new Set(vessels.map((v) => v.type))], [vessels]);
 
   const handleVesselClick = (vessel: Vessel) => {
     setSelectedVesselId(vessel.id);
-    const pos = animatedPositionMap.get(vessel.id);
+    const pos = positionMap.get(vessel.id);
     if (pos && mapRef.current) {
       mapRef.current.flyTo([pos.lat, pos.lng], 6, { duration: 1 });
     }
@@ -383,7 +376,6 @@ export const MaritimeMap: React.FC = () => {
     }
   };
 
-  const activeCount = filteredVessels.filter((v) => (v.vesselStatus || 'Active') === 'Active').length;
   const underwayCount = activeRoutes.length;
 
   return (
@@ -497,14 +489,7 @@ export const MaritimeMap: React.FC = () => {
                   )}
                   {searchedVessels.map((v) => {
                     const isChecked = selectedVesselIds ? selectedVesselIds.has(v.id) : true;
-                    const color =
-                      v.vesselStatus === 'Active' || !v.vesselStatus
-                        ? '#10b981'
-                        : v.vesselStatus === 'Under Repair'
-                        ? '#f59e0b'
-                        : v.vesselStatus === 'Scrapped'
-                        ? '#ef4444'
-                        : '#94a3b8';
+                    const color = '#10b981';
                     return (
                       <label
                         key={v.id}
@@ -537,12 +522,6 @@ export const MaritimeMap: React.FC = () => {
             <Section title="Layers" icon={<RouteIcon size={12} />}>
               <div className="space-y-2">
                 <ToggleRow
-                  icon={<RouteIcon size={13} className="text-blue-500 dark:text-blue-400" />}
-                  label="Active Routes"
-                  checked={showRoutes}
-                  onChange={setShowRoutes}
-                />
-                <ToggleRow
                   icon={<Anchor size={13} className="text-indigo-500 dark:text-indigo-400" />}
                   label="Operation Ports"
                   checked={showOperations}
@@ -557,14 +536,6 @@ export const MaritimeMap: React.FC = () => {
               </div>
             </Section>
 
-            <Section title="Vessel Status" icon={<Ship size={12} />}>
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <LegendDot color="#10b981" label="Active" />
-                <LegendDot color="#f59e0b" label="Under Repair" />
-                <LegendDot color="#94a3b8" label="Laid Up" />
-                <LegendDot color="#ef4444" label="Scrapped" />
-              </div>
-            </Section>
           </div>
 
           <div className="border-t border-slate-200/70 px-4 py-3 dark:border-white/5">
@@ -616,7 +587,7 @@ export const MaritimeMap: React.FC = () => {
           <MapSizeInvalidator trigger={sidebarOpen} />
 
           {filteredVessels.map((vessel) => {
-            const pos = animatedPositionMap.get(vessel.id);
+            const pos = positionMap.get(vessel.id);
             if (!pos) return null;
             return (
               <VesselMarker
@@ -629,21 +600,6 @@ export const MaritimeMap: React.FC = () => {
             );
           })}
 
-          {showRoutes &&
-            activeRoutes.map((route) => {
-              const depCoords = PORT_COORDS[route.departurePort];
-              const arrCoords = PORT_COORDS[route.arrivalPort];
-              if (!depCoords || !arrCoords) return null;
-              return (
-                <RoutePolyline
-                  key={route.id}
-                  route={route}
-                  departureCoords={depCoords}
-                  arrivalCoords={arrCoords}
-                  vesselName={vesselById.get(route.vesselId)?.name}
-                />
-              );
-            })}
 
           {showOperations &&
             Array.from(operationPortMarkers.values()).map((portInfo) => {
@@ -734,7 +690,7 @@ export const MaritimeMap: React.FC = () => {
         </MapContainer>
 
         {/* Loading overlay until header resolves the active company */}
-        {!isCompanyReady && (
+        {(isMapLoading || !isCompanyReady) && (
           <div className="pointer-events-auto absolute inset-0 z-[1000] flex items-center justify-center bg-slate-100/60 backdrop-blur-sm dark:bg-slate-950/60">
             <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-5 py-3 text-sm font-medium text-slate-700 shadow-lg dark:border-white/10 dark:bg-slate-900/95 dark:text-slate-100">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
@@ -751,7 +707,7 @@ export const MaritimeMap: React.FC = () => {
           </span>
           LIVE
           <span className="text-slate-400">·</span>
-          <span className="text-slate-300">{activeCount}/{filteredVessels.length} active</span>
+          <span className="text-slate-300">{filteredVessels.length} vessels</span>
         </div>
 
         {/* Bottom-left status bar */}
@@ -794,9 +750,3 @@ const ToggleRow: React.FC<{
   </label>
 );
 
-const LegendDot: React.FC<{ color: string; label: string }> = ({ color, label }) => (
-  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-    <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-    {label}
-  </div>
-);

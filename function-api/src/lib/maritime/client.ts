@@ -47,7 +47,6 @@ function chunk<T>(arr: T[], size: number): T[][] {
 
 async function fetchBatch(imos: string[]): Promise<DatadockedResult[]> {
   const url = `${env.datadockedBaseUrl}/api/vessels_operations/get-vessels-location-bulk-search?imo_or_mmsi=${imos.join(',')}`;
-
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), env.datadockedTimeoutMs);
 
@@ -99,6 +98,10 @@ async function fetchBatch(imos: string[]): Promise<DatadockedResult[]> {
 
 export async function fetchDatadockedPositions(imos: string[]): Promise<DatadockedResult[]> {
   if (imos.length === 0) return [];
+  if (!env.datadockedApiKey) {
+    console.warn('[maritime] DATADOCKED_API_KEY not set — skipping Datadocked fetch, returning empty results');
+    return [];
+  }
   const batches = chunk(imos, 50);
   const settled = await Promise.allSettled(batches.map((batch) => fetchBatch(batch)));
   const results: DatadockedResult[] = [];

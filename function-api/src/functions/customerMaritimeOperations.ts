@@ -11,7 +11,7 @@ export async function customerMaritimeOperations(request: HttpRequest, context: 
     if (!actor.permissions.includes('view:maritime-map')) {
       return errorResponse(403, 'Missing permission: view:maritime-map');
     }
-    if (!actor.activeProjId || !actor.activeDataAreaId) {
+    if (!actor.activeProjId || !actor.activeDataAreaId || !actor.activeCompanyId) {
       return errorResponse(400, 'Active company has no projId/dataAreaId configured.');
     }
     const topProjectIdDataAreaId = `${actor.activeProjId},${actor.activeDataAreaId}`;

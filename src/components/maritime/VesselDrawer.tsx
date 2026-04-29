@@ -62,14 +62,6 @@ export const VesselDrawer: React.FC<Props> = ({ vesselId }) => {
   const activeRoute = routes.find((r) => r.status === 'In Progress');
   const recentOps = operations.slice(0, 5);
 
-  const statusColor = (status?: string) => {
-    switch (status) {
-      case 'Active': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
-      case 'Under Repair': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
-      case 'Laid Up': return 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200';
-      default: return 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200';
-    }
-  };
 
   const formatAmount = (amount: number, currency: string) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
@@ -90,9 +82,6 @@ export const VesselDrawer: React.FC<Props> = ({ vesselId }) => {
           <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
             {vessel.type}
           </span>
-          <span className={`rounded px-2 py-0.5 text-xs font-semibold ${statusColor(vessel.vesselStatus)}`}>
-            {vessel.vesselStatus || 'Active'}
-          </span>
         </div>
         {company && (
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{company.name}</p>
@@ -110,10 +99,10 @@ export const VesselDrawer: React.FC<Props> = ({ vesselId }) => {
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs text-slate-700 dark:text-slate-200">
             <div>
-              <span className="text-slate-500">Lat:</span> {position.lat.toFixed(4)}
+              <span className="text-slate-500">Lat:</span> {position.lat != null ? position.lat.toFixed(4) : 'N/A'}
             </div>
             <div>
-              <span className="text-slate-500">Lng:</span> {position.lng.toFixed(4)}
+              <span className="text-slate-500">Lng:</span> {position.lng != null ? position.lng.toFixed(4) : 'N/A'}
             </div>
             <div>
               <span className="text-slate-500">Speed:</span> {position.speed} kn
@@ -146,7 +135,7 @@ export const VesselDrawer: React.FC<Props> = ({ vesselId }) => {
             <span>{activeRoute.arrivalPort}</span>
           </div>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Departed: {new Date(activeRoute.departureDate).toLocaleDateString()}
+            Departed: {activeRoute.departureDate ? new Date(activeRoute.departureDate).toLocaleDateString() : '—'}
           </p>
         </div>
       )}

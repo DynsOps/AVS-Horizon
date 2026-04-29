@@ -1,18 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../services/api';
-import { Vessel, VesselPosition } from '../../types';
-import { MapPin, Ship, ArrowUpRight } from 'lucide-react';
+import { MapPin, ArrowUpRight } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
+import { useMaritimeMapPayload } from '../../hooks/useMaritimeMapPayload';
 
-const statusColors: Record<string, string> = {
-  Active: '#34d399',
-  'Under Repair': '#fbbf24',
-  'Laid Up': '#94a3b8',
-  Scrapped: '#f87171',
-};
 
 const FitToVessels: React.FC<{ coords: [number, number][] }> = ({ coords }) => {
   const map = useMap();
@@ -45,22 +38,12 @@ const SizeInvalidator: React.FC = () => {
 
 export const MapWidget: React.FC = () => {
   const navigate = useNavigate();
-  const [allVessels, setAllVessels] = useState<Vessel[]>([]);
-  const [positions, setPositions] = useState<VesselPosition[]>([]);
   const { dashboardCompanyId } = useUIStore();
   const isCompanyReady = Boolean(dashboardCompanyId);
+  const { data, isLoading } = useMaritimeMapPayload();
 
-  useEffect(() => {
-    const load = async () => {
-      const [v, p] = await Promise.all([
-        api.maritime.getVessels(),
-        api.maritime.getVesselPositions(),
-      ]);
-      setAllVessels(v);
-      setPositions(p);
-    };
-    void load();
-  }, []);
+  const allVessels = data?.vessels ?? [];
+  const positions = data?.positions ?? [];
 
   const vessels = useMemo(() => {
     if (!isCompanyReady) return [];
@@ -73,10 +56,11 @@ export const MapWidget: React.FC = () => {
     [positions, vesselIds],
   );
   const coords = useMemo<[number, number][]>(
-    () => Array.from(positionMap.values()).map((p) => [p.lat, p.lng]),
+    () => Array.from(positionMap.values())
+      .filter((p): p is typeof p & { lat: number; lng: number } => p.lat != null && p.lng != null)
+      .map((p) => [p.lat, p.lng]),
     [positionMap],
   );
-  const activeCount = vessels.filter((v) => (v.vesselStatus || 'Active') === 'Active').length;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm dark:border-slate-700/60 dark:bg-slate-900">
@@ -88,7 +72,7 @@ export const MapWidget: React.FC = () => {
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Fleet Overview</h3>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Live positions · {vessels.length} vessels · {activeCount} active
+              Live positions · {vessels.length} vessels
             </p>
           </div>
         </div>
@@ -125,8 +109,8 @@ export const MapWidget: React.FC = () => {
 
           {vessels.map((vessel) => {
             const pos = positionMap.get(vessel.id);
-            if (!pos) return null;
-            const color = statusColors[vessel.vesselStatus || 'Active'] || '#34d399';
+            if (!pos || pos.lat == null || pos.lng == null) return null;
+            const color = '#34d399';
             return (
               <React.Fragment key={vessel.id}>
                 <CircleMarker
@@ -139,8 +123,12 @@ export const MapWidget: React.FC = () => {
                   radius={4}
                   pathOptions={{ color: '#fff', fillColor: color, fillOpacity: 1, weight: 1.5 }}
                 >
-                  <Tooltip direction="top" offset={[0, -6]}>
-                    <span className="text-xs font-semibold">{vessel.name}</span>
+                  <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
+                    <div className="text-xs">
+                      <p className="font-semibold">{vessel.name}</p>
+                      <p>{pos.speed != null && pos.speed > 0 ? `${pos.speed} kn · ${pos.navStatus}` : pos.navStatus}</p>
+                      {pos.destination && <p className="text-blue-400">→ {pos.destination}</p>}
+                    </div>
                   </Tooltip>
                 </CircleMarker>
               </React.Fragment>
@@ -150,7 +138,7 @@ export const MapWidget: React.FC = () => {
 
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
 
-        {!isCompanyReady && (
+        {(isLoading || !isCompanyReady) && (
           <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
             <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-slate-900/90 px-3 py-2 text-xs font-medium text-white shadow-lg">
               <span className="h-3 w-3 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
@@ -167,10 +155,6 @@ export const MapWidget: React.FC = () => {
           LIVE · {vessels.length} vessels tracked
         </div>
 
-        <div className="absolute bottom-3 right-3 z-[1000] flex items-center gap-1.5 rounded-lg bg-slate-900/80 px-2.5 py-1.5 text-[11px] text-white shadow-lg backdrop-blur">
-          <Ship size={12} />
-          {activeCount} underway
-        </div>
       </div>
     </div>
   );

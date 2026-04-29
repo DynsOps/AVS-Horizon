@@ -6,40 +6,40 @@ import { env } from '../env';
 import { parsePositiveInt } from '../fabric/utils';
 
 // ---------------------------------------------------------------------------
-// Public types
+// Public types — field names match the frontend Vessel/VesselPosition/VesselRoute interfaces
 // ---------------------------------------------------------------------------
 
 export interface MappedVessel {
   id: string;
-  company_id: string;
+  companyId: string;
   name: string;
   imo: string;
   type: string;
-  flag_country: string;
-  vessel_status: string;
+  flagCountry: string;
 }
 
 export interface MappedPosition {
   id: string;
-  vessel_id: string;
+  vesselId: string;
   lat: number | null;
   lng: number | null;
   speed: number | null;
   course: number | null;
   heading: number | null;
-  nav_status: string;
+  navStatus: string;
   destination: string;
-  eta: Date | null;
+  eta: string | null;
+  fetchedAt: string;
 }
 
 export interface MappedRoute {
   id: string;
-  vessel_id: string;
-  departure_port: string;
-  arrival_port: string;
-  departure_date: Date | null;
-  arrival_date: Date | null;
-  status: string;
+  vesselId: string;
+  departurePort: string;
+  arrivalPort: string;
+  departureDate: string | null;
+  arrivalDate: string | null;
+  status: 'Planned' | 'In Progress' | 'Completed' | 'Cancelled';
 }
 
 export interface MaritimeMapPayload {
@@ -69,39 +69,38 @@ function mapResult(result: DatadockedResult, companyId: string): {
   route: MappedRoute;
 } {
   const vesselId = `imo-${result.imo}`;
+  const now = new Date().toISOString();
 
   const vessel: MappedVessel = {
     id: vesselId,
-    company_id: companyId,
+    companyId,
     name: result.name,
     imo: result.imo,
     type: result.typeSpecific,
-    flag_country: '',
-    vessel_status: 'Active',
+    flagCountry: '',
   };
-
-  const speed = safeFloat(result.speed);
 
   const position: MappedPosition = {
     id: `pos-${result.imo}`,
-    vessel_id: vesselId,
+    vesselId,
     lat: safeFloat(result.latitude),
     lng: safeFloat(result.longitude),
-    speed: speed,
+    speed: safeFloat(result.speed),
     course: safeFloat(result.course),
     heading: safeFloat(result.heading),
-    nav_status: result.navigationalStatus,
+    navStatus: result.navigationalStatus,
     destination: result.destination,
-    eta: result.etaUtc ? new Date(result.etaUtc) : null,
+    eta: result.etaUtc ? new Date(result.etaUtc).toISOString() : null,
+    fetchedAt: now,
   };
 
   const route: MappedRoute = {
     id: `route-${result.imo}`,
-    vessel_id: vesselId,
-    departure_port: result.lastPort,
-    arrival_port: result.destination,
-    departure_date: result.atdUtc ? new Date(result.atdUtc) : null,
-    arrival_date: result.etaUtc ? new Date(result.etaUtc) : null,
+    vesselId,
+    departurePort: result.lastPort,
+    arrivalPort: result.destination,
+    departureDate: result.atdUtc ? new Date(result.atdUtc).toISOString() : null,
+    arrivalDate: result.etaUtc ? new Date(result.etaUtc).toISOString() : null,
     status: 'In Progress',
   };
 
@@ -128,7 +127,6 @@ interface DbPositionRow {
   imo: string;
   type: string;
   flag_country: string;
-  vessel_status: string;
   company_id: string;
   departure_port: string | null;
   arrival_port: string | null;
@@ -140,7 +138,7 @@ interface DbPositionRow {
 const READ_POSITIONS_SQL = `
 SELECT p.vessel_id, p.fetched_at, p.lat, p.lng, p.speed, p.course, p.heading,
        p.nav_status, p.destination, p.eta,
-       v.id, v.name, v.imo, v.type, v.flag_country, v.vessel_status, v.company_id,
+       v.id, v.name, v.imo, v.type, v.flag_country, v.company_id,
        vr.departure_port, vr.arrival_port, vr.departure_date, vr.arrival_date, vr.status AS route_status
 FROM dbo.vessel_positions p
 JOIN dbo.vessels v ON v.id = p.vessel_id
@@ -166,36 +164,36 @@ function dbRowsToPayload(rows: DbPositionRow[]): MaritimeMapPayload {
   for (const row of rows) {
     vessels.push({
       id: row.id,
-      company_id: row.company_id,
+      companyId: row.company_id,
       name: row.name,
       imo: row.imo,
       type: row.type,
-      flag_country: row.flag_country,
-      vessel_status: row.vessel_status,
+      flagCountry: row.flag_country,
     });
 
     positions.push({
       id: `pos-${row.imo}`,
-      vessel_id: row.vessel_id,
+      vesselId: row.vessel_id,
       lat: row.lat,
       lng: row.lng,
       speed: row.speed,
       course: row.course,
       heading: row.heading,
-      nav_status: row.nav_status,
+      navStatus: row.nav_status,
       destination: row.destination,
-      eta: row.eta ?? null,
+      eta: row.eta ? row.eta.toISOString() : null,
+      fetchedAt: row.fetched_at.toISOString(),
     });
 
     if (row.departure_port !== null || row.arrival_port !== null) {
       routes.push({
         id: `route-${row.imo}`,
-        vessel_id: row.vessel_id,
-        departure_port: row.departure_port ?? '',
-        arrival_port: row.arrival_port ?? '',
-        departure_date: row.departure_date ?? null,
-        arrival_date: row.arrival_date ?? null,
-        status: row.route_status ?? 'In Progress',
+        vesselId: row.vessel_id,
+        departurePort: row.departure_port ?? '',
+        arrivalPort: row.arrival_port ?? '',
+        departureDate: row.departure_date ? row.departure_date.toISOString() : null,
+        arrivalDate: row.arrival_date ? row.arrival_date.toISOString() : null,
+        status: (row.route_status as MappedRoute['status']) ?? 'In Progress',
       });
     }
   }
@@ -209,14 +207,14 @@ function dbRowsToPayload(rows: DbPositionRow[]): MaritimeMapPayload {
 
 const MERGE_VESSEL_SQL = `
 MERGE dbo.vessels AS target
-USING (VALUES (@id, @companyId, @name, @imo, @type, @flagCountry, @vesselStatus))
-  AS source (id, company_id, name, imo, type, flag_country, vessel_status)
+USING (VALUES (@id, @companyId, @name, @imo, @type, @flagCountry))
+  AS source (id, company_id, name, imo, type, flag_country)
 ON target.imo = source.imo
 WHEN MATCHED THEN
-  UPDATE SET name = source.name, type = source.type, vessel_status = source.vessel_status, updated_at = SYSUTCDATETIME()
+  UPDATE SET name = source.name, type = source.type, updated_at = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
-  INSERT (id, company_id, name, imo, type, flag_country, vessel_status, created_at, updated_at)
-  VALUES (source.id, source.company_id, source.name, source.imo, source.type, source.flag_country, source.vessel_status, SYSUTCDATETIME(), SYSUTCDATETIME());
+  INSERT (id, company_id, name, imo, type, flag_country, created_at, updated_at)
+  VALUES (source.id, source.company_id, source.name, source.imo, source.type, source.flag_country, SYSUTCDATETIME(), SYSUTCDATETIME());
 `;
 
 const MERGE_POSITION_SQL = `
@@ -252,38 +250,37 @@ WHEN NOT MATCHED THEN
 async function upsertVessel(vessel: MappedVessel): Promise<void> {
   await runQuery(MERGE_VESSEL_SQL, {
     id: vessel.id,
-    companyId: vessel.company_id,
+    companyId: vessel.companyId,
     name: vessel.name,
     imo: vessel.imo,
     type: vessel.type,
-    flagCountry: vessel.flag_country,
-    vesselStatus: vessel.vessel_status,
+    flagCountry: vessel.flagCountry,
   });
 }
 
 async function upsertPosition(position: MappedPosition): Promise<void> {
   await runQuery(MERGE_POSITION_SQL, {
     id: position.id,
-    vesselId: position.vessel_id,
+    vesselId: position.vesselId,
     lat: position.lat,
     lng: position.lng,
     speed: position.speed,
     course: position.course,
     heading: position.heading,
-    navStatus: position.nav_status,
+    navStatus: position.navStatus,
     destination: position.destination,
-    eta: position.eta,
+    eta: position.eta ? new Date(position.eta) : null,
   });
 }
 
 async function upsertRoute(route: MappedRoute): Promise<void> {
   await runQuery(MERGE_ROUTE_SQL, {
     id: route.id,
-    vesselId: route.vessel_id,
-    departurePort: route.departure_port,
-    arrivalPort: route.arrival_port,
-    departureDate: route.departure_date,
-    arrivalDate: route.arrival_date,
+    vesselId: route.vesselId,
+    departurePort: route.departurePort,
+    arrivalPort: route.arrivalPort,
+    departureDate: route.departureDate ? new Date(route.departureDate) : null,
+    arrivalDate: route.arrivalDate ? new Date(route.arrivalDate) : null,
     status: route.status,
   });
 }
@@ -292,7 +289,7 @@ async function persistToDb(payload: MaritimeMapPayload): Promise<void> {
   for (let i = 0; i < payload.vessels.length; i++) {
     await upsertVessel(payload.vessels[i]);
     await upsertPosition(payload.positions[i]);
-    const route = payload.routes.find(r => r.vessel_id === payload.vessels[i].id);
+    const route = payload.routes.find(r => r.vesselId === payload.vessels[i].id);
     if (route) await upsertRoute(route);
   }
 }
@@ -347,12 +344,16 @@ export async function fetchVesselPositionsCached(
 
   const payload: MaritimeMapPayload = { vessels, positions, routes };
 
-  // Persist to DB then write Redis
-  try {
-    await persistToDb(payload);
-  } catch (persistErr) {
-    console.warn('[maritime] DB persist failed (cache will still be populated):', persistErr instanceof Error ? persistErr.message : String(persistErr));
+  // Persist to DB then write Redis — only cache when Datadocked returned real data
+  if (positions.length > 0) {
+    try {
+      await persistToDb(payload);
+    } catch (persistErr) {
+      console.warn('[maritime] DB persist failed (cache will still be populated):', persistErr instanceof Error ? persistErr.message : String(persistErr));
+    }
+    await writeJsonCache(cacheKey, payload, ttl);
+  } else {
+    console.warn('[maritime] Datadocked returned no position data — skipping cache write');
   }
-  await writeJsonCache(cacheKey, payload, ttl);
   return { payload, cacheStatus: 'miss' };
 }

@@ -134,7 +134,6 @@ export interface Vessel {
   flagCountry?: string;
   builtYear?: number;
   dwt?: number;
-  vesselStatus?: 'Active' | 'Laid Up' | 'Under Repair' | 'Scrapped';
 }
 
 export interface ContractedVessel {
@@ -184,14 +183,14 @@ export interface FleetMandayReport {
 export interface VesselPosition {
   id: string;
   vesselId: string;
-  lat: number;
-  lng: number;
-  speed: number;
-  course: number;
-  heading: number;
+  lat: number | null;
+  lng: number | null;
+  speed: number | null;
+  course: number | null;
+  heading: number | null;
   navStatus: string;
   destination: string;
-  eta: string;
+  eta: string | null;
   fetchedAt: string;
 }
 
@@ -200,8 +199,8 @@ export interface VesselRoute {
   vesselId: string;
   departurePort: string;
   arrivalPort: string;
-  departureDate: string;
-  arrivalDate?: string;
+  departureDate: string | null;
+  arrivalDate?: string | null;
   status: 'Planned' | 'In Progress' | 'Completed' | 'Cancelled';
 }
 

@@ -10,7 +10,7 @@ type Props = {
 };
 
 const statusStyles: Record<string, { color: string; dashArray?: string }> = {
-  'In Progress': { color: '#3b82f6' },
+  'In Progress': { color: '#3b82f6', dashArray: '10 7' },
   Completed: { color: '#6b7280', dashArray: '4 8' },
   Planned: { color: '#f59e0b', dashArray: '8 12' },
   Cancelled: { color: '#ef4444', dashArray: '4 8' },
