@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
-import { api } from '../../services/api';
 import { useUIStore } from '../../store/uiStore';
 import { SupportTicket } from '../../types';
+import { useAdminTickets, useReplyToTicket } from '../../hooks/queries/useSupportTickets';
 
 const PAGE_SIZE = 8;
 type AdminFilter = 'All' | SupportTicket['status'];
@@ -15,26 +15,15 @@ const statusClasses: Record<SupportTicket['status'], string> = {
 
 export const SupportTicketManagement: React.FC = () => {
   const { addToast } = useUIStore();
-  const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState('');
   const [replyMessage, setReplyMessage] = useState('');
-  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
   const [activeFilter, setActiveFilter] = useState<AdminFilter>('Open');
   const [page, setPage] = useState(1);
 
-  const loadTickets = async () => {
-    try {
-      const rows = await api.support.getAdminTickets();
-      setTickets(rows);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load support tickets.';
-      addToast({ title: 'Error', message, type: 'error' });
-    }
-  };
+  const { data: tickets = [] } = useAdminTickets();
+  const replyToTicket = useReplyToTicket();
 
-  useEffect(() => {
-    void loadTickets();
-  }, []);
+  const isSubmittingReply = replyToTicket.isPending;
 
   const filteredTickets = useMemo(() => {
     if (activeFilter === 'All') return tickets;
@@ -73,7 +62,7 @@ export const SupportTicketManagement: React.FC = () => {
     return [...selectedTicket.replies].reverse().find((reply) => reply.authorRole === 'supadmin') || null;
   }, [selectedTicket]);
 
-  const submitReply = async () => {
+  const submitReply = () => {
     if (!selectedTicket) return;
     const message = replyMessage.trim();
     if (!message) {
@@ -81,18 +70,18 @@ export const SupportTicketManagement: React.FC = () => {
       return;
     }
 
-    setIsSubmittingReply(true);
-    try {
-      await api.support.replyToTicket(selectedTicket.id, message);
-      setReplyMessage('');
-      await loadTickets();
-      addToast({ title: 'Resolved', message: `Ticket ${selectedTicket.id} resolved with response.`, type: 'success' });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to send reply.';
-      addToast({ title: 'Error', message: errorMessage, type: 'error' });
-    } finally {
-      setIsSubmittingReply(false);
-    }
+    replyToTicket.mutate(
+      { ticketId: selectedTicket.id, message },
+      {
+        onSuccess: () => {
+          setReplyMessage('');
+          addToast({ title: 'Resolved', message: `Ticket ${selectedTicket.id} resolved with response.`, type: 'success' });
+        },
+        onError: (error) => {
+          addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to send reply.', type: 'error' });
+        },
+      },
+    );
   };
 
   const filterButtons: AdminFilter[] = ['Open', 'Resolved', 'All'];

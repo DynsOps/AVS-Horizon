@@ -1,8 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import { api } from '../../services/api';
+import React from 'react';
 import { LogEntry } from '../../types';
 import { Card } from '../../components/ui/Card';
 import { Activity, CheckCircle, AlertTriangle, Server, Terminal } from 'lucide-react';
+import { useSystemHealth } from '../../hooks/queries/useSystemHealth';
+
+const FALLBACK_SERVICES = [
+  { key: 'auth-service', label: 'Auth Service', status: 'warn' as const },
+  { key: 'core-db', label: 'Core DB', status: 'warn' as const },
+  { key: 'function-runtime', label: 'Function Runtime', status: 'warn' as const },
+  { key: 'identity-module', label: 'Identity Module', status: 'warn' as const },
+];
+
+const FALLBACK_LOG: LogEntry = {
+  id: 'health-fallback-static',
+  timestamp: new Date().toISOString(),
+  level: 'WARN',
+  service: 'SystemHealth',
+  message: 'Function API token is missing. Complete hosted sign-in or disable forced Function API mode.',
+};
 
 const StatusCard = ({ label, status }: { label: string, status: 'ok' | 'warn' | 'error' }) => (
     <div className="bg-white/80 dark:bg-slate-900 p-5 rounded-xl border border-gray-200/60 dark:border-slate-800 shadow-sm flex items-center justify-between backdrop-blur-sm">
@@ -19,56 +34,23 @@ const StatusCard = ({ label, status }: { label: string, status: 'ok' | 'warn' | 
 );
 
 export const SystemHealth: React.FC = () => {
-    const [services, setServices] = useState<Array<{ key: string; label: string; status: 'ok' | 'warn' | 'error' }>>([]);
-    const [logs, setLogs] = useState<LogEntry[]>([]);
+    // useSystemHealth already has refetchInterval: 30_000
+    const { data: health } = useSystemHealth();
 
-    useEffect(() => {
-        const fetchHealth = async () => {
-            try {
-                const health = await api.admin.getSystemHealth();
-                setServices(health.services.map((service) => ({
-                    key: service.key,
-                    label: service.label,
-                    status: service.status,
-                })));
-                setLogs(health.logs);
-            } catch {
-                try {
-                    const fallbackLogs = await api.admin.getSystemLogs();
-                    setLogs(fallbackLogs);
-                } catch {
-                    setServices([
-                        { key: 'auth-service', label: 'Auth Service', status: 'warn' },
-                        { key: 'core-db', label: 'Core DB', status: 'warn' },
-                        { key: 'function-runtime', label: 'Function Runtime', status: 'warn' },
-                        { key: 'identity-module', label: 'Identity Module', status: 'warn' },
-                    ]);
-                    setLogs([{
-                        id: `health-fallback-${Date.now()}`,
-                        timestamp: new Date().toISOString(),
-                        level: 'WARN',
-                        service: 'SystemHealth',
-                        message: 'Function API token is missing. Complete hosted sign-in or disable forced Function API mode.',
-                    }]);
-                }
-            }
-        };
-        void fetchHealth();
-        const interval = setInterval(() => { void fetchHealth(); }, 10000);
-        return () => clearInterval(interval);
-    }, []);
+    const services = health?.services?.map((service) => ({
+        key: service.key,
+        label: service.label,
+        status: service.status,
+    })) ?? FALLBACK_SERVICES;
+
+    const logs: LogEntry[] = health?.logs ?? [FALLBACK_LOG];
 
     return (
         <div className="space-y-6">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">System Health</h1>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {(services.length ? services : [
-                    { key: 'auth-service', label: 'Auth Service', status: 'warn' as const },
-                    { key: 'core-db', label: 'Core DB', status: 'warn' as const },
-                    { key: 'function-runtime', label: 'Function Runtime', status: 'warn' as const },
-                    { key: 'identity-module', label: 'Identity Module', status: 'warn' as const },
-                ]).map((service) => (
+                {services.map((service) => (
                     <StatusCard key={service.key} label={service.label} status={service.status} />
                 ))}
             </div>
@@ -85,7 +67,7 @@ export const SystemHealth: React.FC = () => {
                              <span className={`w-12 font-bold ${log.level === 'ERROR' ? 'text-red-400' : log.level === 'WARN' ? 'text-yellow-400' : 'text-blue-400'}`}>
                                  {log.level}
                              </span>
-                             <span className="text-purple-400 w-24 flex-shrink-0">{log.service}:</span> 
+                             <span className="text-purple-400 w-24 flex-shrink-0">{log.service}:</span>
                              <span className="text-slate-300">{log.message}</span>
                          </div>
                      ))}

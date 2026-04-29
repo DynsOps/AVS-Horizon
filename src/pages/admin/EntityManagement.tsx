@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
 import { api } from '../../services/api';
@@ -6,6 +6,15 @@ import { BootstrapCredentials, Company } from '../../types';
 import { useUIStore } from '../../store/uiStore';
 import { Plus, Edit2, Trash2, Building2, Mail, Tag, KeyRound, Copy, Eye, EyeOff, X, Search } from 'lucide-react';
 import { getDefaultPermissionsForRole } from '../../utils/rbac';
+import {
+  useCompanies,
+  useCompanyTemplateId,
+  useCreateCompany,
+  useUpdateCompany,
+  useDeleteCompany,
+  useAssignCompanyTemplate,
+} from '../../hooks/queries/useCompanies';
+import { useTemplates } from '../../hooks/queries/useTemplates';
 
 type GroupProjtableOption = {
   name: string;
@@ -20,45 +29,20 @@ type CreateEntityPayload = Omit<Company, 'id'> & {
 };
 
 export const EntityManagement: React.FC = () => {
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const loadCompaniesRef = useRef<Promise<void> | null>(null);
   const [newAdminCredentials, setNewAdminCredentials] = useState<BootstrapCredentials | null>(null);
   const [showNewAdminCredentialPassword, setShowNewAdminCredentialPassword] = useState(false);
   const { addToast, openDrawer, closeDrawer, openConfirmDialog } = useUIStore();
 
-  const loadCompanies = async () => {
-    if (loadCompaniesRef.current) {
-      return loadCompaniesRef.current;
-    }
-
-    setIsLoading(true);
-    const request = (async () => {
-      try {
-        const companyRows = await api.admin.getCompanies();
-        setCompanies(companyRows);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to load entities.';
-        addToast({ title: 'Error', message, type: 'error' });
-      } finally {
-        setIsLoading(false);
-        loadCompaniesRef.current = null;
-      }
-    })();
-
-    loadCompaniesRef.current = request;
-    return request;
-  };
-
-  useEffect(() => {
-    void loadCompanies();
-  }, []);
+  const { data: companies = [], isLoading } = useCompanies();
+  const createCompany = useCreateCompany();
+  const updateCompany = useUpdateCompany();
+  const deleteCompany = useDeleteCompany();
 
   const createEntity = async (payload: CreateEntityPayload) => {
     const { createCompanyAdmin, adminName, adminEmail, ...companyPayload } = payload;
     try {
-      const createdCompany = await api.admin.createCompany(companyPayload);
+      const createdCompany = await createCompany.mutateAsync(companyPayload);
       addToast({ title: 'Entity Created', message: `${companyPayload.name} added successfully.`, type: 'success' });
 
       if (createCompanyAdmin) {
@@ -94,7 +78,6 @@ export const EntityManagement: React.FC = () => {
         }
       }
 
-      await loadCompanies();
       closeDrawer();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Entity create failed.';
@@ -111,9 +94,8 @@ export const EntityManagement: React.FC = () => {
     });
     if (!confirmed) return;
     try {
-      await api.admin.updateCompany(company.id, payload);
+      await updateCompany.mutateAsync({ id: company.id, updates: payload });
       addToast({ title: 'Entity Updated', message: `${payload.name || company.name} updated successfully.`, type: 'success' });
-      await loadCompanies();
       closeDrawer();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Entity update failed.';
@@ -134,9 +116,8 @@ export const EntityManagement: React.FC = () => {
       return;
     }
     try {
-      await api.admin.deleteCompany(company.id);
+      await deleteCompany.mutateAsync(company.id);
       addToast({ title: 'Entity Deleted', message: `${company.name} removed.`, type: 'info' });
-      await loadCompanies();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Entity delete failed.';
       addToast({ title: 'Error', message, type: 'error' });
@@ -290,45 +271,42 @@ export const EntityManagement: React.FC = () => {
 };
 
 const CompanyTemplateSection: React.FC<{ companyId: string }> = ({ companyId }) => {
-  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
-  const [assignedId, setAssignedId] = useState<string>('');
-  const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useUIStore();
 
-  const load = useCallback(async () => {
-    try {
-      const [tpls, currentId] = await Promise.all([
-        api.admin.getTemplates('global'),
-        api.admin.getCompanyTemplateId(companyId),
-      ]);
-      setTemplates(tpls);
-      if (currentId) setAssignedId(currentId);
-    } catch { /* non-critical */ }
-  }, [companyId]);
+  const { data: templates = [] } = useTemplates('global');
+  const { data: assignedId = '' } = useCompanyTemplateId(companyId);
+  const assignCompanyTemplate = useAssignCompanyTemplate();
 
-  useEffect(() => { void load(); }, [load]);
+  const [localAssignedId, setLocalAssignedId] = useState<string>('');
 
-  const assign = async (templateId: string) => {
-    setIsSaving(true);
-    try {
-      await api.admin.assignCompanyTemplate(companyId, templateId);
-      setAssignedId(templateId);
-      addToast({ title: 'Template Assigned', message: 'Company template updated.', type: 'success' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to assign template.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setIsSaving(false);
-    }
+  // Sync localAssignedId from query data
+  useEffect(() => {
+    if (assignedId) setLocalAssignedId(assignedId);
+  }, [assignedId]);
+
+  const assign = (templateId: string) => {
+    setLocalAssignedId(templateId);
+    assignCompanyTemplate.mutate(
+      { companyId, templateId },
+      {
+        onSuccess: () => {
+          addToast({ title: 'Template Assigned', message: 'Company template updated.', type: 'success' });
+        },
+        onError: (error) => {
+          setLocalAssignedId(assignedId || '');
+          addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to assign template.', type: 'error' });
+        },
+      },
+    );
   };
 
   return (
     <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
       <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Permission Template</p>
       <select
-        value={assignedId}
-        onChange={(e) => { void assign(e.target.value); }}
-        disabled={isSaving || !templates.length}
+        value={localAssignedId}
+        onChange={(e) => { assign(e.target.value); }}
+        disabled={assignCompanyTemplate.isPending || !templates.length}
         className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 disabled:opacity-60"
       >
         <option value="">— No template assigned —</option>

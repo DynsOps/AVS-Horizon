@@ -1,17 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
 import { AnalysisReport } from '../../types';
-import { api } from '../../services/api';
 import { useUIStore } from '../../store/uiStore';
 import { CircleHelp, Edit2, Plus, Trash2, X } from 'lucide-react';
+import {
+  useAdminAnalysisReports,
+  useCreateAnalysisReport,
+  useUpdateAnalysisReport,
+  useDeleteAnalysisReport,
+} from '../../hooks/queries/useAnalysisReports';
 
 export const ReportManagement: React.FC = () => {
-  const [reports, setReports] = useState<AnalysisReport[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [embedUrl, setEmbedUrl] = useState('');
@@ -22,6 +25,13 @@ export const ReportManagement: React.FC = () => {
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const { addToast, openConfirmDialog } = useUIStore();
+
+  const { data: reports = [] } = useAdminAnalysisReports();
+  const createReport = useCreateAnalysisReport();
+  const updateReport = useUpdateAnalysisReport();
+  const deleteReport = useDeleteAnalysisReport();
+
+  const isSubmitting = createReport.isPending || updateReport.isPending;
 
   const parsePowerBiEmbedUrl = (rawUrl: string): { workspaceId?: string; reportId?: string } => {
     try {
@@ -52,20 +62,6 @@ export const ReportManagement: React.FC = () => {
     }
   };
 
-  const loadReports = async () => {
-    try {
-      const rows = await api.admin.getAnalysisReports();
-      setReports(rows);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load analysis reports.';
-      addToast({ title: 'Error', message, type: 'error' });
-    }
-  };
-
-  useEffect(() => {
-    void loadReports();
-  }, []);
-
   const resetForm = () => {
     setEditingReportId(null);
     setName('');
@@ -89,14 +85,13 @@ export const ReportManagement: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const createReport = async () => {
+  const handleCreate = () => {
     if (!name.trim()) {
       addToast({ title: 'Validation Error', message: 'Report name is required.', type: 'error' });
       return;
     }
-    setIsSubmitting(true);
-    try {
-      await api.admin.createAnalysisReport({
+    createReport.mutate(
+      {
         name,
         description,
         embedUrl,
@@ -107,16 +102,17 @@ export const ReportManagement: React.FC = () => {
           .split(',')
           .map((item) => item.trim())
           .filter(Boolean),
-      });
-      await loadReports();
-      closeModal();
-      addToast({ title: 'Report Created', message: 'Analysis report added successfully.', type: 'success' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create report.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setIsSubmitting(false);
-    }
+      },
+      {
+        onSuccess: () => {
+          closeModal();
+          addToast({ title: 'Report Created', message: 'Analysis report added successfully.', type: 'success' });
+        },
+        onError: (error) => {
+          addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to create report.', type: 'error' });
+        },
+      },
+    );
   };
 
   const startEdit = (report: AnalysisReport) => {
@@ -132,39 +128,41 @@ export const ReportManagement: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const updateReport = async () => {
+  const handleUpdate = () => {
     if (!editingReportId) return;
     if (!name.trim()) {
       addToast({ title: 'Validation Error', message: 'Report name is required.', type: 'error' });
       return;
     }
-
-    setIsSubmitting(true);
-    try {
-      await api.admin.updateAnalysisReport(editingReportId, {
-        name,
-        description,
-        embedUrl,
-        workspaceId,
-        reportId,
-        datasetId,
-        defaultRoles: defaultRolesInput
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean),
-      });
-      await loadReports();
-      closeModal();
-      addToast({ title: 'Report Updated', message: 'Analysis report updated successfully.', type: 'success' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update report.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setIsSubmitting(false);
-    }
+    updateReport.mutate(
+      {
+        id: editingReportId,
+        updates: {
+          name,
+          description,
+          embedUrl,
+          workspaceId,
+          reportId,
+          datasetId,
+          defaultRoles: defaultRolesInput
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        },
+      },
+      {
+        onSuccess: () => {
+          closeModal();
+          addToast({ title: 'Report Updated', message: 'Analysis report updated successfully.', type: 'success' });
+        },
+        onError: (error) => {
+          addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to update report.', type: 'error' });
+        },
+      },
+    );
   };
 
-  const deleteReport = async (report: AnalysisReport) => {
+  const handleDelete = async (report: AnalysisReport) => {
     setPendingDeleteId(report.id);
     const confirmed = await openConfirmDialog({
       title: 'Delete Report',
@@ -177,16 +175,16 @@ export const ReportManagement: React.FC = () => {
       return;
     }
 
-    try {
-      await api.admin.deleteAnalysisReport(report.id);
-      await loadReports();
-      addToast({ title: 'Report Deleted', message: `${report.name} removed.`, type: 'info' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to delete report.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setPendingDeleteId(null);
-    }
+    deleteReport.mutate(report.id, {
+      onSuccess: () => {
+        addToast({ title: 'Report Deleted', message: `${report.name} removed.`, type: 'info' });
+        setPendingDeleteId(null);
+      },
+      onError: (error) => {
+        addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to delete report.', type: 'error' });
+        setPendingDeleteId(null);
+      },
+    });
   };
 
   return (
@@ -225,7 +223,7 @@ export const ReportManagement: React.FC = () => {
                   <Edit2 size={15} />
                 </button>
                 <AsyncActionButton
-                  onClick={() => void deleteReport(report)}
+                  onClick={() => void handleDelete(report)}
                   isPending={pendingDeleteId === report.id}
                   loadingMode="spinner-only"
                   className="rounded p-1 text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20"
@@ -393,7 +391,7 @@ export const ReportManagement: React.FC = () => {
                 Cancel
               </button>
               <AsyncActionButton
-                onClick={() => void (modalMode === 'edit' ? updateReport() : createReport())}
+                onClick={() => void (modalMode === 'edit' ? handleUpdate() : handleCreate())}
                 isPending={isSubmitting}
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
               >

@@ -1,11 +1,17 @@
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
-import { api } from '../../services/api';
 import { useUIStore } from '../../store/uiStore';
 import { Edit2, Plus, Trash2, X, LayoutGrid, CheckSquare } from 'lucide-react';
+import {
+  useTemplates,
+  usePermissionsCatalog,
+  useCreateTemplate,
+  useUpdateTemplate,
+  useDeleteTemplate,
+} from '../../hooks/queries/useTemplates';
 
 type PermissionEntry = { key: string; label: string; kind: string };
 type PermissionCatalog = Record<string, PermissionEntry[]>;
@@ -23,35 +29,20 @@ type Template = {
 const EMPTY_FORM = { name: '', description: '', permissions: [] as string[] };
 
 export const TemplateManagement: React.FC = () => {
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [catalog, setCatalog] = useState<PermissionCatalog>({});
-  const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const { addToast, openConfirmDialog } = useUIStore();
 
-  const loadAll = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const [tpls, cat] = await Promise.all([
-        api.admin.getTemplates('global'),
-        api.admin.getPermissionsCatalog(),
-      ]);
-      setTemplates(tpls);
-      setCatalog(cat);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load templates.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [addToast]);
+  const { data: templates = [], isLoading } = useTemplates('global');
+  const { data: catalog = {} as PermissionCatalog } = usePermissionsCatalog();
+  const createTemplate = useCreateTemplate();
+  const updateTemplate = useUpdateTemplate();
+  const deleteTemplate = useDeleteTemplate();
 
-  useEffect(() => { void loadAll(); }, [loadAll]);
+  const isSubmitting = createTemplate.isPending || updateTemplate.isPending;
 
   const allPermissionKeys = Object.values(catalog).flatMap((entries) => entries.map((e) => e.key));
 
@@ -97,32 +88,43 @@ export const TemplateManagement: React.FC = () => {
     setEditingId(null);
   };
 
-  const save = async () => {
+  const save = () => {
     const name = form.name.trim();
     if (!name) {
       addToast({ title: 'Validation Error', message: 'Template name is required.', type: 'error' });
       return;
     }
-    setIsSubmitting(true);
-    try {
-      if (modalMode === 'add') {
-        await api.admin.createTemplate({ name, description: form.description || undefined, scope: 'global', permissions: form.permissions });
-        addToast({ title: 'Template Created', message: `"${name}" created.`, type: 'success' });
-      } else if (editingId) {
-        await api.admin.updateTemplate(editingId, { name, description: form.description || undefined, permissions: form.permissions });
-        addToast({ title: 'Template Updated', message: `"${name}" saved.`, type: 'success' });
-      }
-      await loadAll();
-      closeModal();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to save template.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setIsSubmitting(false);
+
+    if (modalMode === 'add') {
+      createTemplate.mutate(
+        { name, description: form.description || undefined, scope: 'global', permissions: form.permissions },
+        {
+          onSuccess: () => {
+            addToast({ title: 'Template Created', message: `"${name}" created.`, type: 'success' });
+            closeModal();
+          },
+          onError: (error) => {
+            addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to save template.', type: 'error' });
+          },
+        },
+      );
+    } else if (editingId) {
+      updateTemplate.mutate(
+        { id: editingId, updates: { name, description: form.description || undefined, permissions: form.permissions } },
+        {
+          onSuccess: () => {
+            addToast({ title: 'Template Updated', message: `"${name}" saved.`, type: 'success' });
+            closeModal();
+          },
+          onError: (error) => {
+            addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to save template.', type: 'error' });
+          },
+        },
+      );
     }
   };
 
-  const deleteTemplate = async (tpl: Template) => {
+  const handleDeleteTemplate = async (tpl: Template) => {
     setPendingDeleteId(tpl.id);
     const confirmed = await openConfirmDialog({
       title: 'Delete Template',
@@ -131,16 +133,17 @@ export const TemplateManagement: React.FC = () => {
       tone: 'danger',
     });
     if (!confirmed) { setPendingDeleteId(null); return; }
-    try {
-      await api.admin.deleteTemplate(tpl.id);
-      await loadAll();
-      addToast({ title: 'Template Deleted', message: `"${tpl.name}" removed.`, type: 'info' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to delete template.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setPendingDeleteId(null);
-    }
+
+    deleteTemplate.mutate(tpl.id, {
+      onSuccess: () => {
+        addToast({ title: 'Template Deleted', message: `"${tpl.name}" removed.`, type: 'info' });
+        setPendingDeleteId(null);
+      },
+      onError: (error) => {
+        addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to delete template.', type: 'error' });
+        setPendingDeleteId(null);
+      },
+    });
   };
 
   const groupEntries = Object.entries(catalog);
@@ -189,7 +192,7 @@ export const TemplateManagement: React.FC = () => {
                     <Edit2 size={15} />
                   </button>
                   <AsyncActionButton
-                    onClick={() => void deleteTemplate(tpl)}
+                    onClick={() => void handleDeleteTemplate(tpl)}
                     isPending={pendingDeleteId === tpl.id}
                     loadingMode="spinner-only"
                     className="rounded p-1 text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20"

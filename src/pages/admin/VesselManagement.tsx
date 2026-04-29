@@ -1,38 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
 import { api } from '../../services/api';
 import { Company, Vessel } from '../../types';
 import { useUIStore } from '../../store/uiStore';
 import { Plus, Edit2, Trash2, Ship, Anchor, Flag, Hash } from 'lucide-react';
+import { useAdminVessels } from '../../hooks/queries/useMaritime';
+import { useCompanies } from '../../hooks/queries/useCompanies';
+import { useQueryClient } from '@tanstack/react-query';
+import { qk } from '../../lib/queryKeys';
 
 export const VesselManagement: React.FC = () => {
-  const [vessels, setVessels] = useState<Vessel[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const { addToast, openDrawer, closeDrawer, openConfirmDialog } = useUIStore();
+  const queryClient = useQueryClient();
 
-  const loadData = async () => {
-    setIsLoading(true);
-    try {
-      const [vesselRows, companyRows] = await Promise.all([
-        api.maritime.getVessels(),
-        api.admin.getCompanies(),
-      ]);
-      setVessels(vesselRows);
-      setCompanies(companyRows);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load vessels.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { data: vessels = [], isLoading } = useAdminVessels();
+  const { data: companies = [] } = useCompanies();
 
-  useEffect(() => {
-    void loadData();
-  }, []);
+  const invalidateVessels = () => queryClient.invalidateQueries({ queryKey: qk.maritime.vessels() });
 
   const getCompanyName = (companyId?: string) => {
     if (!companyId) return '—';
@@ -52,9 +38,10 @@ export const VesselManagement: React.FC = () => {
       return;
     }
     try {
+      // NOTE: api.maritime.deleteVessel is not yet implemented on the backend and will throw.
       await api.maritime.deleteVessel(vessel.id);
       addToast({ title: 'Vessel Deleted', message: `${vessel.name} removed.`, type: 'info' });
-      await loadData();
+      await invalidateVessels();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Vessel delete failed.';
       addToast({ title: 'Error', message, type: 'error' });
@@ -78,13 +65,15 @@ export const VesselManagement: React.FC = () => {
                 confirmLabel: 'Update',
               });
               if (!confirmed) return;
+              // NOTE: api.maritime.updateVessel is not yet implemented on the backend and will throw.
               await api.maritime.updateVessel(vessel.id, payload);
               addToast({ title: 'Vessel Updated', message: `${payload.name || vessel.name} updated successfully.`, type: 'success' });
             } else {
+              // NOTE: api.maritime.createVessel is not yet implemented on the backend and will throw.
               await api.maritime.createVessel(payload as Omit<Vessel, 'id'>);
               addToast({ title: 'Vessel Created', message: `${payload.name} added successfully.`, type: 'success' });
             }
-            await loadData();
+            await invalidateVessels();
             closeDrawer();
           } catch (error) {
             const message = error instanceof Error ? error.message : 'Vessel save failed.';

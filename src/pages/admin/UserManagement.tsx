@@ -1,6 +1,5 @@
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { api } from '../../services/api';
+import React, { useEffect, useState } from 'react';
 import { User, Permission, UserRole, Company, AnalysisReport, ProvisioningSource, BootstrapCredentials } from '../../types';
 import { AsyncActionButton } from '../../components/ui/AsyncActionButton';
 import { Card } from '../../components/ui/Card';
@@ -8,6 +7,13 @@ import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
 import { Trash2, Edit2, Plus, Check, Search, KeyRound, Copy, Eye, EyeOff, X, Lock } from 'lucide-react';
 import { getDefaultPermissionsForRole } from '../../utils/rbac';
+import { useUsers, useDeleteUser, useCreateUser, useUpdateUser, useSetAdminUserCompanies, useSetUserReports, useAssignUserTemplate } from '../../hooks/queries/useUsers';
+import { useCompanies } from '../../hooks/queries/useCompanies';
+import { useAdminAnalysisReports } from '../../hooks/queries/useAnalysisReports';
+import { useTemplates, usePermissionsCatalog } from '../../hooks/queries/useTemplates';
+import { api } from '../../services/api';
+import { useQuery } from '@tanstack/react-query';
+import { qk } from '../../lib/queryKeys';
 
 const BASE_PERMISSIONS: Permission[] = [
     'view:dashboard', 'view:operational-list', 'view:invoices', 'view:port-fees', 'view:reports', 'view:fleet', 'view:shipments', 'view:orders', 'view:supplier',
@@ -44,9 +50,6 @@ const isCompanyAdminLikeUser = (target: Pick<User, 'role' | 'permissions'>): boo
 const isBiReportPermission = (permission: Permission): boolean => permission.startsWith('view:analysis-report:');
 
 export const UserManagement: React.FC = () => {
-    const [users, setUsers] = useState<User[]>([]);
-    const [companies, setCompanies] = useState<Company[]>([]);
-    const [analysisReports, setAnalysisReports] = useState<AnalysisReport[]>([]);
     const { addToast, openDrawer, closeDrawer, openConfirmDialog } = useUIStore();
     const [searchTerm, setSearchTerm] = useState('');
     const [newUserCredentials, setNewUserCredentials] = useState<BootstrapCredentials | null>(null);
@@ -62,24 +65,18 @@ export const UserManagement: React.FC = () => {
     const assignableRoles: UserRole[] = isSupAdminActor ? ['user', 'admin', 'supadmin'] : ['user'];
     const canManageTargetUser = (target: User) =>
         isSupAdminActor || (isCompanyAdminActor ? (target.role === 'user' && !isCompanyAdminLikeUser(target)) : target.role !== 'supadmin');
+
+    const { data: users = [] } = useUsers();
+    const { data: companies = [] } = useCompanies();
+    const { data: analysisReports = [] } = useAdminAnalysisReports();
+
+    const deleteUser = useDeleteUser();
+    const createUser = useCreateUser();
+    const updateUser = useUpdateUser();
+    const setAdminUserCompanies = useSetAdminUserCompanies();
+
     const analysisReportPermissions = analysisReports.map((report) => report.permissionKey);
     const allPermissions = [...BASE_PERMISSIONS, ...analysisReportPermissions];
-
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    const loadData = async () => {
-        try {
-            const [u, c, reports] = await Promise.all([api.admin.getUsers(), api.admin.getCompanies(), api.admin.getAnalysisReports()]);
-            setUsers(u);
-            setCompanies(c);
-            setAnalysisReports(reports);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to load users/entities.';
-            addToast({ title: 'Data Load Error', message, type: 'error' });
-        }
-    };
 
     const handleDelete = async (id: string) => {
         const targetUser = users.find((u) => u.id === id);
@@ -102,16 +99,16 @@ export const UserManagement: React.FC = () => {
             setPendingDeleteId(null);
             return;
         }
-        try {
-            await api.admin.deleteUser(id);
-            await loadData();
-            addToast({ title: 'User Deleted', message: 'User removed successfully.', type: 'info' });
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to delete user.';
-            addToast({ title: 'Error', message, type: 'error' });
-        } finally {
-            setPendingDeleteId(null);
-        }
+        deleteUser.mutate(id, {
+            onSuccess: () => {
+                addToast({ title: 'User Deleted', message: 'User removed successfully.', type: 'info' });
+                setPendingDeleteId(null);
+            },
+            onError: (error) => {
+                addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to delete user.', type: 'error' });
+                setPendingDeleteId(null);
+            },
+        });
     };
 
     const handleSaveUser = async (userData: Partial<User>, isNew: boolean) => {
@@ -182,17 +179,16 @@ export const UserManagement: React.FC = () => {
                     return;
                 }
                 // @ts-ignore - id generated by api
-                const { user: newUser, bootstrapCredentials, notifications } = await api.admin.createUser({
+                const { user: newUser, bootstrapCredentials, notifications } = await createUser.mutateAsync({
                     ...normalizedUserData,
                     email: normalizedEmail,
                 } as Omit<User, 'id'>);
                 if (Array.isArray(normalizedUserData.companyIds) && newUser?.id &&
                     (normalizedUserData.role === 'admin' || normalizedUserData.role === 'user')) {
-                    await api.admin.setAdminUserCompanies(newUser.id, normalizedUserData.companyIds);
+                    await setAdminUserCompanies.mutateAsync({ userId: newUser.id, companyIds: normalizedUserData.companyIds });
                 }
                 setNewUserCredentials(bootstrapCredentials || null);
                 setShowNewCredentialPassword(false);
-                await loadData();
                 const welcomeEmail = notifications?.welcomeEmail;
                 addToast({
                     title: welcomeEmail?.sent === false ? 'User Created, Email Failed' : 'User Created',
@@ -212,12 +208,11 @@ export const UserManagement: React.FC = () => {
                     confirmLabel: 'Update',
                 });
                 if (!confirmed) return;
-                await api.admin.updateUser(normalizedUserData.id, { ...normalizedUserData, email: normalizedEmail });
+                await updateUser.mutateAsync({ id: normalizedUserData.id, updates: { ...normalizedUserData, email: normalizedEmail } });
                 if (Array.isArray(normalizedUserData.companyIds) &&
                     (normalizedUserData.role === 'admin' || normalizedUserData.role === 'user')) {
-                    await api.admin.setAdminUserCompanies(normalizedUserData.id, normalizedUserData.companyIds);
+                    await setAdminUserCompanies.mutateAsync({ userId: normalizedUserData.id, companyIds: normalizedUserData.companyIds });
                 }
-                await loadData();
                 addToast({ title: 'User Updated', message: 'User details saved.', type: 'success' });
             }
             closeDrawer();
@@ -264,8 +259,8 @@ export const UserManagement: React.FC = () => {
         );
     };
 
-    const filteredUsers = users.filter(u => 
-        u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    const filteredUsers = users.filter(u =>
+        u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         u.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
@@ -284,7 +279,7 @@ export const UserManagement: React.FC = () => {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-white">User Management</h1>
-                <button 
+                <button
                     onClick={() => openUserDrawer()}
                     className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-blue-500/20 transition-all"
                 >
@@ -346,9 +341,9 @@ export const UserManagement: React.FC = () => {
             <Card className="overflow-hidden" noPadding>
                 <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-gray-50/50 dark:bg-slate-900">
                     <div className="relative w-64">
-                        <input 
-                            type="text" 
-                            placeholder="Search users..." 
+                        <input
+                            type="text"
+                            placeholder="Search users..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
@@ -608,7 +603,7 @@ const UserForm = ({
         <>
         <div className="space-y-6">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">{user ? 'Edit User' : 'Create User'}</h2>
-            
+
             <div className="space-y-4">
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Full Name</label>
@@ -885,42 +880,48 @@ const UserForm = ({
 };
 
 const ReportAccessSelector: React.FC<{ userId: string; actorPermissions: string[]; isSupAdmin: boolean }> = ({ userId, actorPermissions, isSupAdmin }) => {
-  const [reports, setReports] = useState<{ id: string; name: string; permissionKey: string }[]>([]);
+  const { addToast } = useUIStore();
+  const setUserReports = useSetUserReports();
+
+  const { data: allReports = [] } = useAdminAnalysisReports();
+  const { data: currentIds = [] } = useQuery({
+    queryKey: qk.users.reports(userId),
+    queryFn: () => api.admin.getUserReports(userId),
+    enabled: !!userId,
+  });
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState<string | null>(null);
-  const { addToast } = useUIStore();
 
+  // Sync selectedIds from query data
   useEffect(() => {
-    void (async () => {
-      try {
-        const [allReports, currentIds] = await Promise.all([
-          api.admin.getAnalysisReports(),
-          api.admin.getUserReports(userId),
-        ]);
-        const visible = isSupAdmin
-          ? allReports
-          : allReports.filter((r) => actorPermissions.includes(r.permissionKey));
-        setReports(visible);
-        setSelectedIds(new Set(currentIds));
-      } catch { /* non-critical */ }
-    })();
-  }, [userId, isSupAdmin, actorPermissions]);
+    setSelectedIds(new Set(currentIds));
+  }, [currentIds]);
 
-  const toggle = async (reportId: string, permissionKey: string) => {
+  const reports = isSupAdmin
+    ? allReports
+    : allReports.filter((r) => actorPermissions.includes(r.permissionKey));
+
+  const toggle = (reportId: string, permissionKey: string) => {
     if (!isSupAdmin && !actorPermissions.includes(permissionKey)) return;
     const next = new Set(selectedIds);
     if (next.has(reportId)) next.delete(reportId);
     else next.add(reportId);
     setSelectedIds(next);
     setSaving(reportId);
-    try {
-      await api.admin.setUserReports(userId, Array.from(next));
-    } catch (error) {
-      setSelectedIds(selectedIds);
-      addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to update report access.', type: 'error' });
-    } finally {
-      setSaving(null);
-    }
+    setUserReports.mutate(
+      { userId, reportIds: Array.from(next) },
+      {
+        onSuccess: () => {
+          setSaving(null);
+        },
+        onError: (error) => {
+          setSelectedIds(selectedIds);
+          addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to update report access.', type: 'error' });
+          setSaving(null);
+        },
+      },
+    );
   };
 
   if (reports.length === 0) return (
@@ -965,36 +966,36 @@ const ReportAccessSelector: React.FC<{ userId: string; actorPermissions: string[
 };
 
 const UserTemplateSelector: React.FC<{ userId: string; scope?: string }> = ({ userId, scope }) => {
-  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
-  const [assignedId, setAssignedId] = useState<string>('');
-  const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useUIStore();
+  const assignUserTemplate = useAssignUserTemplate();
 
-  const load = useCallback(async () => {
-    try {
-      const [tpls, currentId] = await Promise.all([
-        api.admin.getTemplates(scope),
-        api.admin.getUserTemplateId(userId),
-      ]);
-      setTemplates(tpls);
-      if (currentId) setAssignedId(currentId);
-    } catch { /* non-critical */ }
-  }, [userId, scope]);
+  const { data: templates = [] } = useTemplates(scope || 'global');
+  const { data: fetchedAssignedId = '' } = useQuery({
+    queryKey: qk.users.templateId(userId),
+    queryFn: () => api.admin.getUserTemplateId(userId),
+    enabled: !!userId,
+  });
 
-  useEffect(() => { void load(); }, [load]);
+  const [assignedId, setAssignedId] = useState<string>('');
 
-  const assign = async (templateId: string) => {
-    setIsSaving(true);
-    try {
-      await api.admin.assignUserTemplate(userId, templateId);
-      setAssignedId(templateId);
-      addToast({ title: 'Template Assigned', message: 'User template updated.', type: 'success' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to assign template.';
-      addToast({ title: 'Error', message, type: 'error' });
-    } finally {
-      setIsSaving(false);
-    }
+  useEffect(() => {
+    if (fetchedAssignedId) setAssignedId(fetchedAssignedId);
+  }, [fetchedAssignedId]);
+
+  const assign = (templateId: string) => {
+    setAssignedId(templateId);
+    assignUserTemplate.mutate(
+      { userId, templateId },
+      {
+        onSuccess: () => {
+          addToast({ title: 'Template Assigned', message: 'User template updated.', type: 'success' });
+        },
+        onError: (error) => {
+          setAssignedId(fetchedAssignedId || '');
+          addToast({ title: 'Error', message: error instanceof Error ? error.message : 'Failed to assign template.', type: 'error' });
+        },
+      },
+    );
   };
 
   return (
@@ -1002,8 +1003,8 @@ const UserTemplateSelector: React.FC<{ userId: string; scope?: string }> = ({ us
       <label className="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-2">Permission Template</label>
       <select
         value={assignedId}
-        onChange={(e) => { void assign(e.target.value); }}
-        disabled={isSaving || !templates.length}
+        onChange={(e) => { assign(e.target.value); }}
+        disabled={assignUserTemplate.isPending || !templates.length}
         className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 disabled:opacity-60"
       >
         <option value="">— No template assigned —</option>
